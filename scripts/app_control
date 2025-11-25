@@ -1,0 +1,131 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          fainode
+# Required-Start:    $all
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: Halts USB power...
+### END INIT INFO
+
+
+APP_HOME=$(pwd)
+RUN_SERVER="/home/appops/chensong/venv/bin/python3 -u main_api_autoconfig.py"
+RUNSERVER=$RUN_SERVER
+WORKDIR=$APP_HOME
+LOG_DIR=${APP_HOME}
+PID_DIR=${WORKDIR}/run
+STDERR_LOG=${APP_HOME}/log.log.err
+STDOUT_LOG=${APP_HOME}/log.log
+PID=${WORKDIR}/run/app.pid
+
+JAVA_HOME=$JAVA_HOME_CONFIG
+
+if [ ! -d $PID_PATH ];then
+    echo "pid path not found !"
+    exit 1
+fi
+
+if [ -z "$RUNSERVER" ]; then
+    echo "RunServer not exist, please check !"
+    exit 1
+fi
+
+
+if [ ! -d $LOG_DIR ];then
+    mkdir $LOG_DIR
+fi
+
+if [ ! -d $PID_DIR ];then
+    mkdir $PID_DIR
+fi
+
+CMDS="${RUNSERVER}"
+
+#0:pid bad and proc OK;   1:pid ok and proc bad;    2:pid bad
+function status(){
+    test -e ${PID} || return 2
+    test -d /proc/$(cat ${PID}) && return 0 || return 1
+}
+
+function start() {
+    cd ${WORKDIR}
+    nohup ${CMDS} </dev/null >>${STDOUT_LOG} 2>&1 &
+    if [ $? -ne 0 ]; then
+        echo "start failed."
+    fi
+    echo $! > ${PID}
+    if status ; then
+        echo "process start success."; return 0
+    else
+        echo "process start failed."; return 1
+    fi
+}
+function stop() {
+    status && (pkill -P $(cat ${PID}); kill $(cat ${PID}))
+    if ! status; then
+        echo "stop success."; return 0
+    fi
+
+    kill_times=0
+    while status
+    do
+        sleep 1
+        let kill_times++
+        if [ ${kill_times} -eq 10 ]
+        then
+            pkill -9 -P $(cat ${PID})
+            kill -9 $(cat ${PID})
+            sleep 3; break
+        fi
+    done
+
+    if status; then
+        echo "stop failed. process is still running."; return 1
+    else
+        echo "stop success."; return 0
+    fi
+}
+
+case "$1" in
+    start)
+        status;
+        if [ $? -eq 2 ]; then
+            echo 'starting app server.'
+            start
+        elif [ $? -eq 0 ]; then
+            echo "alreadly running. start app failed."
+        else
+            echo "the pid file exists but porc is down; will delete ths pidfile ${PID} and starting app server."
+            start
+        fi
+        ;;
+    stop)
+        status;
+        if [ $? -ne 0 ]; then
+            echo "proc not running."
+        else
+            echo 'stopping app server.'
+            stop
+        fi
+        ;;
+    restart)
+        stop && sleep 3 && start
+        ;;
+    status)
+        status;
+        if [ $? -eq 0 ];then
+            echo 'running.'
+        else
+            echo 'not running.'
+            exit 1
+        fi
+        ;;
+    pid)
+        cat $PID
+        ;;
+    *)
+        echo "Usage $0 start|stop|restart|status|pid"
+        exit 1
+        ;;
+esac
