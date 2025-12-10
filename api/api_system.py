@@ -84,7 +84,6 @@ def deleteRole():
 def getRoleList():
     try:
         data = request.json
-        print("-=-=-=-", data)
         ret = user_manage.get_role_list(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
