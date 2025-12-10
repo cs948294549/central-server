@@ -15,12 +15,14 @@ def login():
         data = request.json
         username = data.get('username')
         secret = data.get('secret')  # 使用password代替identify，更符合常规命名
-        
+        timestamp = data.get('timestamp')
+
+
         # 验证参数
         if not username or not secret:
             return APIResponse.error("用户名和密码不能为空", 400)
 
-        ret = user_manage.authenticate_user(username, secret=secret)
+        ret = user_manage.authenticate_user(username=username, secret=secret, timestamp=int(timestamp))
         if ret["status"] == "success":
             return APIResponse.success(ret["data"], message=ret["message"])
         else:

@@ -48,7 +48,10 @@ def verify_access_token(token: str):
         raise Exception("无效令牌")
 
 # 验证user
-def authenticate_user(username: str, secret: str):
+def authenticate_user(username: str, secret: str, timestamp: int):
+    current_time = int(time.time())
+    if current_time-timestamp >= 30:
+        return {"status": "failed", "data": None, "message": "认证失败, timestamp超时"}
     db = UsersDB()
     user_infos = db.getUser({"username": username})
     if len(user_infos) == 0:
@@ -56,7 +59,7 @@ def authenticate_user(username: str, secret: str):
     else:
         if len(user_infos) == 1:
             user_info = user_infos[0]
-            sign_content = user_info["username"] + user_info["identify"] + "netops"
+            sign_content = user_info["username"] + user_info["identify"] + "netops" + str(timestamp)
             sign = md5(sign_content.encode("utf-8")).hexdigest()
             if sign == secret:
                 token = create_access_token(data={"username": username, 'rid': user_info["rid"]})
