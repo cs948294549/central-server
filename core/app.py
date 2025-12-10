@@ -107,7 +107,13 @@ def create_app():
         """
         # 记录请求信息
         logger.info(f"Request: {request.method} {request.path} Status: {response.status_code}")
-        
+
+
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,session_id,sessionid')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,HEAD')
+        # 这里不能使用add方法，否则会出现 The 'Access-Control-Allow-Origin' header contains multiple values 的问题
+        response.headers['Access-Control-Allow-Origin'] = '*'
+
         # 添加自定义响应头
         response.headers['X-App-Name'] = 'NetOps-Central-Server'
         
