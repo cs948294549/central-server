@@ -11,7 +11,7 @@ drop table IF EXISTS users;
 create table users(
 username varchar(40) COLLATE utf8_bin NOT NULL COMMENT '用户名',
 identify varchar(64) COLLATE utf8_bin NOT NULL COMMENT '密码hash或API key',
-subame varchar(40) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '中文名',
+subname varchar(40) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '中文名',
 phone varchar(20) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '电话',
 mail varchar(50) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '邮箱',
 rid varchar(40) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '角色ID',
@@ -23,7 +23,7 @@ primary key(username)
 class UsersDB(mysqldb_netops):
     def addUser(self, data):
         try:
-            check_params = ["username", "identify", "subame", "phone", "mail", "rid"]
+            check_params = ["username", "identify", "subname", "phone", "mail", "rid"]
             for i in check_params:
                 if i not in data.keys():
                     print("参数不足", i)
@@ -31,8 +31,8 @@ class UsersDB(mysqldb_netops):
             timestamp = int(time.time())
             sqlParam = []
             data = waf(data)
-            sqlParam.append((data["username"], data["identify"], data["subame"], data["phone"], data["mail"], data["rid"], str(timestamp), str(timestamp)))
-            sql = 'insert into users(username,identify,subame,phone,mail,rid,update_time,last_login)values(%s,%s,%s,%s,%s,%s,%s,%s);'
+            sqlParam.append((data["username"], data["identify"], data["subname"], data["phone"], data["mail"], data["rid"], str(timestamp), str(timestamp)))
+            sql = 'insert into users(username,identify,subname,phone,mail,rid,update_time,last_login)values(%s,%s,%s,%s,%s,%s,%s,%s);'
             self.cursor.executemany(sql, sqlParam)
             self.conn.commit()
             return self.cursor.lastrowid
@@ -69,7 +69,7 @@ class UsersDB(mysqldb_netops):
             conditions = []
             params = []
 
-            update_key = ["identify", "subame", "phone", "mail", "rid", "last_login"]
+            update_key = ["identify", "subname", "phone", "mail", "rid", "last_login"]
             for key in update_key:
                 if key in data.keys():
                     conditions.append(key + " = %s")
@@ -118,7 +118,7 @@ class UsersDB(mysqldb_netops):
         left join roles on users.rid = roles.rid'''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
-        proper = ["username", "identify", "subame", "phone", "mail", "rid", "update_time", "last_login", "role_name", "role_descr"]
+        proper = ["username", "identify", "subname", "phone", "mail", "rid", "update_time", "last_login", "role_name", "role_descr"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()

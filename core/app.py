@@ -82,7 +82,6 @@ def create_app():
             
             # 将用户信息存储到全局上下文
             g.user = user_info
-            print(user_info)
             logger.info("用户{} {}访问接口{}".format(user_info['username'], user_info['rid'], path))
             # 可以在这里添加更细粒度的鉴权逻辑
             # 例如：检查用户是否有权限访问当前资源

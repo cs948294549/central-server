@@ -174,7 +174,7 @@ def get_role_list(data):
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
 # 新增完角色，用户可以添加了
-@decorator_checkparams(key_array=["username", "identify", "subame", "phone", "mail", "rid"])
+@decorator_checkparams(key_array=["username", "identify", "subname", "phone", "mail", "rid"])
 def add_user(data):
     try:
         db = UsersDB()
