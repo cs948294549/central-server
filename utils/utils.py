@@ -33,10 +33,8 @@ def decorator_checkparams(key_array=None):
                 if flag is True:
                     return func(*args, **kwargs)
                 else:
-                    print("请求缺失参数=", func.__name__, key_array, flag_key)
-                    return "failed"
+                    return {"status":"failed", "data":None, "message": "请求{}缺失参数=={}".format(str(func.__name__), str(flag_key))}
             else:
-                print("参数缺失")
-                return "failed"
+                return {"status": "failed", "data": None,"message": "请求{}参数缺失".format(str(func.__name__))}
         return decorated
     return params_decorated

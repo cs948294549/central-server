@@ -47,3 +47,5 @@ def after_request(response):
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=8081, allow_unsafe_werkzeug=True)
+
+    # nohup python3 -u socket_main.py > lsocket.log 2>&1 &

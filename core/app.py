@@ -1,7 +1,17 @@
-from flask import Flask
+from flask import Flask, request, jsonify, g
+import logging
+from functools import wraps
 
 # 导入API蓝图和设置函数
 from api.api_routes import api_bp
+from api.api_system import system_bp
+from api.api_response import APIResponse
+
+# 导入认证相关功能
+from function_system.user_manage import verify_access_token, verify_url_privilege
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 
@@ -29,7 +39,79 @@ def create_app():
     app.register_blueprint(api_bp)
     # 注：其他蓝图可以根据需要在这里注册
 
+    app.register_blueprint(system_bp)
 
+    # 认证和鉴权中间件
+    @app.before_request
+    def before_request():
+        """
+        请求前处理：进行认证和鉴权
+        """
+        # 排除不需要认证的路由
+        excluded_routes = [
+            '/system/login',  # 登录路由
+        ]
+        
+        # 获取请求路径
+        path = request.path
+        
+        # 如果是排除的路由，直接通过
+        if path in excluded_routes or path.startswith('/static/'):
+            return None
+        
+        # 获取认证信息
+        auth_header = request.headers.get('Authorization')
+        
+        # 检查认证头是否存在
+        if not auth_header:
+            return APIResponse.error("未提供认证信息", 401)
+        
+        # 检查认证头格式
+        if not auth_header.startswith('Bearer '):
+            return APIResponse.error("认证格式错误", 401)
+        
+        # 提取token
+        token = auth_header[7:]
+        
+        try:
+            # 验证token
+            user_info = verify_access_token(token)
+            
+            if not user_info:
+                return APIResponse.error("无效的认证信息", 401)
+            
+            # 将用户信息存储到全局上下文
+            g.user = user_info
+            print(user_info)
+            logger.info("用户{} {}访问接口{}".format(user_info['username'], user_info['rid'], path))
+            # 可以在这里添加更细粒度的鉴权逻辑
+            # 例如：检查用户是否有权限访问当前资源
+            if g.user["rid"] in ["system1", "admin"]:
+                pass
+            else:
+                priv = verify_url_privilege(g.user["rid"], path)
+                if priv:
+                    pass
+                else:
+                    return APIResponse.forbidden_error(message="权限不足")
+
+            
+        except Exception as e:
+            logger.error(f"认证失败: {str(e)}")
+            return APIResponse.error("认证失败", 401)
+    
+    @app.after_request
+    def after_request(response):
+        """
+        请求后处理：可以在这里添加日志记录、响应处理等
+        """
+        # 记录请求信息
+        logger.info(f"Request: {request.method} {request.path} Status: {response.status_code}")
+        
+        # 添加自定义响应头
+        response.headers['X-App-Name'] = 'NetOps-Central-Server'
+        
+        return response
 
     # 向中心注册自身
     # 修改成中心主动探测proxy，实现监控一体化

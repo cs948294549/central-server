@@ -21,7 +21,7 @@ class TopicProducer:
             value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode('utf-8'),
             key_serializer=lambda k: k.encode('utf-8') if k else None
         )
-    
+
     def send(self, data: Any, key: Optional[str] = None, partition: Optional[int] = None) -> bool:
         """
         发送单条消息
@@ -114,42 +114,42 @@ class TopicConsumer:
         except Exception as e:
             logger.error(f"关闭Kafka消费者失败: {str(e)}")
 
+_syslogConsumer = None
+
+def readDataFromSyslog():
+    global _syslogConsumer
+    retry = 3
+    while retry > 0:
+        try:
+            if _syslogConsumer is None:
+                _syslogConsumer = TopicConsumer(Config.syslog_kafka_topic)
+            for message in _syslogConsumer.get_consumer():
+                yield message
+        except Exception as e:
+            retry -= 1
+            _syslogConsumer = None
+            logger.error("failed to read data to syslog topic {} reason {}".format(Config.syslog_kafka_topic, str(e)))
+
+_collectConsumer = None
+
+def readDataFromCollect():
+    global _collectConsumer
+    retry = 3
+    while retry > 0:
+        try:
+            if _collectConsumer is None:
+                _collectConsumer = TopicConsumer(Config.collect_kafka_topic)
+            for message in _collectConsumer.get_consumer():
+                yield message
+        except Exception as e:
+            retry -= 1
+            _collectConsumer = None
+            logger.error("failed to read data to collector topic {} reason {}".format(Config.syslog_kafka_topic, str(e)))
 
 
-_collectProducer = None
-_syslogProducer = None
-
-def get_collect_producer() -> TopicProducer:
-    """
-    获取全局Kafka客户端实例
-    Returns:
-        KafkaClient: Kafka客户端实例
-    """
-    global _collectProducer
-    if _collectProducer is None:
-        _collectProducer = TopicProducer(Config.collect_kafka_topic)
-    return _collectProducer
-
-def get_syslog_producer() -> TopicProducer:
-    """
-    获取syslog服务的Kafka Producer实例
-    Returns:
-        TopicProducer: syslog的Kafka生产者实例
-    """
-    global _syslogProducer
-    if _syslogProducer is None:
-        _syslogProducer = TopicProducer("syslog_data")
-    return _syslogProducer
 
 
 if __name__ == '__main__':
-    # 示例：使用TopicProducer发送消息
-    producer = TopicProducer("collect_data")
-    producer.send({"message": "Hello Kafka"}, key="test-key")
-    producer.close()
-    
-    # 示例：使用TopicConsumer消费消息
-    # consumer = TopicConsumer("collect_data", group_id="test_group")
-    # for msg in consumer.get_consumer():
-    #     print(f"Received: {msg.value}, key: {msg.key}")
-    # consumer.close()
+    for message in readDataFromCollect():
+        print(f"Received: {message.value}, key: {message.key}")
+
