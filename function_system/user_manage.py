@@ -60,6 +60,7 @@ def authenticate_user(username: str, secret: str, timestamp: int):
         if len(user_infos) == 1:
             user_info = user_infos[0]
             sign_content = user_info["username"] + user_info["identify"] + "netops" + str(timestamp)
+            logger.info("签名=={}".format(sign_content))
             sign = md5(sign_content.encode("utf-8")).hexdigest()
             if sign == secret:
                 token = create_access_token(data={"username": username, 'rid': user_info["rid"]})
