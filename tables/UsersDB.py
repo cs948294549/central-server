@@ -114,7 +114,7 @@ class UsersDB(mysqldb_netops):
                 conditions.append("users.{}".format(key) + "='" + str(data[key]) + "'")
 
         sql = '''
-        select users.username,users.identify,users.subame,users.phone,users.mail,roles.rid,users.update_time,users.last_login,roles.name,roles.descr from users 
+        select users.username,users.identify,users.subname,users.phone,users.mail,roles.rid,users.update_time,users.last_login,roles.name,roles.descr from users 
         left join roles on users.rid = roles.rid'''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)

@@ -40,7 +40,7 @@ drop table IF EXISTS users;
 create table users(
 username varchar(40) COLLATE utf8_bin NOT NULL COMMENT '用户名',
 identify varchar(64) COLLATE utf8_bin NOT NULL COMMENT '密码hash或API key',
-subame varchar(40) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '中文名',
+subname varchar(40) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '中文名',
 phone varchar(20) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '电话',
 mail varchar(50) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '邮箱',
 rid varchar(40) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '角色ID',
