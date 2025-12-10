@@ -390,5 +390,8 @@ if __name__ == '__main__':
     # ret = authenticate_user(username="admin", identify="20d6ba810a3185f4207bac8588824da3")
     # print(ret)
 
-    aa = verify_url_privilege("admin", "/system/getuser")
+    # aa = verify_url_privilege("admin", "/system/getuser")
+    # print(aa)
+
+    aa = get_role_list(data={})
     print(aa)

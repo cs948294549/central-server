@@ -46,7 +46,7 @@ def getuser():
 def addRole():
     try:
         data = request.json
-        ret = user_manage.add_role(data=data)
+        ret = user_manage.add_role(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -58,7 +58,7 @@ def addRole():
 def updateRole():
     try:
         data = request.json
-        ret = user_manage.update_role(data=data)
+        ret = user_manage.update_role(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -70,7 +70,7 @@ def updateRole():
 def deleteRole():
     try:
         data = request.json
-        ret = user_manage.del_role(data=data)
+        ret = user_manage.del_role(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -82,7 +82,8 @@ def deleteRole():
 def getRoleList():
     try:
         data = request.json
-        ret = user_manage.get_role_list(data=data)
+        print("-=-=-=-", data)
+        ret = user_manage.get_role_list(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -95,7 +96,7 @@ def getRoleList():
 def addUser():
     try:
         data = request.json
-        ret = user_manage.add_user(data=data)
+        ret = user_manage.add_user(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -107,7 +108,7 @@ def addUser():
 def updateUser():
     try:
         data = request.json
-        ret = user_manage.update_user(data=data)
+        ret = user_manage.update_user(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -119,7 +120,7 @@ def updateUser():
 def deleteUser():
     try:
         data = request.json
-        ret = user_manage.del_role(data=data)
+        ret = user_manage.del_role(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -131,7 +132,7 @@ def deleteUser():
 def getUserList():
     try:
         data = request.json
-        ret = user_manage.get_user_list(data=data)
+        ret = user_manage.get_user_list(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -144,7 +145,7 @@ def getUserList():
 def addPage():
     try:
         data = request.json
-        ret = user_manage.add_page(data=data)
+        ret = user_manage.add_page(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -156,7 +157,7 @@ def addPage():
 def updatePage():
     try:
         data = request.json
-        ret = user_manage.update_page(data=data)
+        ret = user_manage.update_page(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -168,7 +169,7 @@ def updatePage():
 def deletePage():
     try:
         data = request.json
-        ret = user_manage.del_page(data=data)
+        ret = user_manage.del_page(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -180,7 +181,7 @@ def deletePage():
 def getPageList():
     try:
         data = request.json
-        ret = user_manage.get_page_list(data=data)
+        ret = user_manage.get_page_list(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -193,7 +194,7 @@ def getPageList():
 def addUri():
     try:
         data = request.json
-        ret = user_manage.add_page_uri(data=data)
+        ret = user_manage.add_page_uri(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -205,7 +206,7 @@ def addUri():
 def updateUri():
     try:
         data = request.json
-        ret = user_manage.update_page_uri(data=data)
+        ret = user_manage.update_page_uri(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -217,7 +218,7 @@ def updateUri():
 def deleteUri():
     try:
         data = request.json
-        ret = user_manage.del_page_uri(data=data)
+        ret = user_manage.del_page_uri(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -229,7 +230,7 @@ def deleteUri():
 def getUriList():
     try:
         data = request.json
-        ret = user_manage.get_page_uri_list(data=data)
+        ret = user_manage.get_page_uri_list(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -242,7 +243,7 @@ def getUriList():
 def addRolePage():
     try:
         data = request.json
-        ret = user_manage.add_role_page(data=data)
+        ret = user_manage.add_role_page(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -254,7 +255,7 @@ def addRolePage():
 def updateRolePage():
     try:
         data = request.json
-        ret = user_manage.update_role_page(data=data)
+        ret = user_manage.update_role_page(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -266,7 +267,7 @@ def updateRolePage():
 def deleteRolePage():
     try:
         data = request.json
-        ret = user_manage.del_role_page(data=data)
+        ret = user_manage.del_role_page(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -278,7 +279,7 @@ def deleteRolePage():
 def getRolePageList():
     try:
         data = request.json
-        ret = user_manage.get_role_page_list(data=data)
+        ret = user_manage.get_role_page_list(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
@@ -290,7 +291,7 @@ def getRolePageList():
 def getRoleUriList():
     try:
         data = request.json
-        ret = user_manage.get_role_uri_list(data=data)
+        ret = user_manage.get_role_uri_list(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
