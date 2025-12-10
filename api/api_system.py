@@ -14,13 +14,13 @@ def login():
     try:
         data = request.json
         username = data.get('username')
-        identify = data.get('identify')  # 使用password代替identify，更符合常规命名
+        secret = data.get('secret')  # 使用password代替identify，更符合常规命名
         
         # 验证参数
-        if not username or not identify:
+        if not username or not secret:
             return APIResponse.error("用户名和密码不能为空", 400)
 
-        ret = user_manage.authenticate_user(username, identify)
+        ret = user_manage.authenticate_user(username, secret=secret)
         if ret["status"] == "success":
             return APIResponse.success(ret["data"], message=ret["message"])
         else:

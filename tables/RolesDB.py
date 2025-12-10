@@ -250,5 +250,5 @@ class RolesDB(mysqldb_netops):
 
 if __name__ == '__main__':
     aa = RolesDB()
-    ret = aa.addRole({"rid":"system", "name":"系统管理", "descr":'管理员权限'})
+    ret = aa.addRole({"rid":"system123", "name":"系统管理", "descr":'管理员权限'})
     print(ret)
