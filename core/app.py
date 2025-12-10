@@ -86,7 +86,7 @@ def create_app():
             logger.info("用户{} {}访问接口{}".format(user_info['username'], user_info['rid'], path))
             # 可以在这里添加更细粒度的鉴权逻辑
             # 例如：检查用户是否有权限访问当前资源
-            if g.user["rid"] in ["system1", "admin"]:
+            if g.user["rid"] in ["system", "admin"]:
                 pass
             else:
                 priv = verify_url_privilege(g.user["rid"], path)

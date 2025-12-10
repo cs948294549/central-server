@@ -37,4 +37,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # nohup python3 -u socket_main.py > lsocket.log 2>&1 &
     main()
