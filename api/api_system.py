@@ -122,7 +122,7 @@ def updateUser():
 def deleteUser():
     try:
         data = request.json
-        ret = user_manage.del_role(data)
+        ret = user_manage.del_user(data)
         if ret["status"] == "success":
             return APIResponse.success(data=ret["data"], message=ret["message"])
         else:
