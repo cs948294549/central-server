@@ -286,9 +286,21 @@ def del_page(data):
 def get_page_list(data):
     try:
         db = PagesDB()
-        ret = db.getPageList(data)
-        if ret != "failed":
-            return {"status":"success","message": "查询成功", "data": ret}
+        page_list = db.getPageList(data)
+        if page_list != "failed":
+            dir_map = {}
+            for page in page_list:
+                if page["parent_id"] == 0:
+                    dir_map[page["page_id"]] = page
+                    dir_map[page["page_id"]]["children"] = []
+
+            for page in page_list:
+                if page["parent_id"] != 0:
+                    if page["parent_id"] in dir_map:
+                        dir_map[page["parent_id"]]["children"].append(page)
+
+            final_page_list = list(dir_map.values())
+            return {"status":"success","message": "查询成功", "data": final_page_list}
         else:
             return {"status": "failed", "message": "查询失败", "data": None}
     except Exception as e:
@@ -419,5 +431,56 @@ if __name__ == '__main__':
     # aa = verify_url_privilege("admin", "/system/getuser")
     # print(aa)
 
-    aa = get_role_list(data={})
-    print(aa)
+    # aa = get_role_list(data={})
+    # print(aa)
+    pages = [
+        {
+            "classify": "系统管理",
+            "descr": "用户管理",
+            "hide": "0",
+            "icon": "",
+            "name": "用户管理",
+            "p_type": "1",
+            "page_id": 1,
+            "parent_id": 0,
+            "path": "pages/systemManage/userManage",
+            "sort_num": "400"
+        },
+        {
+            "classify": "DEMO",
+            "descr": "测试页面",
+            "hide": "0",
+            "icon": "",
+            "name": "测试页面",
+            "p_type": "0",
+            "page_id": 2,
+            "parent_id": 0,
+            "path": "",
+            "sort_num": "300"
+        },
+        {
+            "classify": "默认分组",
+            "descr": "流程图",
+            "hide": "0",
+            "icon": "",
+            "name": "G6流程图",
+            "p_type": "1",
+            "page_id": 3,
+            "parent_id": 2,
+            "path": "pages/demo/workflow/g6_flow",
+            "sort_num": "6"
+        }
+    ]
+
+    dir_map = {}
+    for page in pages:
+        if page["parent_id"]==0:
+            dir_map[page["page_id"]] = page
+            dir_map[page["page_id"]]["children"] = []
+
+    for page in pages:
+        if page["parent_id"]!=0:
+            if page["parent_id"] in dir_map:
+                dir_map[page["parent_id"]]["children"].append(page)
+    print(json.dumps(dir_map, indent=4, ensure_ascii=False))
+
