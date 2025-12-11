@@ -42,6 +42,22 @@ def getuser():
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
+@system_bp.route('/change_passwd', methods=['POST'])
+def changePasswd():
+    """
+    获取当前用户基本信息
+    """
+    try:
+        data = request.json
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        ret = user_manage.changePasswdByUser(username=g.user["username"], old_pass=old_password, new_pass=new_password)
+        if ret["status"] == "success":
+            return APIResponse.success(data=ret["data"], message=ret["message"])
+        else:
+            return APIResponse.error(message=ret["message"])
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
 # 角色表相关接口
 @system_bp.route('/add_role', methods=['POST'])

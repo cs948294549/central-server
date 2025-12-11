@@ -47,6 +47,26 @@ def verify_access_token(token: str):
     except jwt.InvalidTokenError:
         raise Exception("无效令牌")
 
+#修改用户密码
+def changePasswdByUser(username: str, old_pass: str, new_pass: str):
+    db = UsersDB()
+    user_infos = db.getUser({"username": username})
+    if len(user_infos) == 0:
+        return {"status": "failed", "data": None, "message": "用户不存在"}
+    else:
+        if len(user_infos) == 1:
+            user_info = user_infos[0]
+            if user_info["identify"] == old_pass:
+                db1 = UsersDB()
+                ret = db1.updateUser({"username": username, "identify": new_pass})
+                if ret != "failed":
+                    return {"status": "success", "data": None, "message": "密码更新成功"}
+                else:
+                    return {"status": "failed", "data": None, "message": "密码更新失败"}
+            else:
+                return {"status": "failed", "data": None, "message": "密码错误"}
+        else:
+            return {"status": "failed", "data": None, "message": "用户冲突"}
 # 验证user
 def authenticate_user(username: str, secret: str, timestamp: int):
     current_time = int(time.time())
@@ -60,7 +80,6 @@ def authenticate_user(username: str, secret: str, timestamp: int):
         if len(user_infos) == 1:
             user_info = user_infos[0]
             sign_content = user_info["username"] + user_info["identify"] + "netops" + str(timestamp)
-            logger.info("签名=={}".format(sign_content))
             sign = md5(sign_content.encode("utf-8")).hexdigest()
             if sign == secret:
                 token = create_access_token(data={"username": username, 'rid': user_info["rid"], 'sign': sign})
