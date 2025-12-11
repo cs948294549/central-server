@@ -74,11 +74,11 @@ def create_app():
         # 提取token
         token = auth_header[7:]
 
-        auth_timestamp = request.headers.get('api_timestamp')
+        auth_timestamp = request.headers.get('Api_timestamp')
         if not auth_timestamp:
             return APIResponse.error("未提供时间戳", 401)
 
-        auth_sessionid = request.headers.get('sessionID')
+        auth_sessionid = request.headers.get('Sessionid')
         if not auth_sessionid:
             return APIResponse.error("未提供会话ID", 401)
         
