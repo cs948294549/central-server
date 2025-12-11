@@ -75,7 +75,7 @@ def create_app():
         # 提取token
         token = auth_header[7:]
 
-        auth_timestamp = request.headers.get('Api_timestamp')
+        auth_timestamp = request.headers.get('Apptime')
 
         if not auth_timestamp:
             return APIResponse.error("未提供时间戳", 401)
@@ -123,7 +123,7 @@ def create_app():
         logger.info(f"Request: {request.method} {request.path} Status: {response.status_code}")
 
 
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,session_id,sessionid,api_timestamp')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,session_id,sessionid,apptime')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,HEAD')
         # 这里不能使用add方法，否则会出现 The 'Access-Control-Allow-Origin' header contains multiple values 的问题
         response.headers['Access-Control-Allow-Origin'] = '*'
