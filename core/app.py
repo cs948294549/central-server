@@ -90,7 +90,8 @@ def create_app():
             
             if not user_info:
                 return APIResponse.error("无效的认证信息", 401)
-
+            logger.info(user_info)
+            logger.info(auth_timestamp)
             sign = md5((str(user_info["sign"])+str(auth_timestamp)).encode("utf-8")).hexdigest()
             if sign != auth_sessionid:
                 return APIResponse.error("认证签名异常", 401)
