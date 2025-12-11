@@ -298,8 +298,14 @@ def get_page_list(data):
                 if page["parent_id"] != 0:
                     if page["parent_id"] in dir_map:
                         dir_map[page["parent_id"]]["children"].append(page)
-
             final_page_list = list(dir_map.values())
+
+            for page in final_page_list:
+                page["children"].sort(key=lambda x: x["sort_num"])
+
+            final_page_list.sort(key=lambda x: x["sort_num"])
+
+
             return {"status":"success","message": "查询成功", "data": final_page_list}
         else:
             return {"status": "failed", "message": "查询失败", "data": None}
@@ -482,5 +488,11 @@ if __name__ == '__main__':
         if page["parent_id"]!=0:
             if page["parent_id"] in dir_map:
                 dir_map[page["parent_id"]]["children"].append(page)
+
+    page_list = list(dir_map.values())
+    for page in page_list:
+        page["children"].sort(key=lambda x: x["sort_num"])
+    page_list.sort(key=lambda x: x["sort_num"])
+
     print(json.dumps(dir_map, indent=4, ensure_ascii=False))
 
