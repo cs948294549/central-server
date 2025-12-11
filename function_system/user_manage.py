@@ -274,7 +274,16 @@ def update_page(data):
 def del_page(data):
     try:
         db = PagesDB()
+        ret = db.getPageList({"parent_id": data["page_id"]})
+        if ret != "failed" and len(ret) > 0:
+            return {"status": "failed", "message": "目录不为空", "data": None}
+
+        db = PagesDB()
         ret = db.delPage(data)
+
+        db = PagesDB()
+        ret = db.delPageUriByPageId({"page_id": data["page_id"]})
+
         if ret != "failed":
             return {"status":"success","message": "删除成功", "data": ret}
         else:

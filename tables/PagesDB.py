@@ -117,7 +117,7 @@ class PagesDB(mysqldb_netops):
             if key_item["key"] in data.keys():
                 conditions.append(key_item["value"] + " regexp '" + str(data[key_item["key"]]) + "'")
 
-        serach_eq_key = ["classify"]
+        serach_eq_key = ["classify", "parent_id"]
         for key in serach_eq_key:
             if key in data.keys():
                 conditions.append(key + "='" + str(data[key]) + "'")
@@ -172,7 +172,7 @@ class PagesDB(mysqldb_netops):
     def delPageUri(self, data):
         data = waf(data)
         if "uri_id" in data.keys():
-            sql = "delete from pages_uri where page_id='{}'".format(int(data["uri_id"]))
+            sql = "delete from pages_uri where uri_id='{}'".format(int(data["uri_id"]))
             try:
                 self.cursor.execute(sql)
                 self.conn.commit()
@@ -180,6 +180,24 @@ class PagesDB(mysqldb_netops):
             except Exception as err:
                 self.conn.rollback()
                 logger.error("======PagesDB delpage uri error========\n{}".format(str(err)))
+                return "failed"
+            finally:
+                self.cursor.close()
+                self.conn.close()
+        else:
+            return "failed"
+
+    def delPageUriByPageId(self, data):
+        data = waf(data)
+        if "page_id" in data.keys():
+            sql = "delete from pages_uri where page_id='{}'".format(int(data["page_id"]))
+            try:
+                self.cursor.execute(sql)
+                self.conn.commit()
+                return "success"
+            except Exception as err:
+                self.conn.rollback()
+                logger.error("======PagesDB delpage uri by page_id error========\n{}".format(str(err)))
                 return "failed"
             finally:
                 self.cursor.close()
