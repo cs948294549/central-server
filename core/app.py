@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, g
 import logging
 from functools import wraps
+from hashlib import md5
 
 # 导入API蓝图和设置函数
 from api.api_routes import api_bp
@@ -72,6 +73,14 @@ def create_app():
         
         # 提取token
         token = auth_header[7:]
+
+        auth_timestamp = request.headers.get('api_timestamp')
+        if not auth_timestamp:
+            return APIResponse.error("未提供时间戳", 401)
+
+        auth_sessionid = request.headers.get('sessionID')
+        if not auth_sessionid:
+            return APIResponse.error("未提供会话ID", 401)
         
         try:
             # 验证token
@@ -79,7 +88,11 @@ def create_app():
             
             if not user_info:
                 return APIResponse.error("无效的认证信息", 401)
-            
+
+            sign = md5((str(user_info["sign"])+str(auth_timestamp)).encode("utf-8")).hexdigest()
+            if sign != auth_sessionid:
+                return APIResponse.error("认证签名异常", 401)
+
             # 将用户信息存储到全局上下文
             g.user = user_info
             logger.info("用户{} {}访问接口{}".format(user_info['username'], user_info['rid'], path))
@@ -108,7 +121,7 @@ def create_app():
         logger.info(f"Request: {request.method} {request.path} Status: {response.status_code}")
 
 
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,session_id,sessionid')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,session_id,sessionid,api_timestamp')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,HEAD')
         # 这里不能使用add方法，否则会出现 The 'Access-Control-Allow-Origin' header contains multiple values 的问题
         response.headers['Access-Control-Allow-Origin'] = '*'
