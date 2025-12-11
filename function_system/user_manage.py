@@ -164,8 +164,8 @@ def update_role(data):
 @decorator_checkparams(key_array=["rid"])
 def del_role(data):
     try:
-        if data["rid"] in ["system", "admin"]:
-            return {"status": "failed", "message": "系统管理权限，不能删除", "data": None}
+        if data["rid"] in ["system", "default"]:
+            return {"status": "failed", "message": "系统权限，不能删除", "data": None}
         else:
             db = RolesDB()
             ret = db.delRole(data)
