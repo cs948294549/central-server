@@ -97,6 +97,23 @@ class UsersDB(mysqldb_netops):
         else:
             return "failed"
 
+    def defaultRoleByRole(self, data):
+        data = waf(data)
+        # username, identify, subame, phone, mail, rid
+        if "rid" in data.keys():
+            sql = "update users set rid='default'  where rid='{}'".format(str(data["rid"]))
+            try:
+                self.cursor.execute(sql)
+                self.conn.commit()
+                return "success"
+            except Exception as err:
+                self.conn.rollback()
+                logger.error("======UserDB default role error========\n{}".format(str(err)))
+                return "failed"
+            finally:
+                self.cursor.close()
+                self.conn.close()
+
     def getUser(self, data):
         data = waf(data)
         conditions = []

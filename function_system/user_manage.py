@@ -173,6 +173,9 @@ def del_role(data):
             db = RolesDB()
             ret = db.delRolePage(data)
 
+            db = UsersDB()
+            ret = db.defaultRoleByRole(data)
+
             if ret != "failed":
                 return {"status":"success","message": "删除成功", "data": ret}
             else:
