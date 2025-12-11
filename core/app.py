@@ -59,7 +59,8 @@ def create_app():
         # 如果是排除的路由，直接通过
         if path in excluded_routes or path.startswith('/static/'):
             return None
-        
+
+        logger.info(request.headers)
         # 获取认证信息
         auth_header = request.headers.get('Authorization')
         
@@ -75,6 +76,7 @@ def create_app():
         token = auth_header[7:]
 
         auth_timestamp = request.headers.get('Api_timestamp')
+
         if not auth_timestamp:
             return APIResponse.error("未提供时间戳", 401)
 
