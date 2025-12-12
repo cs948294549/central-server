@@ -330,7 +330,7 @@ class PagesDB(mysqldb_netops):
         else:
             return "failed"
 
-        proper = ["rid", "page_id", "page_pri", "name", "group", "order", "path", "descr", "hide", "parent_id", "icon"]
+        proper = ["rid", "page_id", "page_pri", "name", "classify", "sort_num", "path", "descr", "hide", "parent_id", "icon"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
