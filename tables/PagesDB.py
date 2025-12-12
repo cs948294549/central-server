@@ -240,6 +240,14 @@ class PagesDB(mysqldb_netops):
         data = waf(data)
         conditions = []
 
+        serach_reg_key = [
+            {"key": "uri_reg", "value": "uri"},
+        ]
+        for key_item in serach_reg_key:
+            if key_item["key"] in data.keys():
+                conditions.append(key_item["value"] + " regexp '" + str(data[key_item["key"]]) + "'")
+
+
         serach_eq_key = ["page_id"]
         for key in serach_eq_key:
             if key in data.keys():

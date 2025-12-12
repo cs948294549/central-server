@@ -383,6 +383,18 @@ def add_role_page(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
+@decorator_checkparams(key_array=["page_list"])
+def add_role_page_list(data):
+    try:
+        db = RolesDB()
+        ret = db.addRolePageList(data["page_list"])
+        if ret != "failed":
+            return {"status":"success","message": "批量添加成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "批量添加失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
 @decorator_checkparams(key_array=["rid", "page_id"])
 def update_role_page(data):
     try:

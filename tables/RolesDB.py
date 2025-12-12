@@ -147,7 +147,31 @@ class RolesDB(mysqldb_netops):
             sqlParam = []
             data = waf(data)
             sqlParam.append((data["rid"], data["page_id"], data["privilege"]))
-            sql = 'insert into role_pages(rid,page_id,privilege)values(%s,%s,%s);'
+            sql = 'insert into role_pages(rid,page_id,privilege)values(%s,%s,%s) ON DUPLICATE KEY UPDATE privilege = VALUES(privilege);'
+            self.cursor.executemany(sql, sqlParam)
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======RolesDB addrole_page error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def addRolePageList(self, datas):
+        try:
+            sqlParam = []
+            for data in datas:
+                data = waf(data)
+                check_params = ["rid", "page_id", "privilege"]
+                for i in check_params:
+                    if i not in data.keys():
+                        print("参数不足", i)
+                        return "failed"
+                sqlParam.append((data["rid"], data["page_id"], data["privilege"]))
+
+            sql = 'insert into role_pages(rid,page_id,privilege)values(%s,%s,%s) ON DUPLICATE KEY UPDATE privilege = VALUES(privilege);'
             self.cursor.executemany(sql, sqlParam)
             self.conn.commit()
             return self.cursor.lastrowid
