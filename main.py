@@ -20,21 +20,27 @@ class CustomWSGIRequestHandler(WSGIRequestHandler):
         重写日志方法，自定义格式：
         格式示例：[时间] [IP] "请求方法 路径 协议" 状态码 响应大小
         """
+        # 1. 安全获取 request_line（兼容 Werkzeug 新版/旧版）
+        try:
+            # 优先获取完整请求行（方法 + 路径 + 协议）
+            request_line = self.request_line
+        except AttributeError:
+            # 降级方案：手动拼接请求行
+            request_line = f"{self.command} {self.path} HTTP/{self.request_version}"
+
         # 获取真实 IP（优先 X-Forwarded-For，其次客户端原始 IP）
         # 处理多个代理层的情况（如 X-Forwarded-For: 192.168.1.100, 127.0.0.1）
         real_ip = self.headers.get('X-Forwarded-For', self.client_address[0])
-        real_ip = real_ip.split(',')[0].strip() if real_ip else self.client_address[0]
 
         # 自定义日志格式（可根据需求修改）
         log_format = (
-            f"[%(asctime)s] [%(levelname)s] [IP: {real_ip}] "
-            f'"{self.request_line}" {code} {size}'
+            f"[%(levelname)s] [IP: {real_ip}] "
+            f'"{request_line}" {code} {size}'
         )
         # 调用日志方法输出
         self.log(
             'info',
             log_format % {
-                'asctime': self.log_date_time_string(),
                 'levelname': 'INFO',
             }
         )

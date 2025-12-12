@@ -1,0 +1,182 @@
+2025-12-10 13:06:40 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 13:06:40 - root - INFO - 启动任务调度系统
+2025-12-10 13:06:40 - root - INFO - 任务调度器已启动
+2025-12-10 13:06:40 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 13:06:45 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 13:06:45 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 13:07:05 - task_manager - INFO - 所有任务已停止
+2025-12-10 13:07:05 - root - INFO - 任务调度系统已关闭
+2025-12-10 13:14:40 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 13:14:40 - root - INFO - 启动任务调度系统
+2025-12-10 13:14:40 - root - INFO - 任务调度器已启动
+2025-12-10 13:14:40 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 13:14:45 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 13:14:45 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 13:15:42 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 13:15:42 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:15:42] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 13:47:27 - core.app - ERROR - 认证失败: 无效令牌
+2025-12-10 13:47:27 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 13:47:27 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:47:27] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 13:47:52 - core.app - ERROR - 认证失败: 无效令牌
+2025-12-10 13:47:52 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 13:47:52 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:47:52] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 13:48:38 - core.app - INFO - Request: POST /system/getuser Status: 404
+2025-12-10 13:48:38 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:48:38] "[33mPOST /system/getuser HTTP/1.1[0m" 404 -
+2025-12-10 13:48:50 - core.app - INFO - Request: POST /system/getuser Status: 404
+2025-12-10 13:48:50 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:48:50] "[33mPOST /system/getuser HTTP/1.1[0m" 404 -
+2025-12-10 13:49:10 - task_manager - INFO - 所有任务已停止
+2025-12-10 13:49:10 - root - INFO - 任务调度系统已关闭
+2025-12-10 13:49:11 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 13:49:11 - root - INFO - 启动任务调度系统
+2025-12-10 13:49:11 - root - INFO - 任务调度器已启动
+2025-12-10 13:49:11 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 13:49:16 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 13:49:16 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 13:49:20 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 13:49:20 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:49:20] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 13:50:17 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 13:50:17 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:50:17] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 13:54:36 - task_manager - INFO - 所有任务已停止
+2025-12-10 13:54:36 - root - INFO - 任务调度系统已关闭
+2025-12-10 13:54:37 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 13:54:37 - root - INFO - 启动任务调度系统
+2025-12-10 13:54:37 - root - INFO - 任务调度器已启动
+2025-12-10 13:54:37 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 13:54:42 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 13:54:42 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 13:54:43 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 13:54:43 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:54:43] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 13:55:02 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 13:55:02 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 13:55:02] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:14:24 - task_manager - INFO - 所有任务已停止
+2025-12-10 14:14:24 - root - INFO - 任务调度系统已关闭
+2025-12-10 14:14:24 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 14:14:24 - root - INFO - 启动任务调度系统
+2025-12-10 14:14:24 - root - INFO - 任务调度器已启动
+2025-12-10 14:14:24 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 14:14:29 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 14:14:29 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 14:14:32 - core.app - ERROR - 认证失败: 'rid'
+2025-12-10 14:14:32 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 14:14:32 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 14:14:32] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:14:42 - core.app - ERROR - 认证失败: 'rid'
+2025-12-10 14:14:42 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 14:14:42 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 14:14:42] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:14:57 - task_manager - INFO - 所有任务已停止
+2025-12-10 14:14:57 - root - INFO - 任务调度系统已关闭
+2025-12-10 14:14:58 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 14:14:58 - root - INFO - 启动任务调度系统
+2025-12-10 14:14:58 - root - INFO - 任务调度器已启动
+2025-12-10 14:14:58 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 14:15:03 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 14:15:03 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 14:15:03 - core.app - ERROR - 认证失败: 'rid'
+2025-12-10 14:15:03 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 14:15:03 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 14:15:03] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:16:29 - task_manager - INFO - 所有任务已停止
+2025-12-10 14:16:29 - root - INFO - 任务调度系统已关闭
+2025-12-10 14:16:30 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 14:16:30 - root - INFO - 启动任务调度系统
+2025-12-10 14:16:30 - root - INFO - 任务调度器已启动
+2025-12-10 14:16:30 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 14:16:35 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 14:16:35 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 14:16:36 - core.app - ERROR - 认证失败: 'rid'
+2025-12-10 14:16:36 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 14:16:36 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 14:16:36] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:18:26 - core.app - INFO - 用户admin system访问接口/system/getuser
+2025-12-10 14:18:26 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 14:18:26 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 14:18:26] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:19:05 - task_manager - INFO - 所有任务已停止
+2025-12-10 14:19:05 - root - INFO - 任务调度系统已关闭
+2025-12-10 14:19:05 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 14:19:05 - root - INFO - 启动任务调度系统
+2025-12-10 14:19:05 - root - INFO - 任务调度器已启动
+2025-12-10 14:19:06 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 14:19:11 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 14:19:11 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 14:19:13 - core.app - INFO - 用户admin system访问接口/system/getuser
+2025-12-10 14:19:13 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 14:19:13 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 14:19:13] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:19:34 - task_manager - INFO - 所有任务已停止
+2025-12-10 14:19:34 - root - INFO - 任务调度系统已关闭
+2025-12-10 14:19:34 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 14:19:34 - root - INFO - 启动任务调度系统
+2025-12-10 14:19:34 - root - INFO - 任务调度器已启动
+2025-12-10 14:19:34 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 14:19:39 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 14:19:39 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 14:19:41 - core.app - INFO - 用户admin system访问接口/system/getuser
+2025-12-10 14:19:41 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 14:19:41 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 14:19:41] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 14:21:14 - task_manager - INFO - 所有任务已停止
+2025-12-10 14:21:14 - root - INFO - 任务调度系统已关闭
+2025-12-10 15:57:23 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 15:57:23 - root - INFO - 启动任务调度系统
+2025-12-10 15:57:23 - root - INFO - 任务调度器已启动
+2025-12-10 15:57:23 - root - INFO - Flask服务器启动在端口 8080
+2025-12-10 15:57:28 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://192.168.0.106:8080
+2025-12-10 15:57:28 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 15:58:00 - task_manager - INFO - 所有任务已停止
+2025-12-10 15:58:00 - root - INFO - 任务调度系统已关闭
+2025-12-10 15:58:11 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 15:58:11 - root - INFO - 启动任务调度系统
+2025-12-10 15:58:11 - root - INFO - 任务调度器已启动
+2025-12-10 15:58:11 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 15:58:16 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 15:58:16 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 15:58:20 - core.app - INFO - 用户admin system访问接口/system/getuser
+2025-12-10 15:58:20 - core.app - INFO - Request: POST /system/getuser Status: 200
+2025-12-10 15:58:20 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 15:58:20] "POST /system/getuser HTTP/1.1" 200 -
+2025-12-10 15:58:36 - core.app - INFO - 用户admin system访问接口/system/get_role_list
+2025-12-10 15:58:36 - core.app - INFO - Request: POST /system/get_role_list Status: 200
+2025-12-10 15:58:36 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 15:58:36] "POST /system/get_role_list HTTP/1.1" 200 -
+2025-12-10 16:01:16 - task_manager - INFO - 所有任务已停止
+2025-12-10 16:01:16 - root - INFO - 任务调度系统已关闭
+2025-12-10 16:01:17 - root - INFO - 日志系统初始化完成，日志级别: INFO
+2025-12-10 16:01:17 - root - INFO - 启动任务调度系统
+2025-12-10 16:01:17 - root - INFO - 任务调度器已启动
+2025-12-10 16:01:17 - root - INFO - Flask服务器启动在端口 5000
+2025-12-10 16:01:22 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.106:5000
+2025-12-10 16:01:22 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-10 16:01:26 - core.app - INFO - 用户admin system访问接口/system/get_role_list
+2025-12-10 16:01:26 - core.app - INFO - Request: POST /system/get_role_list Status: 200
+2025-12-10 16:01:26 - werkzeug - INFO - 127.0.0.1 - - [10/Dec/2025 16:01:26] "POST /system/get_role_list HTTP/1.1" 200 -
+2025-12-10 16:04:29 - task_manager - INFO - 所有任务已停止
+2025-12-10 16:04:29 - root - INFO - 任务调度系统已关闭
