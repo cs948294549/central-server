@@ -423,9 +423,28 @@ def del_role_page(data):
 def get_role_page_list(data):
     try:
         db = PagesDB()
-        ret = db.getPageListByRole(data)
-        if ret != "failed":
-            return {"status":"success","message": "查询成功", "data": ret}
+        pri_page_list = db.getPageListByRole(data)
+        if pri_page_list != "failed":
+
+            dir_map = {}
+            for page in pri_page_list:
+                if page["parent_id"] == 0:
+                    dir_map[page["page_id"]] = page
+                    dir_map[page["page_id"]]["children"] = []
+
+            for page in pri_page_list:
+                if page["parent_id"] != 0:
+                    if page["parent_id"] in dir_map:
+                        dir_map[page["parent_id"]]["children"].append(page)
+
+            final_page_list = list(dir_map.values())
+
+            for page in final_page_list:
+                page["children"].sort(key=lambda x: x["sort_num"])
+
+            final_page_list.sort(key=lambda x: x["sort_num"])
+
+            return {"status":"success","message": "查询成功", "data": final_page_list}
         else:
             return {"status": "failed", "message": "查询失败", "data": None}
     except Exception as e:
