@@ -28,7 +28,7 @@ def create_app():
     
     # 创建Flask应用实例
     app = Flask(__name__)
-    
+
     # 配置应用
     app.config.update(
         JSON_SORT_KEYS=False,  # 保持JSON响应中键的顺序
