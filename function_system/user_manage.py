@@ -411,6 +411,18 @@ def update_role_page(data):
 def del_role_page(data):
     try:
         db = RolesDB()
+        page_list = db.getRolePage({"rid": data["rid"]})
+        page_ids = []
+        for page in page_list:
+            page_ids.append(page["page_id"])
+
+        db1= PagesDB()
+        sub_page_list = db1.getPageList({"parent_id": data["page_id"]})
+        for page in sub_page_list:
+            if page["page_id"] in page_ids:
+                return {"status": "failed", "message": "目录不为空,不能删除", "data": None}
+
+        db = RolesDB()
         ret = db.delRolePage(data)
         if ret != "failed":
             return {"status":"success","message": "删除成功", "data": ret}
