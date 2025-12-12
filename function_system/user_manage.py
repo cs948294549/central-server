@@ -84,6 +84,11 @@ def authenticate_user(username: str, secret: str, timestamp: int):
             if sign == secret:
                 token = create_access_token(data={"username": username, 'rid': user_info["rid"], 'sign': sign})
                 del user_info["identify"]
+                try:
+                    db_user = UsersDB()
+                    db_user.updateUser({"username": username, "last_login": int(time.time())})
+                except Exception as e:
+                    logger.error("更新last_login失败,原因{}".format(str(e)))
                 return {
                     "status": "success",
                     "data": {
@@ -474,6 +479,15 @@ def get_role_uri_list(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
+@decorator_checkparams(key_array=["rid"])
+def get_route_list_by_role(data):
+    try:
+        if data["rid"] in ["system"]:
+            return get_page_list({})
+        else:
+            return get_role_page_list(data)
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
 if __name__ == '__main__':
     # token = create_access_token(data={"username":"admin1", "role":"admin", "host": ""})

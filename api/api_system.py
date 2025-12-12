@@ -328,5 +328,16 @@ def getRoleUriList():
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
+@system_bp.route('/get_route_list', methods=['POST'])
+def getRouteList():
+    try:
+        ret = user_manage.get_route_list_by_role({"rid": g.user["rid"]})
+        if ret["status"] == "success":
+            return APIResponse.success(data=ret["data"], message=ret["message"])
+        else:
+            return APIResponse.error(message=ret["message"])
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
 # 导出蓝图和设置函数
 __all__ = ['system_bp']
