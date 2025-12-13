@@ -6,6 +6,7 @@ from hashlib import md5
 # 导入API蓝图和设置函数
 from api.api_routes import api_bp
 from api.api_system import system_bp
+from api.api_tools import tools_bp
 from api.api_response import APIResponse
 
 # 导入认证相关功能
@@ -41,6 +42,7 @@ def create_app():
     # 注：其他蓝图可以根据需要在这里注册
 
     app.register_blueprint(system_bp)
+    app.register_blueprint(tools_bp)
 
     # 认证和鉴权中间件
     @app.before_request
