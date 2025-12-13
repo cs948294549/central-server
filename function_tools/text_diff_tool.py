@@ -1,5 +1,5 @@
 import difflib
-
+import re
 # 样式
 '''
 增加
@@ -453,8 +453,6 @@ def check_diff(text_src, text_target, flag):
         return diff
 
 if __name__ == '__main__':
-    import re
-
     str1 = '''#
 vlan 1
 #
