@@ -5,6 +5,8 @@ from core.logger import setup_logger
 from config import Config
 # 导入任务管理器
 from task_core.task_manager import task_manager
+from services.syslog.syslog_main import SyslogService
+
 
 # 初始化日志系统
 logger = setup_logger()
@@ -53,6 +55,11 @@ def main():
     scheduler.start()
     logger.info("任务调度器已启动")
 
+    # 启动syslog
+    if Config.syslog_enable:
+        syslog_service = SyslogService()
+        syslog_service.start()
+        logger.info("交换机日志处理器已启动")
 
     # 创建Flask应用
     app = create_app()

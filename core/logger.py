@@ -80,6 +80,9 @@ def setup_logger(log_level=None):
     agent_logger = logging.getLogger('agent')
     
     logging.info(f"日志系统初始化完成，日志级别: {level}")
+
+    # 方法1：精准屏蔽 kafka 根日志器（覆盖所有 kafka 子模块，包括 kafka.conn）
+    logging.getLogger("kafka").setLevel(logging.WARNING)
     
     return root_logger
 

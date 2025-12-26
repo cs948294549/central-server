@@ -3,6 +3,8 @@ import json
 import logging
 from typing import Optional, List, Dict, Any, Union
 from config import Config
+import time
+
 logger = logging.getLogger(__name__)
 
 # Kafka服务器配置
@@ -89,7 +91,7 @@ class TopicConsumer:
     """
     主题化的Kafka消费者，每个实例关联一个特定的topic
     """
-    def __init__(self, topic: str, group_id: Optional[str] = None, bootstrap_servers: Union[str, List[str]] = None):
+    def __init__(self, topic: str, group_id: Optional[str] = "central_server", bootstrap_servers: Union[str, List[str]] = None):
         self.topic = topic
         self.group_id = group_id
         self.servers = bootstrap_servers or kafka_servers
@@ -147,7 +149,22 @@ def readDataFromCollect():
             logger.error("failed to read data to collector topic {} reason {}".format(Config.syslog_kafka_topic, str(e)))
 
 
-
+_collectProducer = None
+def sendDataToCollector(messages, key: Optional[str] = None, partition: Optional[int] = None):
+    global _collectProducer
+    retry = 3
+    while retry>0:
+        retry-=1
+        if _collectProducer is None:
+            _collectProducer = TopicProducer(Config.collect_kafka_topic)
+        try:
+            _collectProducer.send(messages, key=key, partition=partition)
+            return True
+        except Exception as e:
+            logger.error("failed to send data to collector topic {}".format(str(e)))
+            _collectProducer = None
+            time.sleep(1)
+    return False
 
 if __name__ == '__main__':
     for message in readDataFromCollect():

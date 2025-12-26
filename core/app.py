@@ -10,7 +10,7 @@ from api.api_tools import tools_bp
 from api.api_response import APIResponse
 
 # 导入认证相关功能
-from function_system.user_manage import verify_access_token, verify_url_privilege
+from function_system.user_manage import verify_access_token, verify_url_privilege, verify_secret_token
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -62,58 +62,72 @@ def create_app():
         if path in excluded_routes:
             return None
 
-        # 获取认证信息
-        auth_header = request.headers.get('Authorization')
-        
-        # 检查认证头是否存在
-        if not auth_header:
-            return APIResponse.error("未提供认证信息", 401)
-        
-        # 检查认证头格式
-        if not auth_header.startswith('Bearer '):
-            return APIResponse.error("认证格式错误", 401)
-        
-        # 提取token
-        token = auth_header[7:]
-
         auth_timestamp = request.headers.get('Apptime')
 
         if not auth_timestamp:
             return APIResponse.error("未提供时间戳", 401)
 
-        auth_sessionid = request.headers.get('Sessionid')
-        if not auth_sessionid:
-            return APIResponse.error("未提供会话ID", 401)
-        
-        try:
-            # 验证token
-            user_info = verify_access_token(token)
-            
-            if not user_info:
-                return APIResponse.error("无效的认证信息", 401)
-
-            sign = md5((str(user_info["sign"])+str(auth_timestamp)).encode("utf-8")).hexdigest()
-            if sign != auth_sessionid:
-                return APIResponse.error("认证签名异常", 401)
-
-            # 将用户信息存储到全局上下文
-            g.user = user_info
-            logger.info("用户{} {}访问接口{}".format(user_info['username'], user_info['rid'], path))
-            # 可以在这里添加更细粒度的鉴权逻辑
-            # 例如：检查用户是否有权限访问当前资源
-            if g.user["rid"] in ["system", "admin"]:
-                pass
-            else:
-                priv = verify_url_privilege(g.user["rid"], path)
-                if priv:
+        api_key = request.headers.get('key')
+        api_secret = request.headers.get('secret')
+        if api_key and api_secret:
+            # api请求认证
+            try:
+                ret_auth = verify_secret_token(api_key, api_secret, auth_timestamp)
+                if ret_auth is True:
                     pass
                 else:
-                    return APIResponse.forbidden_error(message="权限不足")
+                    return APIResponse.error("API认证失败", 401)
+            except Exception as e:
+                logger.error(f"API认证失败: {str(e)}")
+                return APIResponse.error("API认证失败", 401)
+        else:
+            # 获取认证信息
+            auth_header = request.headers.get('Authorization')
 
-            
-        except Exception as e:
-            logger.error(f"认证失败: {str(e)}")
-            return APIResponse.error("认证失败", 401)
+            # 检查认证头是否存在
+            if not auth_header:
+                return APIResponse.error("未提供认证信息", 401)
+
+            # 检查认证头格式
+            if not auth_header.startswith('Bearer '):
+                return APIResponse.error("认证格式错误", 401)
+
+            # 提取token
+            token = auth_header[7:]
+            auth_sessionid = request.headers.get('Sessionid')
+
+            if not auth_sessionid:
+                return APIResponse.error("未提供会话ID", 401)
+
+            try:
+                # 验证token
+                user_info = verify_access_token(token)
+
+                if not user_info:
+                    return APIResponse.error("无效的认证信息", 401)
+
+                sign = md5((str(user_info["sign"])+str(auth_timestamp)).encode("utf-8")).hexdigest()
+                if sign != auth_sessionid:
+                    return APIResponse.error("认证签名异常", 401)
+
+                # 将用户信息存储到全局上下文
+                g.user = user_info
+                logger.info("用户{} {}访问接口{}".format(user_info['username'], user_info['rid'], path))
+                # 可以在这里添加更细粒度的鉴权逻辑
+                # 例如：检查用户是否有权限访问当前资源
+                if g.user["rid"] in ["system", "admin"]:
+                    pass
+                else:
+                    priv = verify_url_privilege(g.user["rid"], path)
+                    if priv:
+                        pass
+                    else:
+                        return APIResponse.forbidden_error(message="权限不足")
+
+
+            except Exception as e:
+                logger.error(f"认证失败: {str(e)}")
+                return APIResponse.error("认证失败", 401)
     
     @app.after_request
     def after_request(response):

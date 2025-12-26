@@ -46,6 +46,7 @@ config.py
 private_config.py
 
 # test
+*.txt
 test.py
 test1.py
 test*.py

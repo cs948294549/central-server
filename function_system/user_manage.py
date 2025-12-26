@@ -20,6 +20,23 @@ SECRET_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWlu"  # 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24  # 访问令牌有效期
 
+app_secrets = {
+    "agent1": "afbf5e3670fd122220bd464b34eeb253"
+}
+
+# 验证API
+def verify_secret_token(key: str, token: str, timestamp: str):
+    """验证令牌，返回载荷数据"""
+    if key in app_secrets.keys():
+        app_secret = app_secrets[key]
+        signature = md5((app_secret+timestamp).encode("utf-8")).hexdigest()
+        if signature == token:
+            return True
+        else:
+            return False
+    else:
+        return False
+
 # jwt认证相关
 def create_access_token(data: dict):
     """生成访问令牌"""
@@ -492,73 +509,4 @@ def get_route_list_by_role(data):
 if __name__ == '__main__':
     # token = create_access_token(data={"username":"admin1", "role":"admin", "host": ""})
     # print(token)
-
-    # old_t = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzY1NDE4ODQzfQ.Hm9RvsGYvbVahEpRJr6pCZDYFmp2J3tpBFixoCKxcJA"
-    # sd = verify_access_token(old_t)
-    # print(sd)
-
-    # ret = authenticate_user(username="admin", identify="20d6ba810a3185f4207bac8588824da3")
-    # print(ret)
-
-    # aa = verify_url_privilege("admin", "/system/getuser")
-    # print(aa)
-
-    # aa = get_role_list(data={})
-    # print(aa)
-    pages = [
-        {
-            "classify": "系统管理",
-            "descr": "用户管理",
-            "hide": "0",
-            "icon": "",
-            "name": "用户管理",
-            "p_type": "1",
-            "page_id": 1,
-            "parent_id": 0,
-            "path": "pages/systemManage/userManage",
-            "sort_num": "400"
-        },
-        {
-            "classify": "DEMO",
-            "descr": "测试页面",
-            "hide": "0",
-            "icon": "",
-            "name": "测试页面",
-            "p_type": "0",
-            "page_id": 2,
-            "parent_id": 0,
-            "path": "",
-            "sort_num": "300"
-        },
-        {
-            "classify": "默认分组",
-            "descr": "流程图",
-            "hide": "0",
-            "icon": "",
-            "name": "G6流程图",
-            "p_type": "1",
-            "page_id": 3,
-            "parent_id": 2,
-            "path": "pages/demo/workflow/g6_flow",
-            "sort_num": "6"
-        }
-    ]
-
-    dir_map = {}
-    for page in pages:
-        if page["parent_id"]==0:
-            dir_map[page["page_id"]] = page
-            dir_map[page["page_id"]]["children"] = []
-
-    for page in pages:
-        if page["parent_id"]!=0:
-            if page["parent_id"] in dir_map:
-                dir_map[page["parent_id"]]["children"].append(page)
-
-    page_list = list(dir_map.values())
-    for page in page_list:
-        page["children"].sort(key=lambda x: x["sort_num"])
-    page_list.sort(key=lambda x: x["sort_num"])
-
-    print(json.dumps(dir_map, indent=4, ensure_ascii=False))
-
+    print(md5("chens_dasdasd".encode("utf-8")).hexdigest())
