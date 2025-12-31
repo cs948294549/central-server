@@ -7,6 +7,7 @@ from hashlib import md5
 from api.api_routes import api_bp
 from api.api_system import system_bp
 from api.api_tools import tools_bp
+from api.api_kafka_data import data_bp
 from api.api_response import APIResponse
 
 # 导入认证相关功能
@@ -43,6 +44,7 @@ def create_app():
 
     app.register_blueprint(system_bp)
     app.register_blueprint(tools_bp)
+    app.register_blueprint(data_bp)
 
     # 认证和鉴权中间件
     @app.before_request

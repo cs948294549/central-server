@@ -4,79 +4,9 @@ import logging
 import threading
 import json
 import time
+from services.syslog import BlacklistEntry, get_blacklisted_entries
 
 logger = logging.getLogger(__name__)
-
-
-class BlacklistEntry:
-    """
-    黑名单条目
-    """
-
-    def __init__(self, entry_id: str, pattern: str, description: str = None):
-        """
-        初始化黑名单条目
-
-        Args:
-            entry_id: 条目ID
-            pattern: 匹配模式（正则表达式）
-            description: 描述
-        """
-        self.id = entry_id
-        self.pattern = pattern
-        self.description = description
-        self._matched_sum = 0
-        self._compiled_pattern = None
-
-        try:
-            self._compiled_pattern = re.compile(pattern, re.IGNORECASE)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern '{pattern}': {e}")
-
-    def matches(self, text: str) -> bool:
-        """
-        检查文本是否匹配该黑名单条目
-
-        Args:
-            text: 要检查的文本
-
-        Returns:
-            是否匹配
-        """
-        if not text:
-            return False
-        return bool(self._compiled_pattern.search(text))
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        转换为字典格式
-
-        Returns:
-            字典表示
-        """
-        return {
-            'id': self.id,
-            'pattern': self.pattern,
-            'description': self.description,
-            'matched_sum': self._matched_sum,
-        }
-
-    def increase(self):
-        self._matched_sum += 1
-
-def get_blacklisted_entries() -> List[BlacklistEntry]:
-    with open("services/syslog/syslog_config.json", "r") as f:
-        config = json.loads(f.read())
-        black_list = config.get("black_list", [])
-        blacklisted_entries = []
-        for blacklisted_entry in black_list:
-            entry = BlacklistEntry(
-                entry_id=blacklisted_entry.get('id', ''),
-                pattern=blacklisted_entry.get('pattern', ''),
-                description=blacklisted_entry.get('description', '')
-            )
-            blacklisted_entries.append(entry)
-        return blacklisted_entries
 
 class BlacklistManager:
     def __init__(self, refresh_interval: int=300) -> None:
@@ -88,7 +18,9 @@ class BlacklistManager:
         self._refresh_interval=refresh_interval
 
         # 初始化方法
-        self._initialize()
+        status = self._initialize()
+        if not status:
+            raise RuntimeError("Failed to initialize blacklist")
 
 
     def _initialize(self):
@@ -162,8 +94,6 @@ class BlacklistManager:
             blacklist_entries = self._blacklist.copy()
 
         # 要检查的字段
-        check_fields = ['message', 'host', 'program', 'raw']
-
         for entry in blacklist_entries:
             if entry.matches(str(message["message"])):
                 entry.increase()

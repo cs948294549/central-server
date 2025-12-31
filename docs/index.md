@@ -90,4 +90,7 @@ privilege varchar(1) COLLATE utf8_bin NOT NULL DEFAULT '0'  COMMENT '页面权�
 primary key(uri_id)
 );
 
+
+
+
 ```

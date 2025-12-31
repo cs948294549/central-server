@@ -5,86 +5,12 @@ import threading
 import json
 import time
 from hashlib import sha1,md5
-
 from function_messaging.redis_client import get_redis_client
+from services.syslog import MergeRule, get_mergelisted_entries
 
 logger = logging.getLogger(__name__)
 
 local_red = get_redis_client()
-
-class MergeRule:
-    """
-    日志合并规则
-    """
-
-    def __init__(self, entry_id: str, group_name: str, pattern: str, description: str = None):
-        """
-        初始化合并规则
-
-        Args:
-            name: 规则名称
-            pattern: 匹配模式（正则表达式）
-            fields: 用于分组的字段列表
-        """
-        self.id = entry_id
-        self.group_name = group_name
-        self.pattern = pattern
-        self.description = description
-        self._matched_sum = 0
-        self._compiled_pattern = None
-
-        try:
-            self._compiled_pattern = re.compile(pattern, re.IGNORECASE)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern '{pattern}': {e}")
-
-    def matches(self, text: str) -> bool:
-        """
-        检查消息是否匹配该规则
-
-        Args:
-            text: 要检查的消息
-
-        Returns:
-            是否匹配
-        """
-        if not text:
-            return False
-        return bool(self._compiled_pattern.search(text))
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        转换为字典格式
-
-        Returns:
-            字典表示
-        """
-        return {
-            'id': self.id,
-            'group_name': self.group_name,
-            'pattern': self.pattern,
-            'description': self.description,
-            'matched_sum': self._matched_sum,
-        }
-
-    def increase(self):
-        self._matched_sum += 1
-
-def get_mergelisted_entries() -> List[MergeRule]:
-    with open("services/syslog/syslog_config.json", "r") as f:
-        config = json.loads(f.read())
-        merge_list = config.get("merge_list", [])
-        mergelisted_entries = []
-        for mergelisted_entry in merge_list:
-            entry = MergeRule(
-                entry_id=mergelisted_entry.get('id', ''),
-                group_name=mergelisted_entry.get('group_name', ''),
-                pattern=mergelisted_entry.get('pattern', ''),
-                description=mergelisted_entry.get('description', '')
-            )
-            mergelisted_entries.append(entry)
-        return mergelisted_entries
-
 
 class MergelistManager:
     def __init__(self, refresh_interval: int = 300, time_window:int=300):
@@ -98,7 +24,9 @@ class MergelistManager:
 
 
         # 初始化方法
-        self._initialize()
+        status = self._initialize()
+        if not status:
+            raise RuntimeError("Failed to initialize mergelist")
 
     def _initialize(self):
         try:
@@ -192,7 +120,7 @@ class MergelistManager:
             hostname = message.get("hostname", "-")
 
         # 提取识别对象
-        alarmObject = message.get("alarm_object", "")
+        alarmObject = message.get("alarm_object", "-")
         PROT_REGEXS = [
             "\S+(?:\d+/)+\d+",
             "\S+Aggregation\d+",
@@ -237,9 +165,12 @@ class MergelistManager:
                 "message": message["message"],
                 "ip": ip,
                 "hostname": hostname,
+                "alarm_type": "syslog",
                 "keyword": keyword,
                 "alarm_object": alarmObject,
-                "group_name": current_key_entry
+                "group_name": group_name,
+                "group_label": current_key_entry
+
             }
         else:
             last_key = local_red.get(hash_last_group_key)
@@ -250,9 +181,11 @@ class MergelistManager:
                     "message": message["message"],
                     "ip": ip,
                     "hostname": hostname,
+                    "alarm_type": "syslog",
                     "keyword": keyword,
                     "alarm_object": alarmObject,
-                    "group_name": last_key_entry
+                    "group_name": group_name,
+                    "group_label": last_key_entry
                 }
             else:
                 local_red.set(hash_group_key, hash_group_key, ex=timeWindow * 2)
@@ -260,9 +193,11 @@ class MergelistManager:
                     "message": message["message"],
                     "ip": ip,
                     "hostname": hostname,
+                    "alarm_type": "syslog",
                     "keyword": keyword,
                     "alarm_object": alarmObject,
-                    "group_name": hash_group_key
+                    "group_name": group_name,
+                    "group_label": hash_group_key
                 }
 
     def get_mergelisted_entries(self) -> List[MergeRule]:
@@ -275,25 +210,6 @@ if __name__ == '__main__':
 
     bl = MergelistManager()
 
-    log_list = [
-        {"message": "2025-12-23 15:49:02 - core.app - INFO - Request: OPTIONS /system/change_passwd Status: 200"},
-        {"message": '2025-12-23 15:49:02 - werkzeug - INFO - 183.159.48.32 - - [23/Dec/2025 15:49:02] [INFO] [IP: 183.159.48.32] "OPTIONS /system/change_passwd HTTP/HTTP/1.0" 200 -'},
-        {"message": '2025-12-23 15:49:02 - core.app - INFO - 用户demo demo访问接口/system/change_passwd'},
-        {"message": '2025-12-23 15:49:02 - core.app - INFO - Request: POST /system/change_passwd Status: 200'},
-        {"message": '2025-12-23 15:49:02 - werkzeug - INFO - 183.159.48.32 - - [23/Dec/2025 15:49:02] [INFO] [IP: 183.159.48.32] "POST /system/change_passwd HTTP/HTTP/1.0" 200 -'},
-        {"message": '2025-12-23 15:49:13 - core.app - INFO - Request: OPTIONS /system/login Status: 200'},
-        {"message": '2025-12-23 15:49:13 - werkzeug - INFO - 183.159.48.32 - - [23/Dec/2025 15:49:13] [INFO] [IP: 183.159.48.32] "OPTIONS /system/login HTTP/HTTP/1.0" 200 -'},
-        {"message": '2025-12-23 15:49:13 - core.app - INFO - Request: POST /system/login Status: 200'},
-        {"message": '2025-12-23 15:49:13 - werkzeug - INFO - 183.159.48.32 - - [23/Dec/2025 15:49:13] [INFO] [IP: 183.159.48.32] "POST /system/login HTTP/HTTP/1.0" 200 -'},
-        {"message": '2025-12-23 15:49:13 - core.app - INFO - Request: OPTIONS /system/get_route_list Status: 200'},
-    ]
-
-    # while True:
-    #     for msg in log_list:
-    #         status, group_info = bl.mergeLog(msg)
-    #         if status:
-    #             logger.info(f"Message '{msg}' merged to: {group_info} ")
-    #         time.sleep(1)
 
     log_dict = {}
     with open("义桥S125完整日志记录.txt", "r") as f:

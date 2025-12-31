@@ -116,8 +116,8 @@ class TopicConsumer:
         except Exception as e:
             logger.error(f"关闭Kafka消费者失败: {str(e)}")
 
-_syslogConsumer = None
 
+_syslogConsumer = None
 def readDataFromSyslog():
     global _syslogConsumer
     retry = 3
@@ -133,7 +133,6 @@ def readDataFromSyslog():
             logger.error("failed to read data to syslog topic {} reason {}".format(Config.syslog_kafka_topic, str(e)))
 
 _collectConsumer = None
-
 def readDataFromCollect():
     global _collectConsumer
     retry = 3
@@ -163,6 +162,24 @@ def sendDataToCollector(messages, key: Optional[str] = None, partition: Optional
         except Exception as e:
             logger.error("failed to send data to collector topic {}".format(str(e)))
             _collectProducer = None
+            time.sleep(1)
+    return False
+
+_syslogProducer = None
+def sendDataToSyslog(messages, key: Optional[str] = None, partition: Optional[int] = None):
+    global _syslogProducer
+    retry = 3
+    while retry>0:
+        retry-=1
+        if _syslogProducer is None:
+            _syslogProducer = TopicProducer(Config.syslog_kafka_topic)
+
+        rt = _syslogProducer.send(messages, key=key, partition=partition)
+        if rt:
+            return True
+        else:
+            logger.error("failed to send data to syslog topic {}".format(str(Config.syslog_kafka_topic)))
+            _syslogProducer = None
             time.sleep(1)
     return False
 

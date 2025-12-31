@@ -5,7 +5,8 @@ from core.logger import setup_logger
 from config import Config
 # 导入任务管理器
 from task_core.task_manager import task_manager
-from services.syslog.syslog_main import SyslogService
+from services.syslog_main import SyslogService
+from services.data_main import DataService
 
 
 # 初始化日志系统
@@ -60,6 +61,13 @@ def main():
         syslog_service = SyslogService()
         syslog_service.start()
         logger.info("交换机日志处理器已启动")
+        
+    # 启动数据存储
+    if Config.collect_enable:
+        collect_service = DataService()
+        collect_service.start()
+        logger.info("数据存储器已启动")
+
 
     # 创建Flask应用
     app = create_app()
