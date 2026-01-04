@@ -117,6 +117,41 @@ class AlarmDB(mysqldb_netops):
         else:
             return "failed"
 
+    def updateAlarmListByGroup(self, data):
+        data = waf(data)
+        print(data)
+        # ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,status,create_time
+        if "group_labels" in data.keys():
+            conditions = []
+            params = []
+
+            group_list_str = ",".join([f"'{label}'" for label in data["group_labels"]])
+
+            update_key = ["status"]
+            for key in update_key:
+                if key in data.keys():
+                    conditions.append(key + " = %s")
+                    params.append(data[key])
+
+            if len(conditions) > 0:
+                sql = "update alarm_list set " + ",".join(conditions) + " where group_label in ({})".format(str(group_list_str))
+                print(sql)
+                try:
+                    self.cursor.execute(sql, params)
+                    self.conn.commit()
+                    return "success"
+                except Exception as err:
+                    self.conn.rollback()
+                    logger.error("======AlarmDB updateAlarmListByGroup error========\n{}".format(str(err)))
+                    return "failed"
+                finally:
+                    self.cursor.close()
+                    self.conn.close()
+            else:
+                return "failed"
+        else:
+            return "failed"
+
 
     def getAlarmList(self, data):
         data = waf(data)
@@ -133,7 +168,7 @@ class AlarmDB(mysqldb_netops):
             if key_item["key"] in data.keys():
                 conditions.append("{}".format(key_item["value"]) + " regexp '" + str(data[key_item["key"]]) + "'")
 
-        serach_eq_key = ["alarm_type", "alarm_id", "status"]
+        serach_eq_key = ["alarm_type", "alarm_id", "status", "group_label"]
         for key in serach_eq_key:
             if key in data.keys():
                 conditions.append("{}".format(key) + "='" + str(data[key]) + "'")
@@ -250,23 +285,104 @@ class AlarmDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
-
-    def getAlarmListGroup(self, data):
+    def addAlarmLogByGroup(self, data):
         data = waf(data)
-        conditions = []
+
+        group_list_str = ",".join([f"'{label}'" for label in data["group_labels"]])
+        timestamp = int(time.time())
+        sql = '''
+        INSERT INTO alarm_log (
+            alarm_id,handler,msg,create_time
+        )
+        SELECT alarm_id,'{handler}' AS handler,'{msg}' AS msg,'{timestamp}' AS create_time 
+        FROM alarm_list
+        WHERE group_label IN ({group_list}) and status='0';
+        '''.format(handler=data["handler"], msg=data["msg"], timestamp=timestamp, group_list=group_list_str)
+        print(sql)
+        try:
+            self.cursor.execute(sql)
+            self.conn.commit()
+            return "success"
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======AlarmDB delAlarmLog error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+
+    def getAlarmListCurrent(self):
+        sql = '''
+        SELECT 
+            a.group_label,a.ip,a.hostname,a.alarm_type,a.group_name,a.alarm_object,a.keyword,
+            b.group_label_count,b.start_time,b.end_time
+        FROM (
+            SELECT
+                group_label,MAX(ip) AS ip,
+                MAX(hostname) AS hostname,
+                MAX(alarm_type) AS alarm_type,
+                MAX(group_name) AS group_name,
+                MAX(alarm_object) AS alarm_object,
+                MAX(keyword) AS keyword
+	        FROM  alarm_list
+	            where status='0'
+	        GROUP BY group_label
+            ) a
+        LEFT JOIN (
+            SELECT 
+                group_label, COUNT(1) AS group_label_count,
+                min(create_time) AS start_time,
+                max(create_time) AS end_time
+            FROM alarm_list
+            GROUP BY group_label
+            ) b ON a.group_label = b.group_label;'''
+        proper = ["group_label", "ip", "hostname", "alarm_type", "group_name","alarm_object","keyword", "group_label_count", "start_time", "end_time"]
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as err:
+            logger.error("======AlarmDB getAlarmListCurrent error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
 
 if __name__ == '__main__':
     aa = AlarmDB()
 
-    li = aa.getAlarmList({})
+    # li = aa.getAlarmList({})
+    # group_dict = {}
+    # for item in li:
+    #     if item["group_label"] not in group_dict.keys():
+    #         group_dict[item["group_label"]] = []
+    #     group_dict[item["group_label"]].append(item)
+    #
+    # for group_label in group_dict.keys():
+    #     print(group_label)
+    #     print(group_dict[group_label][0]["group_name"], group_dict[group_label][0]["alarm_object"], group_dict[group_label][0]["keyword"])
+    #     for item in group_dict[group_label]:
+    #         print(item["msg"].strip(), item["create_time"])
+    import json
+    li = aa.getAlarmListCurrent()
     group_dict = {}
     for item in li:
-        if item["group_label"] not in group_dict.keys():
-            group_dict[item["group_label"]] = []
-        group_dict[item["group_label"]].append(item)
+        if item["ip"] not in group_dict.keys():
+            group_dict[item["ip"]] = {
+                "ip": item["ip"],
+                "hostname": item["hostname"],
+                "alarm_dict": []
+            }
+        group_dict[item["ip"]]["alarm_dict"].append(item)
 
-    for group_label in group_dict.keys():
-        print(group_label)
-        print(group_dict[group_label][0]["group_name"], group_dict[group_label][0]["alarm_object"], group_dict[group_label][0]["keyword"])
-        for item in group_dict[group_label]:
-            print(item["msg"].strip(), item["create_time"])
+    print(json.dumps(group_dict, indent=4, ensure_ascii=False))

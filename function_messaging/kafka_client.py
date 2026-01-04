@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 # Kafka服务器配置
 kafka_servers = Config.kafka_server
 
-
 class TopicProducer:
     """
     主题化的Kafka生产者，每个实例关联一个特定的topic

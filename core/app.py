@@ -4,11 +4,12 @@ from functools import wraps
 from hashlib import md5
 
 # 导入API蓝图和设置函数
+from api.api_response import APIResponse
 from api.api_routes import api_bp
 from api.api_system import system_bp
 from api.api_tools import tools_bp
 from api.api_kafka_data import data_bp
-from api.api_response import APIResponse
+from api.api_alarm import alarm_bp
 
 # 导入认证相关功能
 from function_system.user_manage import verify_access_token, verify_url_privilege, verify_secret_token
@@ -45,6 +46,7 @@ def create_app():
     app.register_blueprint(system_bp)
     app.register_blueprint(tools_bp)
     app.register_blueprint(data_bp)
+    app.register_blueprint(alarm_bp)
 
     # 认证和鉴权中间件
     @app.before_request
