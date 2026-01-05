@@ -178,6 +178,8 @@ class AlarmDB(mysqldb_netops):
                 status,create_time from alarm_list '''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
+        print(sql)
+
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
                   "alarm_object", "keyword", "status", "create_time"]
         try:
