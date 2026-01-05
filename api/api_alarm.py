@@ -143,6 +143,18 @@ def getCurrentAlarm():
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
+@alarm_bp.route('/get_history_alarm', methods=['POST'])
+def getHistoryAlarm():
+    try:
+        data = request.json
+        ret = syslog_manage.get_history_alarm(data)
+        if ret["status"] == "success":
+            return APIResponse.success(data=ret["data"], message=ret["message"])
+        else:
+            return APIResponse.error(message=ret["message"])
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
 @alarm_bp.route('/get_alarm_by_group', methods=['POST'])
 def getAlarmByGroup():
     try:

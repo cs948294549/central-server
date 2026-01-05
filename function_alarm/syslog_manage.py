@@ -148,6 +148,28 @@ def get_current_alarm(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
+@decorator_checkparams(key_array=[])
+def get_history_alarm(data):
+    try:
+        alarm_db = AlarmDB()
+        li = alarm_db.getAlarmListHistory(data)
+        if li != "failed":
+            group_alarm = {}
+            for item in li:
+                label = "{}_{}".format(item["ip"], item["hostname"])
+                if label not in group_alarm.keys():
+                    group_alarm[label] = {
+                        "ip": item["ip"],
+                        "hostname": item["hostname"],
+                        "children": []
+                    }
+                group_alarm[label]["children"].append(item)
+            return {"status":"success","message": "查询成功", "data": list(group_alarm.values())}
+        else:
+            return {"status": "failed", "message": "查询失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
 @decorator_checkparams(key_array=["group_label"])
 def get_alarm_by_group(data):
     try:
@@ -174,6 +196,9 @@ def handle_alarm_by_group(data):
     try:
         # 添加日志
         handle_msg = "状态修改成{}".format(data["status"])
+        if "descr" in data.keys():
+            handle_msg += "\n{}".format(data["descr"])
+
         alarm_db = AlarmDB()
         ret1 = alarm_db.addAlarmLogByGroup({
             "group_labels": data["group_labels"],

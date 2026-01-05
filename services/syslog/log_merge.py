@@ -103,6 +103,8 @@ class MergelistManager:
 
         timestamp = int(time.time()/timeWindow)
         ip = message.get('ip', '-')
+        alarm_type = message.get('alarm_type', 'syslog')
+
         # 提取关键字
         reg_keyword = re.compile(r"%{1,2}(\S+):")
         keyword_find = reg_keyword.findall(str(message["message"]))
@@ -148,11 +150,11 @@ class MergelistManager:
                 break
         if group_name == "-":
             # 识别分组
-            group_key = "{}.{}.{}.{}".format(ip, timestamp, keyword, alarmObject)
-            last_group_key = "{}.{}.{}.{}".format(ip, str(timestamp-1), keyword, alarmObject)
+            group_key = "{}.{}.{}.{}.{}".format(ip, timestamp, keyword, alarmObject, alarm_type)
+            last_group_key = "{}.{}.{}.{}.{}".format(ip, str(timestamp-1), keyword, alarmObject, alarm_type)
         else:
-            group_key = "{}.{}.{}.{}".format(ip, timestamp, group_name, alarmObject)
-            last_group_key = "{}.{}.{}.{}".format(ip, str(timestamp - 1), group_name, alarmObject)
+            group_key = "{}.{}.{}.{}.{}".format(ip, timestamp, group_name, alarmObject, alarm_type)
+            last_group_key = "{}.{}.{}.{}.{}".format(ip, str(timestamp - 1), group_name, alarmObject, alarm_type)
 
         # 缓存及更新聚合key
         hash_group_key = md5(group_key.encode("utf-8")).hexdigest()
@@ -165,7 +167,7 @@ class MergelistManager:
                 "message": message["message"],
                 "ip": ip,
                 "hostname": hostname,
-                "alarm_type": "syslog",
+                "alarm_type": alarm_type,
                 "keyword": keyword,
                 "alarm_object": alarmObject,
                 "group_name": group_name,
@@ -181,7 +183,7 @@ class MergelistManager:
                     "message": message["message"],
                     "ip": ip,
                     "hostname": hostname,
-                    "alarm_type": "syslog",
+                    "alarm_type": alarm_type,
                     "keyword": keyword,
                     "alarm_object": alarmObject,
                     "group_name": group_name,
@@ -193,7 +195,7 @@ class MergelistManager:
                     "message": message["message"],
                     "ip": ip,
                     "hostname": hostname,
-                    "alarm_type": "syslog",
+                    "alarm_type": alarm_type,
                     "keyword": keyword,
                     "alarm_object": alarmObject,
                     "group_name": group_name,

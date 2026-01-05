@@ -27,7 +27,7 @@ primary key(alarm_id)
 drop table IF EXISTS alarm_log;
 create table alarm_log(
 log_id bigint COLLATE utf8_bin NOT NULL AUTO_INCREMENT COMMENT '记录ID',
-alarm_id bigint COLLATE utf8_bin NOT NULL COMMENT '规则ID',
+group_label varchar(100) COLLATE utf8_bin NOT NULL COMMENT '分组标签 hash',
 handler varchar(100) COLLATE utf8_bin NOT NULL COMMENT '处理人',
 msg  varchar(300) COLLATE utf8_bin NOT NULL COMMENT '处理内容',
 create_time varchar(10) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '创建时间',
@@ -205,7 +205,7 @@ class AlarmDB(mysqldb_netops):
 
     def addAlarmLog(self, data):
         try:
-            check_params = ["alarm_id", "handler", "msg"]
+            check_params = ["group_label", "handler", "msg"]
             for i in check_params:
                 if i not in data.keys():
                     print("参数不足", i)
@@ -213,9 +213,9 @@ class AlarmDB(mysqldb_netops):
             timestamp = int(time.time())
             sqlParam = []
             data = waf(data)
-            sqlParam.append((data["alarm_id"], data["handler"], data["msg"], str(timestamp)))
+            sqlParam.append((data["group_label"], data["handler"], data["msg"], str(timestamp)))
             sql = '''
-            insert into alarm_log(alarm_id,handler,msg,create_time)
+            insert into alarm_log(group_label,handler,msg,create_time)
             values(%s,%s,%s,%s);
             '''
             self.cursor.executemany(sql, sqlParam)
@@ -257,16 +257,16 @@ class AlarmDB(mysqldb_netops):
             if key_item["key"] in data.keys():
                 conditions.append("{}".format(key_item["value"]) + " regexp '" + str(data[key_item["key"]]) + "'")
 
-        serach_eq_key = ["alarm_id"]
+        serach_eq_key = ["group_label"]
         for key in serach_eq_key:
             if key in data.keys():
                 conditions.append("{}".format(key) + "='" + str(data[key]) + "'")
 
         sql = '''
-                select log_id,alarm_id,handler,msg,create_time from alarm_log '''
+                select log_id,group_label,handler,msg,create_time from alarm_log '''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
-        proper = ["log_id", "alarm_id", "handler", "msg", "create_time"]
+        proper = ["log_id", "group_label", "handler", "msg", "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -288,26 +288,27 @@ class AlarmDB(mysqldb_netops):
             self.conn.close()
 
     def addAlarmLogByGroup(self, data):
-        data = waf(data)
-
-        group_list_str = ",".join([f"'{label}'" for label in data["group_labels"]])
-        timestamp = int(time.time())
-        sql = '''
-        INSERT INTO alarm_log (
-            alarm_id,handler,msg,create_time
-        )
-        SELECT alarm_id,'{handler}' AS handler,'{msg}' AS msg,'{timestamp}' AS create_time 
-        FROM alarm_list
-        WHERE group_label IN ({group_list}) and status='0';
-        '''.format(handler=data["handler"], msg=data["msg"], timestamp=timestamp, group_list=group_list_str)
-        print(sql)
         try:
-            self.cursor.execute(sql)
+            check_params = ["group_labels", "handler", "msg"]
+            for i in check_params:
+                if i not in data.keys():
+                    print("参数不足", i)
+                    return "failed"
+
+            timestamp = int(time.time())
+            sqlParam = []
+            for g_label in data["group_labels"]:
+                sqlParam.append((g_label, data["handler"], data["msg"], str(timestamp)))
+            sql = '''
+            insert into alarm_log(group_label,handler,msg,create_time)
+            values(%s,%s,%s,%s);
+            '''
+            self.cursor.executemany(sql, sqlParam)
             self.conn.commit()
-            return "success"
+            return self.cursor.lastrowid
         except Exception as err:
             self.conn.rollback()
-            logger.error("======AlarmDB delAlarmLog error========\n{}".format(str(err)))
+            logger.error("======AlarmDB addAlarmLog many error========\n{}".format(str(err)))
             return "failed"
         finally:
             self.cursor.close()
@@ -355,6 +356,83 @@ class AlarmDB(mysqldb_netops):
                 return []
         except Exception as err:
             logger.error("======AlarmDB getAlarmListCurrent error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def getAlarmListHistory(self, data):
+        # 必须圈定时间
+        if "start_time" not in data.keys() and "end_time" not in data.keys():
+            logger.warning("======AlarmDB getAlarmListHistory waning========\n{}".format("查询缺少时间范围"))
+            return "failed"
+        time_range = int(data["end_time"]) - int(data["start_time"])
+        if time_range >= 86401:
+            logger.warning("======AlarmDB getAlarmListHistory waning========\n{}".format("告警时间跨度过大"))
+            return "failed"
+
+        conditions = []
+        serach_reg_key = [
+            {"key": "ip_reg", "value": "ip"},
+            {"key": "hostname_reg", "value": "hostname"},
+            {"key": "alarm_object_reg", "value": "alarm_object"},
+            {"key": "keyword_reg", "value": "keyword"},
+        ]
+        for key_item in serach_reg_key:
+            if key_item["key"] in data.keys():
+                conditions.append("{}".format(key_item["value"]) + " regexp '" + str(data[key_item["key"]]) + "'")
+
+        serach_eq_key = ["group_label", "alarm_type"]
+        for key in serach_eq_key:
+            if key in data.keys():
+                conditions.append("{}".format(key) + "='" + str(data[key]) + "'")
+
+        if "start_time" in data.keys():
+            conditions.append("create_time>='" + str(data["start_time"]) + "'")
+        if "end_time" in data.keys():
+            conditions.append("create_time<='" + str(data["end_time"]) + "'")
+
+        sql = '''
+        SELECT 
+            a.group_label,a.ip,a.hostname,a.alarm_type,a.group_name,a.alarm_object,a.keyword,
+            b.group_label_count,b.start_time,b.end_time
+        FROM (
+            SELECT
+                group_label,MAX(ip) AS ip,
+                MAX(hostname) AS hostname,
+                MAX(alarm_type) AS alarm_type,
+                MAX(group_name) AS group_name,
+                MAX(alarm_object) AS alarm_object,
+                MAX(keyword) AS keyword
+            FROM  alarm_list
+                where {}
+            GROUP BY group_label
+            ) a
+        LEFT JOIN (
+            SELECT 
+                group_label, COUNT(1) AS group_label_count,
+                min(create_time) AS start_time,
+                max(create_time) AS end_time
+            FROM alarm_list
+            GROUP BY group_label
+            ) b ON a.group_label = b.group_label;'''.format(" and ".join(conditions))
+        proper = ["group_label", "ip", "hostname", "alarm_type", "group_name", "alarm_object", "keyword", "counter",
+                  "start_time", "end_time"]
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as err:
+            logger.error("======AlarmDB getAlarmListHistory error========\n{}".format(str(err)))
             return "failed"
         finally:
             self.cursor.close()
