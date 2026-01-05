@@ -245,7 +245,7 @@ class SyslogDB(mysqldb_netops):
         sql = '''
                 select rule_id,group_name,pattern,descr,update_time from syslog_merge_list'''
         if len(conditions) > 0:
-            sql = sql + " where " + " and ".join(conditions)
+            sql = sql + " where " + " and ".join(conditions) + " order by group_name,rule_id "
         proper = ["rule_id", "group_name", "pattern", "descr", "update_time"]
         try:
             self.cursor.execute(sql)

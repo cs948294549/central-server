@@ -194,6 +194,8 @@ def handle_alarm_by_group(data):
     :return:
     '''
     try:
+        if len(data["group_labels"])<=0:
+            return {"status": "failed", "message": "待处理数据条目为空", "data": None}
         # 添加日志
         handle_msg = "状态修改成{}".format(data["status"])
         if "descr" in data.keys():
