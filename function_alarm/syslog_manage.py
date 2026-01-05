@@ -139,10 +139,10 @@ def get_current_alarm(data):
                     group_alarm[label] = {
                         "ip": item["ip"],
                         "hostname": item["hostname"],
-                        "alarm_list": []
+                        "children": []
                     }
-                group_alarm[label]["alarm_list"].append(item)
-            return {"status":"success","message": "查询成功", "data": group_alarm}
+                group_alarm[label]["children"].append(item)
+            return {"status":"success","message": "查询成功", "data": list(group_alarm.values())}
         else:
             return {"status": "failed", "message": "查询失败", "data": None}
     except Exception as e:

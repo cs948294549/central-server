@@ -337,7 +337,7 @@ class AlarmDB(mysqldb_netops):
             FROM alarm_list
             GROUP BY group_label
             ) b ON a.group_label = b.group_label;'''
-        proper = ["group_label", "ip", "hostname", "alarm_type", "group_name","alarm_object","keyword", "group_label_count", "start_time", "end_time"]
+        proper = ["group_label", "ip", "hostname", "alarm_type", "group_name","alarm_object","keyword", "counter", "start_time", "end_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
