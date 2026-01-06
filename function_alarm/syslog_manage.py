@@ -224,7 +224,7 @@ def handle_alarm_by_group(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
-@decorator_checkparams(key_array=["alarm_id"])
+@decorator_checkparams(key_array=["group_label"])
 def get_alarm_log(data):
     try:
         alarm_db = AlarmDB()

@@ -454,7 +454,7 @@ if __name__ == '__main__':
     #     for item in group_dict[group_label]:
     #         print(item["msg"].strip(), item["create_time"])
     import json
-    li = aa.getAlarmListCurrent()
+    li = aa.getAlarmListHistory({"start_time": int(time.time())-86400, "end_time": int(time.time())})
     group_dict = {}
     for item in li:
         if item["ip"] not in group_dict.keys():
