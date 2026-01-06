@@ -43,7 +43,7 @@ class AlarmDB(mysqldb_netops):
                             "alarm_object", "keyword"]
             for i in check_params:
                 if i not in data.keys():
-                    print("参数不足", i)
+                    logger.error("======AlarmDB addAlarmList error  参数不足========\n{}".format(str(i)))
                     return "failed"
 
             timestamp = data.get("create_time", int(time.time()))
@@ -119,7 +119,6 @@ class AlarmDB(mysqldb_netops):
 
     def updateAlarmListByGroup(self, data):
         data = waf(data)
-        print(data)
         # ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,status,create_time
         if "group_labels" in data.keys():
             conditions = []
@@ -135,7 +134,7 @@ class AlarmDB(mysqldb_netops):
 
             if len(conditions) > 0:
                 sql = "update alarm_list set " + ",".join(conditions) + " where group_label in ({})".format(str(group_list_str))
-                print(sql)
+
                 try:
                     self.cursor.execute(sql, params)
                     self.conn.commit()
@@ -178,7 +177,7 @@ class AlarmDB(mysqldb_netops):
                 status,create_time from alarm_list '''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
-        print(sql)
+
 
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
                   "alarm_object", "keyword", "status", "create_time"]
@@ -208,7 +207,7 @@ class AlarmDB(mysqldb_netops):
             check_params = ["group_label", "handler", "msg"]
             for i in check_params:
                 if i not in data.keys():
-                    print("参数不足", i)
+                    logger.error("======AlarmDB addAlarmLog error 参数不足========\n{}".format(str(i)))
                     return "failed"
             timestamp = int(time.time())
             sqlParam = []
@@ -292,7 +291,7 @@ class AlarmDB(mysqldb_netops):
             check_params = ["group_labels", "handler", "msg"]
             for i in check_params:
                 if i not in data.keys():
-                    print("参数不足", i)
+                    logger.error("======AlarmDB addAlarmLog many error 参数不足========\n{}".format(str(i)))
                     return "failed"
 
             timestamp = int(time.time())
@@ -433,6 +432,42 @@ class AlarmDB(mysqldb_netops):
                 return []
         except Exception as err:
             logger.error("======AlarmDB getAlarmListHistory error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def getAlarmListByGroup(self, data):
+        data = waf(data)
+
+        if "group_labels" not in data.keys():
+            return "failed"
+        conditions = []
+        group_list_str = ",".join([f"'{label}'" for label in data["group_labels"]])
+        conditions.append("group_label in (" + str(group_list_str) + ")")
+        sql = '''
+        select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
+                        status,create_time from alarm_list '''
+        if len(conditions) > 0:
+            sql = sql + " where " + " and ".join(conditions)
+        sql = sql + " order by create_time;"
+        proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
+                  "alarm_object", "keyword", "status", "create_time"]
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as err:
+            logger.error("======AlarmDB getAlarmListByGroup error========\n{}".format(str(err)))
             return "failed"
         finally:
             self.cursor.close()

@@ -236,6 +236,20 @@ def get_alarm_log(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
+@decorator_checkparams(key_array=["group_labels"])
+def get_log_by_group(data):
+    try:
+        alarm_db = AlarmDB()
+        li = alarm_db.getAlarmListByGroup(data)
+        if li != "failed":
+            return {"status": "success", "message": "查询成功", "data": li}
+        else:
+            return {"status": "failed", "message": "查询失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+
+
 if __name__ == '__main__':
     # ret11 = check_mergelist({"message": "%Jan  1 08:46:32:471 2011 vrrp-test-2 %%IFNET/3/PHY_UPDO1WN: Vlan-interface162 link status is up.","ip":"1.1.1.1"})
     # print(ret11)
