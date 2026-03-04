@@ -4,3 +4,5 @@ aiosnmp==0.6.0
 flask==2.2.5
 flask-socketio==5.3.6
 eventlet==0.33.3
+pyjwt
+pymysql
