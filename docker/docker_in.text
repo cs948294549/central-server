@@ -1,0 +1,143 @@
+
+#重新生成 Cluster ID
+docker run --rm apache/kafka:3.8.0 /opt/kafka/bin/kafka-storage.sh random-uuid
+# ZVdyytDRT9-qRZRX4fC2RQ
+
+
+# 创建自定义1网络
+docker network ls
+docker network create kafka-kraft-network
+
+# 将 kafka-kraft 容器加入 app-network 网络
+docker network connect app-network kafka-kraft
+
+# 查看指定容器（kafka-kraft）的网络信息（过滤关键内容）
+docker inspect -f '{{.NetworkSettings.Networks}}' kafka-kraft
+1
+
+
+# 以 root 用户启动临时容器，修改数据卷权限
+docker run --rm \
+  --user root \
+  -v kafka-kraft-data:/tmp/kraft-combined-logs \
+  apache/kafka:3.8.0 \
+  chown -R 1000:1000 /tmp/kraft-combined-logs
+
+
+# 重新初始化存储
+docker run --rm \
+  -v kafka-kraft-data:/tmp/kraft-combined-logs \
+  apache/kafka:3.8.0 \
+  /opt/kafka/bin/kafka-storage.sh format -t ZVdyytDRT9-qRZRX4fC2RQ -c /opt/kafka/config/kraft/server.properties
+
+
+docker cp kafka-kraft:/opt/kafka/config/kraft/server.properties config/
+# 3. 修改宿主机的配置文件（永久生效）
+vim config/server.properties
+# 添加/修改：auto.create.topics.enable=false
+
+# 启动 Kafka 容器
+
+
+docker run -d \
+  --name kafka-kraft \
+  --network kafka-kraft-network \
+  -p 9092:9094 \
+  -v /root/apps/kafka_app/config/server.properties:/opt/kafka/config/kraft/server.properties \
+  -v kafka-kraft-data:/tmp/kraft-combined-logs \
+  -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+  -e KAFKA_CLUSTER_ID=ZVdyytDRT9-qRZRX4fC2RQ \
+  apache/kafka:3.8.0 \
+  /opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties
+
+
+# 查看容器状态（STATUS 为 Up 即正常）
+docker ps | grep kafka-kraft
+
+# 查看日志（无权限/文件写入报错即可）
+docker logs kafka-kraft
+
+# 验证功能（创建测试主题）
+docker exec -it kafka-kraft /bin/bash
+
+# 查看topic
+/opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+
+# 创建topic
+/opt/kafka/bin/kafka-topics.sh --create --topic test --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+# 容器内执行删除
+/opt/kafka/bin/kafka-topics.sh --delete --topic test-manual --bootstrap-server localhost:9092
+
+#发送消息
+/opt/kafka/bin/kafka-console-producer.sh --topic test --bootstrap-server localhost:9092
+
+#接收消息
+/opt/kafka/bin/kafka-console-consumer.sh --topic test --bootstrap-server localhost:9092 --from-beginning
+
+
+
+# 监听容器内所有网卡（保持不变）
+listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094
+
+# 核心修改：把 localhost 改为 Kafka 容器名（kafka-kraft）
+advertised.listeners=PLAINTEXT://kafka-kraft:9092,PLAINTEXT_HOST://192.168.110.153:9094
+
+# 确保 controller 相关配置也指向容器名（如果有）
+controller.quorum.voters=1@kafka-kraft:9093
+controller.listener.names=CONTROLLER
+
+
+# 启动一个 Python 容器，加入 kafka-kraft-network 网络
+docker run -it --rm \
+  --name test-client \
+  --network kafka-kraft-network \
+  python:3.9 /bin/bash
+
+
+pip install kafka-python
+
+
+
+测试代码
+from kafka import KafkaProducer, KafkaConsumer
+import time
+
+# 1. 生产者：发送消息（连接 Kafka 容器名 + 内部端口）
+producer = KafkaProducer(
+    bootstrap_servers=['192.168.110.153:9092'],  # 关键：用 Kafka 容器名
+    value_serializer=lambda v: v.encode('utf-8')  # 自动将字符串编码为 UTF-8 字节串
+)
+# 发送中文消息（直接传字符串，无需 b''）
+producer.send('test', '容器间访问 Kafka 测试消息')
+producer.flush()
+print("消息发送成功！")
+
+# 2. 消费者：接收消息a（自动解码 UTF-8 字节串为字符串）
+consumer = KafkaConsumer(
+    'test',
+    bootstrap_servers=['192.168.110.153:9092'],
+    auto_offset_reset='earliest',  # 从开头消费
+    group_id='test-group',
+    value_deserializer=lambda v: v.decode('utf-8')  # 新增：解码字节串为中文
+)
+print("开始接收消息...")
+for msg in consumer:
+    print(f"收到消息：{msg.value}")
+    break  # 只接收一条消息后退出
+consumer.close()
+
+
+
+无vim写入方法
+cat > /root/test_kafka.py << EOF
+
+EOF
+
+
+
+
+
+
