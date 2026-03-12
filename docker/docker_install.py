@@ -136,6 +136,23 @@ cat > /root/test_kafka.py << EOF
 
 EOF
 
+# 1. 先启动临时容器（不挂载卷），仅用于复制内容
+docker run --name temp-librenms -d librenms/librenms
+
+# 2. 创建宿主机目标目录（避免挂载时空目录覆盖）
+mkdir -p /data/librenms
+
+# 3. 复制容器内 /opt/librenms 的内容到宿主机 /data/librenms
+docker cp temp-librenms:/opt/librenms/. /data/librenms/
+
+# 4. 停止并删除临时容器
+docker stop temp-librenms && docker rm temp-librenms
+
+# 5. 正常启动容器（此时挂载的宿主机目录已有容器默认内容）
+docker run -d \
+  --name librenms \
+  -v /data/librenms:/opt/librenms \
+  librenms/librenms
 
 
 

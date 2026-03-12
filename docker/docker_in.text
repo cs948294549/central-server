@@ -137,6 +137,92 @@ cat > /root/test_kafka.py << EOF
 EOF
 
 
+## snipe-it
+
+# mysql-11
+docker run -d \
+  --name snipe-it-db \
+  --restart unless-stopped \
+  --network snipe-network \
+  -v db_data:/var/lib/mysql \
+  -e MARIADB_DATABASE=snipeit_db \
+  -e MARIADB_USER=root \
+  -e MARIADB_PASSWORD=root \
+  -e MARIADB_ROOT_PASSWORD=root \
+  -e MARIADB_ROOT_HOST=% \
+  --health-cmd="mysqladmin ping -u root -p${MARIADB_ROOT_PASSWORD} || exit 1" \
+  --health-interval=5s \
+  --health-timeout=2s \
+  --health-retries=5 \
+  mariadb:11.4.7
+
+# snipe-it
+docker run -d \
+  --name snipe-it-app \
+  --network snipe-network \
+  --restart unless-stopped \
+  -v storage:/var/lib/snipeit \
+  -p 9000:80 \
+  --link snipe-it-db:db \
+  --env-file .env \
+  snipe/snipe-it:latest
+
+# redis
+docker run -d \
+  --name librenms_redis \
+  --network librenms-network \
+  --restart always \
+  -v /opt/librenms/redis-data:/data \
+  -e TZ=Asia/Shanghai \
+  redis:alpine \
+  redis-server --appendonly yes
+
+# librenms
+docker run -d \
+  --name librenms \
+  --network librenms-network \
+  --network snipe-network \
+  --restart always \
+  -p 80:80 \
+  -p 161:161/udp \
+  -e DB_HOST=snipe-it-db \
+  -e DB_NAME=librenms \
+  -e DB_USER=root \
+  -e DB_PASSWORD=root \
+  -e DB_PORT=3306 \
+  -e REDIS_HOST=librenms_redis \
+  -e REDIS_PORT=6379 \
+  -e TZ=Asia/Shanghai \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -v /opt/librenms/data:/data \
+  -v /opt/librenms/logs:/opt/librenms/logs \
+  -v /opt/librenms/rrd:/opt/librenms/rrd \
+  --cap-add=NET_ADMIN \
+  --cap-add=NET_RAW \
+  librenms/librenms:latest
+
+
+
+
+
+# 1. 先启动临时容器（不挂载卷），仅用于复制内容
+docker run --name temp-librenms -d librenms/librenms
+
+# 2. 创建宿主机目标目录（避免挂载时空目录覆盖）
+mkdir -p /data/librenms
+
+# 3. 复制容器内 /opt/librenms 的内容到宿主机 /data/librenms
+docker cp temp-librenms:/opt/librenms/. /data/librenms/
+
+# 4. 停止并删除临时容器
+docker stop temp-librenms && docker rm temp-librenms
+
+# 5. 正常启动容器（此时挂载的宿主机目录已有容器默认内容）
+docker run -d \
+  --name librenms \
+  -v /data/librenms:/opt/librenms \
+  librenms/librenms
 
 
 
