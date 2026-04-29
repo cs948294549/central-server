@@ -7,13 +7,13 @@ app = Flask(__name__)
 
 # 双目录配置
 UPLOAD_DEL_DIR = "./uploads"   # 可上传、可删除
-STATIC_READ_DIR = "./static"   # 只读、不可删、不可上传
+READONLY_DIR = "./readonlys"   # 只读、不可删、不可上传
 
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'zip', 'rar', 'py', 'json', 'md', 'exe', 'tar.gz', '7z'}
-app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 * 1024  # 1GB
 
 os.makedirs(UPLOAD_DEL_DIR, exist_ok=True)
-os.makedirs(STATIC_READ_DIR, exist_ok=True)
+os.makedirs(READONLY_DIR, exist_ok=True)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -54,9 +54,15 @@ def get_dir_total_info(folder_path):
 @app.route('/')
 def index():
     upload_info = get_dir_total_info(UPLOAD_DEL_DIR)
-    static_info = get_dir_total_info(STATIC_READ_DIR)
+    readonly_info = get_dir_total_info(READONLY_DIR)
 
     html = '''
+    <head>
+        <meta charset="utf-8">
+        <!-- ✅ 这就是浏览器标签栏小图标（header 图标） -->
+        <link rel="icon" href="/static/atlat.png" type="image/png" sizes="32x32">
+        <title>文件服务</title>
+    </head>
     <h1>文件服务 & 存储监控</h1>
     <style>
         .box{border:1px solid #eee;padding:10px;margin:10px 0;border-radius:6px;}
@@ -72,7 +78,7 @@ def index():
     <div class="box">
         <h3>📊 存储占用概览</h3>
         <p>可删除区(uploads)：{{upload_info.file_count}} 个文件 | 已用 {{format_size(upload_info.total_size)}} | 磁盘占比 <b>{{upload_info.used_percent}}%</b></p>
-        <p>只读保护区(static)：{{static_info.file_count}} 个文件 | 已用 {{format_size(static_info.total_size)}} | 磁盘占比 <b>{{static_info.used_percent}}%</b></p>
+        <p>只读保护区(readonly)：{{readonly_info.file_count}} 个文件 | 已用 {{format_size(readonly_info.total_size)}} | 磁盘占比 <b>{{readonly_info.used_percent}}%</b></p>
     </div>
 
     <hr>
@@ -104,9 +110,9 @@ def index():
     <hr>
     <h3>🔒 只读禁止删除区</h3>
     <ul class="lock">
-    {% for item in static_info.files %}
+    {% for item in readonly_info.files %}
         <li>
-            <a href="/download/static/{{item.name}}" target="_blank">{{item.name}}</a>
+            <a href="/download/readonly/{{item.name}}" target="_blank">{{item.name}}</a>
             <span class="size-text">{{item.size_text}}</span>
         </li>
     {% endfor %}
@@ -152,7 +158,7 @@ def index():
     return render_template_string(
         html,
         upload_info=upload_info,
-        static_info=static_info,
+        readonly_info=readonly_info,
         format_size=format_size
     )
 
@@ -183,13 +189,15 @@ def delete_file(filename):
     return "<a href='/'>返回</a>"
 
 # 下载
-@app.route('/download/upload/<filename>')
+@app.route('/download/upload/<filename>', methods=['GET', 'HEAD'])
 def download_upload(filename):
     return send_from_directory(UPLOAD_DEL_DIR, filename, as_attachment=True)
 
-@app.route('/download/static/<filename>')
+@app.route('/download/readonly/<filename>', methods=['GET', 'HEAD'])
 def download_static(filename):
-    return send_from_directory(STATIC_READ_DIR, filename, as_attachment=True)
+    return send_from_directory(READONLY_DIR, filename, as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # nohup python3 -u file_server.py > log_file.log 2>&1 &
+    # 需要/static/x.png
+    app.run(host='127.0.0.1', port=9090, debug=True)
