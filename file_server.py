@@ -79,6 +79,8 @@ def index():
         <h3>📊 存储占用概览</h3>
         <p>可删除区(uploads)：{{upload_info.file_count}} 个文件 | 已用 {{format_size(upload_info.total_size)}} | 磁盘占比 <b>{{upload_info.used_percent}}%</b></p>
         <p>只读保护区(readonly)：{{readonly_info.file_count}} 个文件 | 已用 {{format_size(readonly_info.total_size)}} | 磁盘占比 <b>{{readonly_info.used_percent}}%</b></p>
+        <p>命令上传 curl -X POST -F "file=@backup.sh" http://hz-file.dikong.com/upload</p>
+        <p>命令下载 wget http://hz-file.dikong.com/download/upload/backup.sh</p>
     </div>
 
     <hr>
@@ -200,4 +202,5 @@ def download_static(filename):
 if __name__ == '__main__':
     # nohup python3 -u file_server.py > log_file.log 2>&1 &
     # 需要/static/x.png
+    # curl -X POST -F "file=@backup.sh" http://hz-file.dikong.com/upload
     app.run(host='127.0.0.1', port=9090, debug=True)
