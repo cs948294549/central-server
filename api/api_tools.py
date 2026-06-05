@@ -28,3 +28,19 @@ def mergeNetwork():
         return APIResponse.success(data=final_list, message="合并成功")
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+@tools_bp.route('/ip', methods=['POST',"GET"])
+def get_real_ip():
+    try:
+        real_ip_data = {
+            "ip": request.remote_addr,
+        }
+        # 优先从 X-Forwarded-For 获取
+        if 'X-Forwarded-For' in request.headers:
+            # 格式：客户端IP, 代理1, 代理2...
+            ips = request.headers['X-Forwarded-For'].split(',')
+            real_ip_data["x-forward"] = ips[0].strip()
+
+        return APIResponse.success(data=real_ip_data, message="查询")
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
