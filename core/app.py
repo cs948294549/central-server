@@ -57,6 +57,7 @@ def create_app():
         # 排除不需要认证的路由
         excluded_routes = [
             '/system/login',  # 登录路由
+            '/tools/ip'
         ]
         
         # 获取请求路径
