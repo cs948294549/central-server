@@ -2,7 +2,7 @@ import time
 
 from services.syslog.filter_blacklist import BlacklistManager
 from services.syslog.log_merge import MergelistManager
-from function_messaging.kafka_client import readDataFromSyslog, sendDataToCollector
+from function_messaging.queue_client import readDataFromSyslog, sendDataToCollector
 import threading
 import logging
 

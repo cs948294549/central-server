@@ -1,5 +1,4 @@
 import redis
-from typing import Optional
 from config import Config
 
 # 定义redis连接池

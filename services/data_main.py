@@ -1,4 +1,4 @@
-from function_messaging.kafka_client import readDataFromCollect
+from function_messaging.queue_client import readDataFromCollect
 import threading
 import logging
 
