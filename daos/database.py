@@ -8,7 +8,7 @@ class mysqldb_netops:
         self.conn = pymysql.connect(host=mysql_cfg["db_host"], user=mysql_cfg["db_user"],
                                     password=mysql_cfg["db_token"],
                                     port=mysql_cfg["db_port"],
-                                    database="netops", charset="utf8")
+                                    database=mysql_cfg["db_name"], charset="utf8")
         self.cursor = self.conn.cursor()
 
     def ping(self):
