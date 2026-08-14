@@ -2,6 +2,7 @@
 from core.scheduler import scheduler
 from core.app import create_app
 from core.logger import setup_logger
+from core.websocket_server import WebSocketServer
 from config import Config
 # 导入任务管理器
 from task_core.task_manager import task_manager
@@ -50,24 +51,46 @@ class CustomWSGIRequestHandler(WSGIRequestHandler):
 
 def main():
     """主函数"""
-    logger.info("启动任务调度系统")
+    logger.info("=" * 60)
+    logger.info("启动 Central-Server 服务")
+    logger.info("=" * 60)
 
     # 启动调度器
     scheduler.start()
-    logger.info("任务调度器已启动")
+    logger.info("✓ 任务调度器已启动")
+
+    # 启动 WebSocket 服务器
+    websocket_server = None
+    if Config.websocket_enable:
+        try:
+            websocket_server = WebSocketServer(
+                host=Config.websocket_ip,
+                port=Config.websocket_port
+            )
+            websocket_server.start()
+            logger.info(f"✓ WebSocket 服务器已启动在 {Config.websocket_ip}:{Config.websocket_port}")
+        except Exception as e:
+            logger.error(f"✗ WebSocket 服务器启动失败: {str(e)}")
 
     # 启动syslog
+    syslog_service = None
     if Config.syslog_enable:
-        syslog_service = SyslogService()
-        syslog_service.start()
-        logger.info("交换机日志处理器已启动")
-        
-    # 启动数据存储
-    if Config.collect_enable:
-        collect_service = DataService()
-        collect_service.start()
-        logger.info("数据存储器已启动")
+        try:
+            syslog_service = SyslogService()
+            syslog_service.start()
+            logger.info("✓ Syslog 日志处理器已启动")
+        except Exception as e:
+            logger.error(f"✗ Syslog 服务启动失败: {str(e)}")
 
+    # 启动数据存储
+    collect_service = None
+    if Config.collect_enable:
+        try:
+            collect_service = DataService()
+            collect_service.start()
+            logger.info("✓ 数据采集处理器已启动")
+        except Exception as e:
+            logger.error(f"✗ 数据采集服务启动失败: {str(e)}")
 
     # 创建Flask应用
     app = create_app()
@@ -83,19 +106,43 @@ def main():
 
     # 运行Flask应用
     try:
-        logger.info(f"Flask服务器启动在端口 {Config.service_port}")
+        logger.info("=" * 60)
+        logger.info(f"✓ API 服务器启动在 {Config.service_ip}:{Config.service_port}")
+        logger.info("=" * 60)
+        logger.info("所有服务已就绪，按 Ctrl+C 停止服务")
         app.run(
             host=Config.service_ip, port=Config.service_port, threaded=True, debug=False,
             request_handler=CustomWSGIRequestHandler
         )
     except KeyboardInterrupt:
-        logger.info("收到停止信号，正在关闭...")
+        logger.info("\n收到停止信号，正在关闭服务...")
     finally:
+        # 停止 WebSocket 服务器
+        if websocket_server:
+            websocket_server.stop()
+            logger.info("✓ WebSocket 服务器已停止")
+
+        # 停止 Syslog 服务
+        if syslog_service:
+            syslog_service.stop()
+            logger.info("✓ Syslog 服务已停止")
+
+        # 停止数据采集服务
+        if collect_service:
+            collect_service.stop()
+            logger.info("✓ 数据采集服务已停止")
+
         # 停止所有任务
         task_manager.stop_all_tasks()
+        logger.info("✓ 所有任务已停止")
+
         # 关闭调度器
         scheduler.shutdown()
-        logger.info("任务调度系统已关闭")
+        logger.info("✓ 任务调度器已关闭")
+
+        logger.info("=" * 60)
+        logger.info("Central-Server 服务已完全关闭")
+        logger.info("=" * 60)
 
 
 if __name__ == "__main__":

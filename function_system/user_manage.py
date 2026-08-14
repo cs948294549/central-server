@@ -11,30 +11,54 @@ from function_messaging.redis_client import get_redis_client
 
 from hashlib import md5
 
+# 从配置文件导入
+from config import Config
+
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
-# 配置（生产环境建议从环境变量读取，避免硬编码）
-SECRET_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWlu"  # 对称密钥，需高强度
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24  # 访问令牌有效期
+# JWT 配置（从配置文件读取）
+SECRET_KEY = Config.jwt_secret_key
+ALGORITHM = Config.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_HOURS = Config.jwt_expire_hours
 
-app_secrets = {
-    "agent1": "afbf5e3670fd122220bd464b34eeb253"
-}
+# 验证API Key/Secret（从数据库用户表读取）
+def verify_secret_token(key: str, secret: str, timestamp: str):
+    """
+    验证 API Key/Secret 认证
+    key: username（用户名）
+    secret: 计算后的签名 md5(identify + timestamp)
+    timestamp: 请求时间戳
+    返回: True/False 或用户信息字典
+    """
+    try:
+        db = UsersDB()
+        user_infos = db.getUser({"username": key})
 
-# 验证API
-def verify_secret_token(key: str, token: str, timestamp: str):
-    """验证令牌，返回载荷数据"""
-    if key in app_secrets.keys():
-        app_secret = app_secrets[key]
-        signature = md5((app_secret+timestamp).encode("utf-8")).hexdigest()
-        if signature == token:
-            return True
-        else:
+        if len(user_infos) != 1:
+            logger.warning(f"API Key认证失败: 用户 {key} 不存在或重复")
             return False
-    else:
+
+        user_info = user_infos[0]
+        # 计算签名: md5(identify + timestamp)
+        expected_signature = md5((user_info["identify"] + timestamp).encode("utf-8")).hexdigest()
+
+        if expected_signature == secret:
+            logger.info(f"API Key认证成功: 用户 {key}")
+            # 返回用户信息供后续使用
+            return {
+                "username": user_info["username"],
+                "rid": user_info["rid"],
+                "subname": user_info.get("subname", ""),
+                "auth_type": "api_key"
+            }
+        else:
+            logger.warning(f"API Key认证失败: 用户 {key} 签名不匹配")
+            return False
+
+    except Exception as e:
+        logger.error(f"API Key认证异常: {str(e)}")
         return False
 
 # jwt认证相关

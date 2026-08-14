@@ -1,0 +1,36 @@
+FROM python:3.9-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 设置时区为东八区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# 复制 requirements.txt
+COPY requirements.txt .
+
+# 安装 Python 依赖
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
+
+# 复制应用代码
+COPY . .
+
+# 创建必要的目录
+RUN mkdir -p /app/logs /app/files
+
+# 暴露端口
+EXPOSE 8080 8081
+
+# 健康检查（检查主进程是否运行）
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+  CMD ps aux | grep -v grep | grep -q "python.*main.py" || exit 1
+
+# 启动应用
+CMD ["python3", "-u", "main.py"]

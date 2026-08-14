@@ -1,9 +1,22 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
 from function_system import user_manage
+import time
 
 # 创建蓝图
 system_bp = Blueprint('system', __name__, url_prefix='/system')
+
+
+@system_bp.route('/health', methods=['GET'])
+def health_check():
+    """
+    健康检查接口（无需认证）
+    """
+    return APIResponse.success(data={
+        "status": "healthy",
+        "timestamp": int(time.time()),
+        "service": "central-server"
+    })
 
 
 @system_bp.route('/login', methods=['POST'])
