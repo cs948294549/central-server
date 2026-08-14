@@ -9,6 +9,10 @@ set -e
 CONTAINER_NAME="central-server"
 IMAGE_NAME="central-server"
 IMAGE_TAG="${1:-v1}"
+API_PORT="${2:-8080}"
+WEBSOCKET_PORT="${3:-8081}"
+CONTAINER_API_PORT="8080"
+CONTAINER_WEBSOCKET_PORT="8081"
 
 # 数据目录配置
 DATA_BASE_DIR="${CENTRAL_DATA_DIR:-$(pwd)}"
@@ -27,6 +31,9 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${YELLOW}容器名称:${NC} ${CONTAINER_NAME}"
 echo -e "${YELLOW}镜像:${NC} ${IMAGE_NAME}:${IMAGE_TAG}"
+echo -e "${YELLOW}端口映射:${NC}"
+echo -e "  API: ${API_PORT}:${CONTAINER_API_PORT}"
+echo -e "  WebSocket: ${WEBSOCKET_PORT}:${CONTAINER_WEBSOCKET_PORT}"
 echo ""
 
 # 切换到脚本所在目录的父目录（项目根目录）
@@ -71,13 +78,15 @@ echo ""
 
 docker run -d \
     --name "${CONTAINER_NAME}" \
-    --network host \
+    -p ${API_PORT}:${CONTAINER_API_PORT} \
+    -p ${WEBSOCKET_PORT}:${CONTAINER_WEBSOCKET_PORT} \
+    -e PYTHONUNBUFFERED=1 \
     -v "${LOGS_DIR}:/app/logs" \
     -v "${FILES_DIR}:/app/files" \
     -v "$(pwd)/config.py:/app/config.py:ro" \
     --restart unless-stopped \
-    --health-cmd="curl -f http://localhost:8080/system/health || exit 1" \
-    --health-interval=30s \
+    --health-cmd="ps aux | grep -v grep | grep -q 'python.*main.py' || exit 1" \
+    --health-interval=60s \
     --health-timeout=10s \
     --health-retries=3 \
     "${IMAGE_NAME}:${IMAGE_TAG}"
@@ -93,12 +102,13 @@ if [ $? -eq 0 ]; then
     docker ps | grep "${CONTAINER_NAME}"
     echo ""
     echo -e "${YELLOW}服务访问地址:${NC}"
-    echo -e "  API 服务: ${GREEN}http://localhost:8080${NC}"
-    echo -e "  WebSocket: ${GREEN}ws://localhost:8081${NC}"
-    echo -e "  健康检查: ${GREEN}http://localhost:8080/system/health${NC}"
+    echo -e "  API 服务: ${GREEN}http://localhost:${API_PORT}${NC}"
+    echo -e "  WebSocket: ${GREEN}ws://localhost:${WEBSOCKET_PORT}${NC}"
+    echo -e "  健康检查: ${GREEN}http://localhost:${API_PORT}/system/health${NC}"
     echo ""
     echo -e "${YELLOW}常用命令:${NC}"
-    echo -e "  查看日志: ${GREEN}./docker/logs.sh${NC}"
+    echo -e "  查看日志: ${GREEN}docker logs -f ${CONTAINER_NAME}${NC}"
+    echo -e "  查看应用日志: ${GREEN}ls -lh ${LOGS_DIR}${NC}"
     echo -e "  停止容器: ${GREEN}docker stop ${CONTAINER_NAME}${NC}"
     echo -e "  重启容器: ${GREEN}docker restart ${CONTAINER_NAME}${NC}"
     echo -e "  进入容器: ${GREEN}docker exec -it ${CONTAINER_NAME} bash${NC}"
@@ -111,20 +121,20 @@ if [ $? -eq 0 ]; then
 
     # 等待几秒后检查服务
     echo -e "${YELLOW}等待服务启动...${NC}"
-    sleep 5
+    sleep 3
 
-    echo -e "${YELLOW}最近日志:${NC}"
+    echo -e "${YELLOW}检查容器日志:${NC}"
     docker logs --tail 20 "${CONTAINER_NAME}"
     echo ""
 
     # 检查健康状态
     echo -e "${YELLOW}检查服务健康状态...${NC}"
     sleep 3
-    if curl -f -s http://localhost:8080/system/health > /dev/null 2>&1; then
+    if curl -f -s http://localhost:${API_PORT}/system/health > /dev/null 2>&1; then
         echo -e "${GREEN}✓ API 服务健康检查通过${NC}"
     else
         echo -e "${YELLOW}⚠ API 服务尚未就绪，请稍后查看日志${NC}"
-        echo -e "${YELLOW}  ./docker/logs.sh${NC}"
+        echo -e "${YELLOW}  docker logs -f ${CONTAINER_NAME}${NC}"
     fi
     echo ""
 else
