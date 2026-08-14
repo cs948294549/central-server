@@ -1,3 +1,4 @@
+requests
 paramiko==2.10.4
 puresnmp==1.11.0
 flask==2.2.5
@@ -8,4 +9,3 @@ pymysql
 apscheduler
 kafka-python
 redis
-elasticsearch
