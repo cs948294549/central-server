@@ -37,6 +37,10 @@ class Config:
     syslog_kafka_topic = "syslog_data"
 
     # 消息队列配置
+    # 消息队列类型: "kafka" 或 "redis"
+    queue_type = "redis"  # 默认使用 Redis 队列，切换为 "kafka" 使用 Kafka
+
+    # Kafka 配置
     kafka_server = ["localhost:9092"]
 
     # Redis配置

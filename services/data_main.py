@@ -1,4 +1,4 @@
-from function_messaging.queue_client import readDataFromCollect
+from function_messaging.message_queue import readDataFromCollect
 import threading
 import logging
 
