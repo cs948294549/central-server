@@ -12,6 +12,7 @@ from api.api_tools import tools_bp
 from api.api_kafka_data import data_bp
 from api.api_alarm import alarm_bp
 from api.api_agent import agent_bp
+from api.api_collector import collector_bp
 
 # 导入认证相关功能
 from function_system.user_manage import verify_access_token, verify_url_privilege, verify_secret_token
@@ -53,6 +54,7 @@ def create_app():
     app.register_blueprint(data_bp)
     app.register_blueprint(alarm_bp)
     app.register_blueprint(agent_bp)
+    app.register_blueprint(collector_bp)
 
     def check_url_privilege(path):
         """

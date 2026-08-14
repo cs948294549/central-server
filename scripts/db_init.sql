@@ -154,10 +154,10 @@ INSERT INTO roles (rid, name, descr) VALUES
 ('default', '普通用户', '普通用户权限，需要分配具体页面权限');
 
 -- 插入默认管理员用户
--- 默认密码: admin123 (需要根据实际登录算法计算 identify)
+-- 默认密码: 123456 (需要根据实际登录算法计算 identify)
 -- 登录签名计算: md5(username + identify + "netops" + timestamp)
 INSERT INTO users (username, identify, subname, phone, mail, rid, update_time, last_login) VALUES
-('admin', '0192023a7bbd73250516f069df18b500', '系统管理员', '', 'admin@example.com', 'system', UNIX_TIMESTAMP(), '0');
+('admin', 'b2fd3bace4778f19918ffbf7a42bb4b8', '系统管理员', '', 'admin@example.com', 'system', UNIX_TIMESTAMP(), '0');
 
 -- 插入页面数据（分两步：先插入父级页面，再插入子页面）
 -- 第一步：插入所有父级页面（parent_id = 0）
