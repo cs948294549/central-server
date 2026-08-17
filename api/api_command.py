@@ -7,7 +7,7 @@ from api.api_response import APIResponse
 import json
 from function_collector.func_command import get_result_by_template, get_config_interface, get_interface, get_transceiver, get_logging, get_arp_brief, get_routes
 
-command = Blueprint("command", __name__)
+command = Blueprint("command", __name__, url_prefix='/command')
 '''
 下发命令
 '''
