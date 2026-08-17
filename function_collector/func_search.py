@@ -311,5 +311,9 @@ def get_deviceslist(search_data):
     device_list = db.getDeviceList(search_data)
     return device_list
 
+def get_lldp_list(search_data):
+    db = CollectDB()
+    lldp_list = db.getLLDPs(search_data)
+    return lldp_list
 
 

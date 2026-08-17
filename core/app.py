@@ -13,6 +13,7 @@ from api.api_kafka_data import data_bp
 from api.api_alarm import alarm_bp
 from api.api_agent import agent_bp
 from api.api_collector import collector_bp
+from api.api_command import command
 
 # 导入认证相关功能
 from function_system.user_manage import verify_access_token, verify_url_privilege, verify_secret_token

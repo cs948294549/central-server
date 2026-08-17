@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 # 厂商标识符映射，用于自动识别厂商
 VENDOR_IDENTIFIERS = {
+    'cisco_xr': ['ios xr'],
     'cisco_ios': ['ios'],
     'cisco_nx': ['nx-os', 'nxos', 'cisco', 'catos'],
     'huawei': ['huawei', 'vrp', 'quidway', 'huarong', 'futurematrix'],

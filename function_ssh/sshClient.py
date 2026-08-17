@@ -36,6 +36,7 @@ class SSHClientFactory:
         'h3c': H3CDevice,
         'huawei': HuaweiDevice,
         'cisco_nx': CiscoNXDevice,
+        'cisco_ios': CiscoNXDevice,
         'cisco_xr': CiscoXRDevice,
         'juniper': JuniperDevice,
         'arista': AristaDevice,

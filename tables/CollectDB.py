@@ -539,7 +539,8 @@ class CollectDB(mysqldb_netops):
         for key in serach_reg_key:
             if key in searchKey.keys():
                 conditions.append(key + " regexp'" + str(searchKey[key]) + "'")
-
+        if "host" in searchKey.keys():
+            conditions.append("ip ='" + searchKey["ip"] + "'")
         if "ip" in searchKey.keys():
             conditions.append("ip regexp'" + searchKey["ip"].replace(".", "[.]") + "'")
         if "sysname" in searchKey.keys():

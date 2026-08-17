@@ -2,7 +2,7 @@ from flask import Blueprint, request, g
 from api.api_response import APIResponse
 from function_alarm import syslog_manage
 import logging
-from function_collector.func_search import func_fulltext, get_deviceslist, get_ex_portinfo
+from function_collector.func_search import func_fulltext, get_deviceslist, get_ex_portinfo, get_lldp_list
 from function_snmp.snmpAgent import snmpget, snmpwalk
 from config import Config
 
@@ -75,6 +75,15 @@ def getExPortInfo():
         data = request.json
         ip = data.get('ip')
         respond = get_ex_portinfo(ip=ip)
+        return APIResponse.success(data=respond, message="查询成功")
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+@collector_bp.route('/getlldps',methods=['POST'])
+def getlldps():
+    try:
+        data = request.json
+        respond = get_lldp_list(data)
         return APIResponse.success(data=respond, message="查询成功")
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
