@@ -93,11 +93,11 @@ def main():
 
 ## API 接口
 
-所有接口在主应用端口 (8080) 上，路径前缀：`/api/ssh`
+所有接口在主应用端口 (8080) 上，路径前缀：`/webssh`
 
 ### 1. 创建 SSH 会话（可选，首次发送命令时自动创建）
 ```
-POST /api/ssh/create_session
+POST /webssh/create_session
 
 请求体:
 {
@@ -114,7 +114,7 @@ POST /api/ssh/create_session
 
 ### 2. 发送命令
 ```
-POST /api/ssh/send_command
+POST /webssh/send_command
 
 请求体:
 {
@@ -133,7 +133,7 @@ POST /api/ssh/send_command
 
 ### 3. 关闭会话
 ```
-POST /api/ssh/close_session
+POST /webssh/close_session
 
 请求体:
 {
@@ -144,7 +144,7 @@ POST /api/ssh/close_session
 
 ### 4. 查询会话状态
 ```
-GET /api/ssh/session_status?ip=10.220.17.122&user=admin
+GET /webssh/session_status?ip=10.220.17.122&user=admin
 
 响应:
 {
@@ -165,13 +165,13 @@ export default {
   
   // SSH 终端
   createSSHSession(data, params) {
-    return axios.post("/api/ssh/create_session", data, params)
+    return axios.post("/webssh/create_session", data, params)
   },
   sendSSH(data, params) {
-    return axios.post("/api/ssh/send_command", data, params)
+    return axios.post("/webssh/send_command", data, params)
   },
   closeSSHSession(data, params) {
-    return axios.post("/api/ssh/close_session", data, params)
+    return axios.post("/webssh/close_session", data, params)
   },
 }
 ```
@@ -241,7 +241,7 @@ beforeDestroy() {
 ### 1. 测试创建会话
 
 ```bash
-curl -X POST http://localhost:8080/api/ssh/create_session \
+curl -X POST http://localhost:8080/webssh/create_session \
   -H "Content-Type: application/json" \
   -d '{
     "ip": "10.220.17.122",
@@ -252,7 +252,7 @@ curl -X POST http://localhost:8080/api/ssh/create_session \
 ### 2. 测试发送命令
 
 ```bash
-curl -X POST http://localhost:8080/api/ssh/send_command \
+curl -X POST http://localhost:8080/webssh/send_command \
   -H "Content-Type: application/json" \
   -d '{
     "ip": "10.220.17.122",
