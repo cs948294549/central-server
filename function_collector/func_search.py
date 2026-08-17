@@ -260,18 +260,6 @@ def func_fulltext(searchKeys):
 
 def get_ex_portinfo(ip):
     db = CollectDB()
-    '''
-    result["ip"]
-    result["gateway"]
-    result["if_name"]
-    result["mask"]
-    result["startip"]
-    result["endip"]
-    result["timestamp"]
-    result["oper_statu"]
-    result["port_id"]
-    result["sysname"]
-    '''
     gw_list = db.getfulltextDeviceGates({"ip": "^"+str(ip)+"$", "unlimit": "1", "and": "1"})
     gw_dict = {}
     if gw_list != "failed":
@@ -284,21 +272,6 @@ def get_ex_portinfo(ip):
                 gw_dict[label].append("{}/{}".format(gw["gateway"], gw["mask"]))
 
     db = CollectDB()
-    '''
-    result["loc_ip"]
-    result["loc_name"]
-    result["loc_portid"]
-    result["loc_portstatus"]
-    result["loc_portname"]
-    result["loc_portalias"]
-    result["rem_ip"]
-    result["rem_name"]
-    result["rem_portid"]
-    result["rem_portstatus"]
-    result["rem_portname"]
-    result["rem_portalias"]
-    result["timestamp"]
-    '''
     lldp_list = db.getLLDPs({"loc_ip": "^"+str(ip)+"$", })
     lldp_dict = {}
     if lldp_list != "failed":
@@ -311,17 +284,6 @@ def get_ex_portinfo(ip):
                 lldp_dict[label].append("{}/{}".format(lldp["rem_ip"], lldp["rem_name"]))
 
     db = CollectDB()
-    '''
-    result["sysname"]
-    result["ip"]
-    result["port_id"]
-    result["if_name"]
-    result["speed"]
-    result["admin_statu"]
-    result["oper_statu"]
-    result["alias"]
-    result["timestamp"]
-    '''
     port_list = db.getPortInfo({"ip": "^" + str(ip) + "$"})
     respond = []
     if port_list!="failed":
@@ -342,3 +304,12 @@ def get_ex_portinfo(ip):
     else:
         return "failed"
     return respond
+
+
+def get_deviceslist(search_data):
+    db = CollectDB()
+    device_list = db.getDeviceList(search_data)
+    return device_list
+
+
+

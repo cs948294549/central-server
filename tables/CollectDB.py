@@ -530,6 +530,57 @@ class CollectDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    # 查询设备列表信息
+    def getDeviceList(self,searchKey):
+        searchKey = waf(searchKey)
+        conditions = []
+
+        serach_reg_key = ["sysdesc", "hardware", "features", "version", "syscontact"]
+        for key in serach_reg_key:
+            if key in searchKey.keys():
+                conditions.append(key + " regexp'" + str(searchKey[key]) + "'")
+
+        if "ip" in searchKey.keys():
+            conditions.append("ip regexp'" + searchKey["ip"].replace(".", "[.]") + "'")
+        if "sysname" in searchKey.keys():
+            keys = searchKey["sysname"].split(" ")
+            for key in keys:
+                if key != "":
+                    condition = "sysname regexp '"+key+"'"
+                    conditions.append(condition)
+        if "sysdesc_reg" in searchKey.keys():
+            keys = searchKey["sysdesc_reg"].split(" ")
+            for key in keys:
+                if key != "":
+                    condition = "sysdesc regexp '"+key+"'"
+                    conditions.append(condition)
+
+        sql = 'select ip,sysname,sysdesc,syscontact,uptime,hardware,features,version,timestamp from devices '
+        if len(conditions) > 0:
+            sql = sql + " where " + " and ".join(conditions)
+
+        proper = ["ip", "sysname", "sysdesc", "syscontact", "uptime", "hardware",
+                  "features", "version", "timestamp"
+                  ]
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as e:
+            print("getList error=", e)
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
 
 
 
