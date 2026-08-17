@@ -19,9 +19,9 @@ try:
 except ImportError as e:
     logging.error(f"导入厂商设备类失败: {e}")
 
-from core.singleton_config import ConfigLoader
+from config import Config
 
-COMMON_COMMUNITY = ConfigLoader.get("snmp.community")
+COMMON_COMMUNITY = Config.snmp_community
 
 logger = logging.getLogger(__name__)
 
@@ -286,8 +286,8 @@ class SSHConnectionPool:
             return {"status": "failed", "msg": "命令执行失败", "data": {}}
 
 
-COMMON_USER = ConfigLoader.get("ssh.username")
-COMMON_PASSWD = ConfigLoader.get("ssh.password")
+COMMON_USER = Config.ssh_username
+COMMON_PASSWD = Config.ssh_password
 
 # 全局连接池实例
 ssh_connection_pool = SSHConnectionPool(username=COMMON_USER, password=COMMON_PASSWD)
@@ -311,27 +311,6 @@ def run_ssh_command(host: str, commands: List[str], vendor: str = "") -> Dict[st
         return ssh_connection_pool.execute_command(host=host, commands=commands)
 
 __all__ = ["run_ssh_command"]
-
-def t1(name):
-    t1 = time.time()
-    dev1 = run_ssh_command(host="47.98.235.241", vendor='debian', commands=["ls", "ls -lh"])
-    print("{}结果===".format(name), dev1, time.time() - t1)
-
-def t2(name):
-    t1 = time.time()
-    dev1 = run_ssh_command(host="47.98.235.241", vendor='debian', commands=["ifconfig"])
-    print("{}结果===".format(name), dev1, time.time() - t1)
-
-def t3(name):
-    t1 = time.time()
-    dev1 = run_ssh_command(host="47.98.235.241", vendor='debian', commands=["df -h"])
-    print("{}结果===".format(name), dev1, time.time() - t1)
-
-
-def t4(name):
-    t1 = time.time()
-    dev1 = run_ssh_command(host="47.98.235.241", vendor='debian', commands=["   "])
-    print("{}结果===".format(name), dev1, time.time() - t1)
 
 if __name__ == '__main__':
     from core.logger import setup_logger

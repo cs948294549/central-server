@@ -59,3 +59,10 @@ class Config:
         "db_token": "root",
         "db_port": 3306,
     }
+
+    # SNMP配置
+    snmp_community = "public"  # SNMP团体字符串
+
+    # SSH配置
+    ssh_username = "admin"  # SSH用户名（必须修改）
+    ssh_password = "password"  # SSH密码（必须修改）
