@@ -9,6 +9,10 @@ from task_core.task_manager import task_manager
 from services.syslog_main import SyslogService
 from services.data_main import DataService
 
+# 导入 SSH 终端相关模块
+from function_ssh.interactive_ssh import InteractiveSSHManager
+from api.websocket_ssh_bp import init_websocket_ssh, send_to_websocket
+
 
 # 初始化日志系统
 logger = setup_logger()
@@ -94,6 +98,22 @@ def main():
 
     # 创建Flask应用
     app = create_app()
+
+    # 初始化 SSH 终端功能
+    if websocket_server:
+        try:
+            # 创建 SSH 会话管理器
+            ssh_manager = InteractiveSSHManager(output_sender=send_to_websocket)
+
+            # 获取 WebSocket 服务器地址
+            ws_url = f"http://127.0.0.1:{Config.websocket_port}"
+
+            # 初始化 SSH 终端蓝图
+            init_websocket_ssh(ssh_manager, ws_url)
+
+            logger.info(f"✓ SSH 终端功能已启用，WebSocket 服务器: {ws_url}")
+        except Exception as e:
+            logger.error(f"✗ SSH 终端功能启动失败: {str(e)}")
 
     # 关键：信任代理（解决反向代理下 IP 显示 127.0.0.1）
     # x_for=1 表示 1 层代理（如 Nginx → Flask），根据实际代理层数调整

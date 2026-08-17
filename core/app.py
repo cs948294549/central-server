@@ -15,6 +15,10 @@ from api.api_agent import agent_bp
 from api.api_collector import collector_bp
 from api.api_command import command
 
+# 导入 SSH 终端蓝图
+from api.websocket_ssh_bp import websocket_ssh_bp, init_websocket_ssh, send_to_websocket
+from function_ssh.interactive_ssh import InteractiveSSHManager
+
 # 导入认证相关功能
 from function_system.user_manage import verify_access_token, verify_url_privilege, verify_secret_token
 
@@ -35,7 +39,7 @@ def create_app():
     Returns:
         Flask应用实例
     """
-    
+
     # 创建Flask应用实例
     app = Flask(__name__)
 
@@ -45,7 +49,7 @@ def create_app():
         JSONIFY_MIMETYPE='application/json',
         DEBUG=False  # 生产环境应关闭调试模式
     )
-    
+
     # 注册API蓝图
     app.register_blueprint(api_bp)
     # 注：其他蓝图可以根据需要在这里注册
@@ -57,6 +61,10 @@ def create_app():
     app.register_blueprint(agent_bp)
     app.register_blueprint(collector_bp)
     app.register_blueprint(command)
+
+    # 注册 SSH 终端蓝图
+    app.register_blueprint(websocket_ssh_bp)
+    logger.info("SSH 终端蓝图已注册")
 
     def check_url_privilege(path):
         """
