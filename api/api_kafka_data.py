@@ -1,6 +1,6 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
-from function_messaging.queue_client import sendDataToSyslog, sendDataToCollector
+from function_messaging.message_queue import sendDataToSyslog, sendDataToCollector
 import time
 
 # 创建蓝图

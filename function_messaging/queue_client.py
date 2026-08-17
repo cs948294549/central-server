@@ -23,18 +23,24 @@ class QueueProducer:
         self.queue_key = queue_key
         self._redis = get_redis_client()
 
-    def send(self, data: Any) -> bool:
+    def send(self, data: Any, key: Optional[str] = None) -> bool:
         """
         发送单条消息
 
         Args:
             data: 要发送的数据（会被JSON序列化）
+            key: 消息键（可选，用于保持与Kafka接口一致）
 
         Returns:
             bool: 发送是否成功
         """
         try:
-            message = json.dumps(data, ensure_ascii=False)
+            # 将key和data封装在一起
+            payload = {
+                "key": key,
+                "value": data
+            }
+            message = json.dumps(payload, ensure_ascii=False)
             self._redis.lpush(self.queue_key, message)
             return True
         except Exception as e:
@@ -74,23 +80,25 @@ class QueueConsumer:
         self.timeout = timeout
         self._redis = get_redis_client()
 
-    def pop(self) -> Optional[dict]:
+    def pop(self) -> Optional[Any]:
         """
         从队列右侧弹出一条消息
 
         Returns:
-            dict: 反序列化后的消息，队列为空时返回None
+            object: 包含key和value属性的消息对象，队列为空时返回None
         """
         try:
             raw = self._redis.rpop(self.queue_key)
             if raw is None:
                 return None
-            return json.loads(raw)
+            payload = json.loads(raw)
+            # 返回一个简单对象，包含key和value属性
+            return type('Message', (), payload)()
         except Exception as e:
             logger.error(f"从队列 {self.queue_key} 读取消息失败: {str(e)}")
             raise
 
-    def blpop(self, timeout: int = None) -> Optional[dict]:
+    def blpop(self, timeout: int = None) -> Optional[Any]:
         """
         阻塞式从队列右侧弹出一条消息
 
@@ -98,7 +106,7 @@ class QueueConsumer:
             timeout: 阻塞超时时间（秒），默认使用实例timeout
 
         Returns:
-            dict: 反序列化后的消息，超时返回None
+            object: 包含key和value属性的消息对象，超时返回None
         """
         t = timeout if timeout is not None else self.timeout
         try:
@@ -106,7 +114,9 @@ class QueueConsumer:
             if result is None:
                 return None
             _, raw = result
-            return json.loads(raw)
+            payload = json.loads(raw)
+            # 返回一个简单对象，包含key和value属性
+            return type('Message', (), payload)()
         except Exception as e:
             logger.error(f"从队列 {self.queue_key} 阻塞读取消息失败: {str(e)}")
             raise
@@ -121,12 +131,13 @@ class QueueConsumer:
 _syslogProducer = None
 
 
-def sendDataToSyslog(messages: Any) -> bool:
+def sendDataToSyslog(messages: Any, key: Optional[str] = None) -> bool:
     """
     发送数据到syslog队列
 
     Args:
         messages: 要发送的数据
+        key: 消息键（可选，用于保持与Kafka接口一致）
 
     Returns:
         bool: 发送是否成功
@@ -138,7 +149,7 @@ def sendDataToSyslog(messages: Any) -> bool:
         if _syslogProducer is None:
             _syslogProducer = QueueProducer(Config.queue_key_syslog)
 
-        rt = _syslogProducer.send(messages)
+        rt = _syslogProducer.send(messages, key=key)
         if rt:
             return True
         else:
@@ -151,12 +162,12 @@ def sendDataToSyslog(messages: Any) -> bool:
 _syslogConsumer = None
 
 
-def readDataFromSyslog() -> Iterator[dict]:
+def readDataFromSyslog() -> Iterator[Any]:
     """
     从syslog队列读取数据
 
     Yields:
-        dict: 消息数据
+        object: 包含key和value属性的消息对象
     """
     global _syslogConsumer
     retry = 3
@@ -184,12 +195,13 @@ def readDataFromSyslog() -> Iterator[dict]:
 _collectProducer = None
 
 
-def sendDataToCollector(messages: Any) -> bool:
+def sendDataToCollector(messages: Any, key: Optional[str] = None) -> bool:
     """
     发送数据到collect队列
 
     Args:
         messages: 要发送的数据
+        key: 消息键（可选，用于保持与Kafka接口一致）
 
     Returns:
         bool: 发送是否成功
@@ -201,7 +213,7 @@ def sendDataToCollector(messages: Any) -> bool:
         if _collectProducer is None:
             _collectProducer = QueueProducer(Config.queue_key_collect)
 
-        rt = _collectProducer.send(messages)
+        rt = _collectProducer.send(messages, key=key)
         if rt:
             return True
         else:
@@ -214,12 +226,12 @@ def sendDataToCollector(messages: Any) -> bool:
 _collectConsumer = None
 
 
-def readDataFromCollect() -> Iterator[dict]:
+def readDataFromCollect() -> Iterator[Any]:
     """
     从collect队列读取数据
 
     Yields:
-        dict: 消息数据
+        object: 包含key和value属性的消息对象
     """
     global _collectConsumer
     retry = 3
