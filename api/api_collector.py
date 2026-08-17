@@ -88,17 +88,3 @@ def getlldps():
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
-'''
-getDevs
-getPorts_ex
-getCurrentInterface
-getInterface
-getTransceiver
-getLogging
-getARPs
-getRoutes
-getCommonFunction
-getLLDPS
-setInterfaceStatus
-
-'''

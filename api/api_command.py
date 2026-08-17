@@ -5,7 +5,8 @@ from api.api_response import APIResponse
 # from Module.CommandDevice import get_result_by_template
 # from func.func_offline import clearDeviceSavedConfig
 import json
-from function_collector.func_command import get_result_by_template, get_config_interface, get_interface, get_transceiver, get_logging, get_arp_brief, get_routes
+from function_collector.func_command import (get_result_by_template, get_config_interface, get_interface,
+                                             get_transceiver, get_logging, get_arp_brief, get_routes, exec_diy_cmds)
 
 command = Blueprint("command", __name__, url_prefix='/command')
 '''
@@ -109,6 +110,19 @@ def dis_routes():
                     respond = get_routes(ip=data["ip"], route=data["route"])
             else:
                 respond = get_routes(ip=data["ip"], route="0.0.0.0")
+            return APIResponse.success(data=respond, message="查询成功")
+        else:
+            return APIResponse.error(message="缺失参数 query")
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+
+@command.route('/exec_dev_cmds', methods=['POST'])
+def exec_dev_cmds():
+    try:
+        data = request.json
+        if "ip" in data.keys() and "cmds" in data.keys():
+            respond = exec_diy_cmds(ip=data["ip"], cmds=data["cmds"])
             return APIResponse.success(data=respond, message="查询成功")
         else:
             return APIResponse.error(message="缺失参数 query")
