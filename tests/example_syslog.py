@@ -1,16 +1,29 @@
 import json
-import requests
+import time
 
-def test_websocket_simple():
+import requests
+from hashlib import md5
+
+def sign_key(secret, timestamp):
+    expected_signature = md5((str(secret) + str(timestamp)).encode("utf-8")).hexdigest()
+    return expected_signature
+
+def test_syslog_simple():
     url = "http://netops.vdian.net/api/data/submit_syslog"
-    headers = {"Content-Type": "application/json"}
+    t = str(int(time.time()))
+    headers = {
+        "Content-Type": "application/json",
+        "key": "chensong",
+        "secret":sign_key("90f82219ae7f3452ec84762395b7b51c", t),
+        "Apptime": t
+    }
     data = {
-        "msg": "Hello World!",
-        "target": "submitData"
+        "message": "Hello World!1",
+        "ip": "1.1.1.1"
     }
     response = requests.post(url, headers=headers, data=json.dumps(data))
 
     print(response.text)
 
 if __name__ == '__main__':
-    test_websocket_simple()
+    test_syslog_simple()
