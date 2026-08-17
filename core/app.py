@@ -56,6 +56,7 @@ def create_app():
     app.register_blueprint(alarm_bp)
     app.register_blueprint(agent_bp)
     app.register_blueprint(collector_bp)
+    app.register_blueprint(command)
 
     def check_url_privilege(path):
         """
