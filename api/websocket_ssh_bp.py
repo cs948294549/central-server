@@ -11,7 +11,7 @@ import json
 logger = logging.getLogger(__name__)
 
 # 创建蓝图
-websocket_ssh_bp = Blueprint('websocket_ssh', __name__, url_prefix='/api/ssh')
+websocket_ssh_bp = Blueprint('websocket_ssh', __name__, url_prefix='/webssh')
 
 # 全局变量，在主应用中初始化
 ssh_manager = None
