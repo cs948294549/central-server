@@ -175,20 +175,22 @@ def send_command():
             }), 400
 
         host = data['ip']
-        command = data.get('cmd', '').strip()
+        command = data.get('cmd', '')
         padding = data.get('padding', '')
 
         # 命令白名单检查：只允许 show 和 display 开头的命令
-        if command:
+        # 注意：空格、Tab 等控制字符用于交互式操作（如翻页），不应被拦截
+        command_stripped = command.strip()
+        if command_stripped:
             # 转换为小写进行比较
-            command_lower = command.lower()
+            command_lower = command_stripped.lower()
 
             # 检查是否以允许的命令开头
             allowed_prefixes = ['show', 'display']
             is_allowed = any(command_lower.startswith(prefix) for prefix in allowed_prefixes)
 
             if not is_allowed:
-                logger.warning(f"拒绝执行不允许的命令: {command} (来自 {data.get('user', 'unknown')})")
+                logger.warning(f"拒绝执行不允许的命令: {command_stripped} (来自 {data.get('user', 'unknown')})")
                 return jsonify({
                     "status": "error",
                     "message": "只允许执行 show 或 display 开头的查询命令"
