@@ -317,3 +317,28 @@ def get_lldp_list(search_data):
     return lldp_list
 
 
+def getfulltextDeviceGates_v4(search_data):
+    db = CollectDB()
+    gateway_list = db.getfulltextDeviceGates(search_data)
+    return gateway_list
+
+
+def getfulltextDeviceGates_v6(search_data):
+    db = CollectDB()
+    gateway_list = db.getfulltextDeviceGatesIPv6(search_data)
+    return gateway_list
+
+def get_arp_list(search_data):
+    db = CollectDB()
+    arp_list = db.getARPList(search_data)
+    return arp_list
+
+def get_mac_table_by_tor(search_data):
+    db = CollectDB()
+    mac_table = db.getSwitchArpByDevIP(search_data)
+    return mac_table
+
+def get_device_sns(search_data):
+    db = CollectDB()
+    sns_list = db.getDeviceSNS(search_data)
+    return sns_list

@@ -583,7 +583,97 @@ class CollectDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    # 仅查询ARP信息
+    def getARPList(self, searchKeys):
+        searchKeys = waf(searchKeys)
+        #searchKeys={"ip":"正则","gate":"过滤"}
+        conditions = []
+        if "ip" in searchKeys.keys():
+            conditions.append("ip regexp '" + searchKeys["ip"].replace(".", "[.]") + "'")
+        if "arp_ip" in searchKeys.keys():
+            conditions.append("arp_ip regexp '" + searchKeys["arp_ip"].replace(".", "[.]") + "'")
 
+        conditions1 = []
+        if "if_name" in searchKeys.keys():
+            conditions1.append("ports.if_name regexp '" + searchKeys["if_name"] + "'")
+        if "sysname" in searchKeys.keys():
+            conditions1.append("devices.sysname regexp '" + searchKeys["sysname"] + "'")
+
+
+        sql = 'select t_arp.ip,devices.sysname,t_arp.arp_ip,t_arp.arp_mac,t_arp.port_id,ports.if_name,t_arp.timestamp from (select ip,arp_ip,arp_mac,port_id,timestamp from arps where '
+        if len(conditions) > 0:
+            sql += " and ".join(conditions)
+        else:
+            return []
+        sql += ') t_arp left join devices on t_arp.ip=devices.ip left join ports on ports.port_id=t_arp.port_id and ports.ip=t_arp.ip '
+
+        if len(conditions1) > 0:
+            sql = sql + " where " + " and ".join(conditions1)
+
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    result["ip"] = i[0] if i[0] != None else ""
+                    result["sysname"] = i[1] if i[1] != None else ""
+                    result["arp_ip"] = i[2] if i[2] != None else ""
+                    result["arp_mac"] = i[3] if i[3] != None else ""
+                    result["port_id"] = i[4] if i[4] != None else ""
+                    result["if_name"] = i[5] if i[5] != None else ""
+                    result["timestamp"] = i[6] if i[6] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as e:
+            print("getFailureType", e)
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+
+    # 通过交换机查询下联设备ARP
+    def getSwitchArpByDevIP(self, searchKey):
+        searchKey = waf(searchKey)
+
+        if "switch_ip" in searchKey.keys():
+            sql = '''select t_mac.ip,devices.sysname,t_mac.vlan_id,t_mac.mac_address,arps.arp_ip,t_mac.port_id,ports.if_name,t_mac.timestamp from 
+            (select ip,vlan_id,mac_address,port_id,timestamp from macs where ip="{}") t_mac 
+            join arps on arps.arp_mac=t_mac.mac_address 
+            join ports on ports.ip=t_mac.ip and ports.port_id=t_mac.port_id 
+            left join devices on devices.ip=t_mac.ip ;
+            '''.format(searchKey["switch_ip"])
+        else:
+            return "failed"
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    result["ip"] = i[0] if i[0] != None else ""
+                    result["sysname"] = i[1] if i[1] != None else ""
+                    result["vlan_id"] = i[2] if i[2] != None else ""
+                    result["mac_address"] = i[3] if i[3] != None else ""
+                    result["arp_ip"] = i[4] if i[4] != None else ""
+                    result["port_id"] = i[5] if i[5] != None else ""
+                    result["if_name"] = i[6] if i[6] != None else ""
+                    result["timestamp"] = i[7] if i[7] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as e:
+            print("get mac List error=", e)
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
 
 if __name__ == '__main__':
     pass
