@@ -38,7 +38,7 @@ echo -e "${YELLOW}检查必要文件...${NC}"
 required_files=(
     "requirements.txt"
     "main.py"
-    "config.py"
+    "config/config.py"
     "core/app.py"
     "core/logger.py"
     "core/scheduler.py"

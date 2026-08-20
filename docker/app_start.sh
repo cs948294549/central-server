@@ -47,11 +47,11 @@ if ! docker images | grep -q "${IMAGE_NAME}.*${IMAGE_TAG}"; then
 fi
 
 # 检查配置文件
-if [ ! -f "config.py" ]; then
-    echo -e "${RED}错误: 配置文件 config.py 不存在${NC}"
+if [ ! -f "config/config.py" ]; then
+    echo -e "${RED}错误: 配置文件 config/config.py 不存在${NC}"
     echo -e "${YELLOW}请从模板创建配置文件:${NC}"
-    echo -e "  cp config_example.py config.py"
-    echo -e "  vim config.py  # 编辑配置"
+    echo -e "  cp config/config_example.py config/config.py"
+    echo -e "  vim config/config.py  # 编辑配置"
     exit 1
 fi
 
@@ -83,7 +83,7 @@ docker run -d \
     -e PYTHONUNBUFFERED=1 \
     -v "${LOGS_DIR}:/app/logs" \
     -v "${FILES_DIR}:/app/files" \
-    -v "$(pwd)/config.py:/app/config.py:ro" \
+    -v "$(pwd)/config/config.py:/app/config/config.py:ro" \
     --restart unless-stopped \
     --health-cmd="ps aux | grep -v grep | grep -q 'python.*main.py' || exit 1" \
     --health-interval=60s \
@@ -114,7 +114,7 @@ if [ $? -eq 0 ]; then
     echo -e "  进入容器: ${GREEN}docker exec -it ${CONTAINER_NAME} bash${NC}"
     echo ""
     echo -e "${YELLOW}数据位置:${NC}"
-    echo -e "  配置文件: ${GREEN}$(pwd)/config.py${NC}"
+    echo -e "  配置文件: ${GREEN}$(pwd)/config/config.py${NC}"
     echo -e "  应用日志: ${GREEN}${LOGS_DIR}/${NC}"
     echo -e "  文件存储: ${GREEN}${FILES_DIR}/${NC}"
     echo ""
