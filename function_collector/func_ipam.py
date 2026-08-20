@@ -97,3 +97,11 @@ def batch_add_ipam_address(data_list):
     db = IpamDB()
     result = db.add_ipaddr_batch(data_list)
     return result
+
+
+@decorator_checkparams(key_array=["ip_deci"])
+def delete_ipam_address(data):
+    """删除IP地址"""
+    db = IpamDB()
+    result = db.delete_ipaddr_item(data)
+    return result

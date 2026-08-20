@@ -7,7 +7,8 @@ from function_collector.func_ipam import (
     get_network_address_list,
     get_network_address_tree,
     get_ipam_address_list,
-    batch_add_ipam_address
+    batch_add_ipam_address,
+    delete_ipam_address
 )
 import logging
 
@@ -128,4 +129,20 @@ def batch_add_ipaddr():
             return APIResponse.error(message="批量添加失败")
     except Exception as e:
         logger.error(f"批量添加IP地址异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
+@ipam_bp.route('/del_ipam_address', methods=['POST'])
+def del_ipam_address():
+    """删除IP地址"""
+    try:
+        data = request.json
+        logger.info(f"{str(g.user)}删除IP地址，数据: {data}")
+        result = delete_ipam_address(data)
+        if result == "success":
+            return APIResponse.success(message="删除成功")
+        else:
+            return APIResponse.error(message="删除失败")
+    except Exception as e:
+        logger.error(f"删除IP地址异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")

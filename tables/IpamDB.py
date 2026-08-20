@@ -309,3 +309,21 @@ class IpamDB:
             return "failed"
         finally:
             self.close()
+
+    def delete_ipaddr_item(self, data):
+        """删除IP地址记录"""
+        try:
+            data = waf(data)
+            if "ip_deci" not in data:
+                return "failed"
+
+            sql = "DELETE FROM ipam_ipaddr WHERE ip_deci = %s"
+            self.cursor.execute(sql, (str(data["ip_deci"]),))
+            self.conn.commit()
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"删除IP地址记录失败: {e}")
+            return "failed"
+        finally:
+            self.close()
