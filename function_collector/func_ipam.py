@@ -48,6 +48,17 @@ def get_network_address_tree(data):
     if result == "failed":
         return "failed"
 
+    # 一次性查询所有已使用的IP地址
+    db_ipaddr = IpamDB()
+    all_used_ips = db_ipaddr.get_ipaddr_list({})
+
+    # 将IP地址转换为集合，方便快速查找
+    used_ip_set = set()
+    if all_used_ips != "failed" and isinstance(all_used_ips, list):
+        used_ip_set = set(int(ip["ip_deci"]) for ip in all_used_ips if ip.get("ip_deci"))
+
+    logger.info(f"共查询到 {len(used_ip_set)} 个已使用的IP地址")
+
     # 构建树形结构
     tree_data = sorted(result, key=lambda x: (ip2decimalism(x["ip"]), int(x["mask"])))
 
@@ -59,26 +70,17 @@ def get_network_address_tree(data):
         new_item["end"] = item["end_ip"]
         new_item["children"] = []
 
-        # 计算使用率
+        # 计算使用率：统计该网段范围内有多少已使用的IP
         start_ip = int(item["start_ip"])
         end_ip = int(item["end_ip"])
         total_ips = end_ip - start_ip - 1  # 排除网络地址和广播地址
 
         if total_ips > 0:
-            # 查询该网段内已使用的IP数量（每次查询创建新的数据库连接）
-            query_data = {
-                "start_ip": start_ip,
-                "end_ip": end_ip
-            }
-            db_ipaddr = IpamDB()
-            used_ips = db_ipaddr.get_ipaddr_list(query_data)
-            if used_ips != "failed" and isinstance(used_ips, list):
-                used_count = len(used_ips)
-                used_per = round((used_count / total_ips) * 100, 2)
-                new_item["used_per"] = str(used_per)
-                logger.debug(f"网段 {item['ip']}/{item['mask']}: 总IP={total_ips}, 已使用={used_count}, 使用率={used_per}%")
-            else:
-                new_item["used_per"] = "0"
+            # 统计该范围内已使用的IP数量
+            used_count = sum(1 for ip_deci in used_ip_set if start_ip < ip_deci < end_ip)
+            used_per = round((used_count / total_ips) * 100, 2)
+            new_item["used_per"] = str(used_per)
+            logger.debug(f"网段 {item['ip']}/{item['mask']}: 总IP={total_ips}, 已使用={used_count}, 使用率={used_per}%")
         else:
             new_item["used_per"] = "0"
 
