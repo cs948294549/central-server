@@ -76,7 +76,7 @@ def get_network_address_tree(data):
         total_ips = end_ip - start_ip - 1  # 排除网络地址和广播地址
 
         if total_ips > 0:
-            # 统计该范围内已使用的IP数量
+            # 统计该范围内已使用的IP数量（排除网络地址start_ip和广播地址end_ip）
             used_count = sum(1 for ip_deci in used_ip_set if start_ip < ip_deci < end_ip)
             used_per = round((used_count / total_ips) * 100, 2)
             new_item["used_per"] = str(used_per)
