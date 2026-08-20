@@ -550,7 +550,7 @@ pip install -r requirements.txt
 
 ### 数据库初始化
 ```bash
-python scripts/db_init.py
+db_create.sql
 ```
 
 ### 启动服务

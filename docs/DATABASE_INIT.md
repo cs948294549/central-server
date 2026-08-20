@@ -48,7 +48,7 @@
 cd /path/to/central-server
 
 # 2. 执行初始化脚本
-mysql -u root -p < scripts/db_init.sql
+mysql -u root -p < scripts/db_create.sql
 
 # 3. 验证
 mysql -u root -p netops -e "SHOW TABLES;"
@@ -61,7 +61,7 @@ mysql -u root -p netops -e "SHOW TABLES;"
 mysql -u root -p
 
 # 2. 执行以下命令
-mysql> source /path/to/central-server/scripts/db_init.sql;
+mysql> source /path/to/central-server/scripts/db_create.sql;
 
 # 3. 验证
 mysql> USE netops;
@@ -223,7 +223,7 @@ ALTER DATABASE netops CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 mysql -u root -p -e "DROP DATABASE IF EXISTS netops;"
 
 # 2. 重新初始化
-mysql -u root -p < scripts/db_init.sql
+mysql -u root -p < scripts/db_create.sql
 ```
 
 ### 仅重置用户表

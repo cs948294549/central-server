@@ -46,7 +46,7 @@ vim config.py
 #### 3. 初始化数据库
 
 ```bash
-python scripts/db_init.py
+scripts/db_create.sql
 ```
 
 #### 4. 启动服务
