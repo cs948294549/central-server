@@ -56,7 +56,9 @@ def run():
     logger.info("开始执行IPAM地址更新任务")
 
     try:
-        log_ipaddrs = []
+        # 使用字典按ip_deci去重，记录所有来源
+        # ip_dict: {ip_deci: {"ip_addr": "x.x.x.x", "sources": [{"type": "gateway/arp", "device": "x.x.x.x", "mac": "xx:xx:xx:xx:xx:xx"}]}}
+        ip_dict = {}
 
         # 1. 处理网关信息
         logger.info("读取网关信息...")
@@ -67,36 +69,31 @@ def run():
             logger.error("读取网关信息失败")
             gate_data = []
 
-        gate_dict = {}
-        # 构建网关字典: {gateway: [ip1, ip2, ...]}
         for gate_item in gate_data:
             gateway = gate_item.get("gateway", "")
-            ip = gate_item.get("ip", "")
-            if not gateway:
+            device_ip = gate_item.get("ip", "")  # 设备IP
+            if not gateway or not device_ip:
                 continue
-            if gateway not in gate_dict:
-                gate_dict[gateway] = []
-            gate_dict[gateway].append(ip)
 
-        # 将网关IP添加到待更新列表
-        for gateway, ip_list in gate_dict.items():
             try:
                 ip_deci = ip2decimalism(gateway)
-                if len(ip_list) > 2:
-                    comment = f"gateway many:{len(ip_list)}"
-                else:
-                    comment = f"gateway:{','.join(ip_list)}"
 
-                log_ipaddrs.append({
-                    "ip_deci": ip_deci,
-                    "ip_addr": gateway,
-                    "collect_type": "gateway",
-                    "comment": comment
+                # 初始化或获取已有记录
+                if ip_deci not in ip_dict:
+                    ip_dict[ip_deci] = {
+                        "ip_addr": gateway,
+                        "sources": []
+                    }
+
+                # 添加网关来源信息
+                ip_dict[ip_deci]["sources"].append({
+                    "type": "gateway",
+                    "device": device_ip
                 })
             except Exception as e:
                 logger.error(f"处理网关 {gateway} 失败: {e}")
 
-        logger.info(f"处理网关信息完成，共 {len(log_ipaddrs)} 条")
+        logger.info(f"处理网关信息完成，共 {len([s for s in ip_dict.values() if any(src['type']=='gateway' for src in s['sources'])])} 个网关IP")
 
         # 2. 处理ARP信息
         logger.info("读取ARP信息...")
@@ -107,33 +104,94 @@ def run():
             logger.error("读取ARP信息失败")
             arp_data = []
 
-        # 将ARP记录添加到待更新列表
         arp_count = 0
         for arp_item in arp_data:
             arp_ip = arp_item.get("arp_ip", "")
             arp_mac = arp_item.get("arp_mac", "")
+            device_ip = arp_item.get("ip", "")  # 设备IP
 
             # 过滤无效MAC地址
-            if arp_mac == "00:00:00:00:00:00" or not arp_mac:
-                continue
-
-            # 跳过已经作为网关的IP
-            if arp_ip in gate_dict.keys():
+            if arp_mac == "00:00:00:00:00:00" or not arp_mac or not device_ip:
                 continue
 
             try:
                 ip_deci = ip2decimalism(arp_ip)
-                log_ipaddrs.append({
-                    "ip_deci": ip_deci,
-                    "ip_addr": arp_ip,
-                    "collect_type": "arp",
-                    "comment": f"arp_mac:{arp_mac}"
+
+                # 初始化或获取已有记录
+                if ip_deci not in ip_dict:
+                    ip_dict[ip_deci] = {
+                        "ip_addr": arp_ip,
+                        "sources": []
+                    }
+
+                # 添加ARP来源信息
+                ip_dict[ip_deci]["sources"].append({
+                    "type": "arp",
+                    "device": device_ip,
+                    "mac": arp_mac
                 })
                 arp_count += 1
             except Exception as e:
                 logger.error(f"处理ARP记录 {arp_ip} 失败: {e}")
 
-        logger.info(f"处理ARP信息完成，共 {arp_count} 条")
+        logger.info(f"处理ARP信息完成，共 {arp_count} 条ARP记录")
+
+        # 3. 转换为待写入格式
+        log_ipaddrs = []
+        for ip_deci, ip_info in ip_dict.items():
+            ip_addr = ip_info["ip_addr"]
+            sources = ip_info["sources"]
+
+            # 分类统计来源
+            gateway_sources = [s for s in sources if s["type"] == "gateway"]
+            arp_sources = [s for s in sources if s["type"] == "arp"]
+
+            # 确定主要类型
+            if gateway_sources:
+                collect_type = "gateway"
+            else:
+                collect_type = "arp"
+
+            # 构建comment信息，确保不超过300字符
+            comment_parts = []
+
+            # 添加网关来源信息
+            if gateway_sources:
+                devices = [s["device"] for s in gateway_sources]
+                if len(devices) == 1:
+                    comment_parts.append(f"gw:{devices[0]}")
+                elif len(devices) <= 3:
+                    comment_parts.append(f"gw:{','.join(devices)}")
+                else:
+                    comment_parts.append(f"gw:{','.join(devices[:2])}...(+{len(devices)-2})")
+
+            # 添加ARP来源信息
+            if arp_sources:
+                if len(arp_sources) == 1:
+                    s = arp_sources[0]
+                    comment_parts.append(f"arp:{s['device']}({s['mac']})")
+                elif len(arp_sources) <= 2:
+                    devices_info = [f"{s['device']}({s['mac']})" for s in arp_sources]
+                    comment_parts.append(f"arp:{','.join(devices_info)}")
+                else:
+                    # ARP来源过多时只显示数量和第一个
+                    s = arp_sources[0]
+                    comment_parts.append(f"arp:{s['device']}({s['mac']})...(+{len(arp_sources)-1})")
+
+            comment = "; ".join(comment_parts)
+
+            # 确保不超过300字符
+            if len(comment) > 300:
+                comment = comment[:297] + "..."
+
+            log_ipaddrs.append({
+                "ip_deci": ip_deci,
+                "ip_addr": ip_addr,
+                "collect_type": collect_type,
+                "comment": comment
+            })
+
+        logger.info(f"合并处理完成，共 {len(log_ipaddrs)} 个唯一IP地址")
 
         # 3. 批量写入IPAM数据库
         total_count = len(log_ipaddrs)
