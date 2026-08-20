@@ -275,7 +275,7 @@ socket.on('test_user_10.220.17.122', (data) => {
 
 ## 配置要求
 
-确保 `config.py` 中有：
+确保 `../config/config.py` 中有：
 
 ```python
 class Config:

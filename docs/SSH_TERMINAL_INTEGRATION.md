@@ -343,7 +343,7 @@ socket.on('test_user_10.220.17.122', (data) => {
 
 ## 配置说明
 
-确保 `config.py` 中有以下配置：
+确保 `../config/config.py` 中有以下配置：
 
 ```python
 class Config:
@@ -660,7 +660,7 @@ Vue.use(new VueSocketIO({
 
 ## 配置说明
 
-确保 `config.py` 中有以下配置：
+确保 `../config/config.py` 中有以下配置：
 
 ```python
 class Config:

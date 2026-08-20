@@ -294,7 +294,7 @@ python main.py
 
 ### 核心文件
 - `main.py` - 应用入口
-- `config.py` - 配置文件
+- `../config/config.py` - 配置文件
 - `requirements.txt` - 依赖声明
 
 ### 新增文件

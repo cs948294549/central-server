@@ -192,7 +192,7 @@ curl -X POST http://localhost:8080/api/endpoint \
 
 ### 修改数据库连接
 
-编辑 `config.py`：
+编辑 `../config/config.py`：
 
 ```python
 mysql_config = {

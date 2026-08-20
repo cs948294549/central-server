@@ -1,9 +1,7 @@
-import re
-
 from function_snmp.snmp_collector import common_identify_vendor
 from function_ssh.sshClient import run_ssh_command
 from tables.CollectDB import CollectDB
-from config import Config
+from config.config import Config
 
 COMMON_COMMUNITY = Config.snmp_community
 

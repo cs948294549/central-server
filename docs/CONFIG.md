@@ -4,8 +4,8 @@
 
 ## 📄 配置文件位置
 
-- `config.py` - 实际使用的配置文件
-- `config_example.py` - 配置文件模板
+- `../config/config.py` - 实际使用的配置文件
+- `../config/config_example.py` - 配置文件模板
 
 ## 🔧 配置项说明
 
@@ -284,7 +284,7 @@ config.py           # 不提交实际配置
 .env               # 不提交环境变量文件
 ```
 
-只提交 `config_example.py` 作为模板。
+只提交 `../config/config_example.py` 作为模板。
 
 ---
 
@@ -301,7 +301,7 @@ config.py           # 不提交实际配置
 
 ```python
 # 验证配置脚本
-from config import Config
+from config.config import Config
 
 print("API 端口:", Config.service_port)
 print("WebSocket 端口:", Config.websocket_port)

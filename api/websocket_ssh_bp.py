@@ -99,7 +99,7 @@ def create_session():
         host = data['ip']
 
         # 从配置获取默认凭证
-        from config import Config
+        from config.config import Config
         username = data.get('username', Config.ssh_username)
         password = data.get('password', Config.ssh_password)
 

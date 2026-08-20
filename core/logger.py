@@ -7,7 +7,7 @@ import os
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from logging import Formatter
-from config import Config
+from config.config import Config
 
 # 日志目录
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')

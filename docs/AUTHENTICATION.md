@@ -381,7 +381,7 @@ UPDATE users SET identify = 'new_random_secret' WHERE username = 'api_user';
 **注意事项**:
 - 确保服务器时间准确（使用 NTP 同步）
 - 客户端时间偏差过大会导致认证失败
-- 可在 `config.py` 中调整 `timestamp_tolerance`
+- 可在 `../config/config.py` 中调整 `timestamp_tolerance`
 
 ### 5. HTTPS 强制
 

@@ -32,7 +32,7 @@ app_secrets = {
 
 ### 1. 配置文件改进
 
-将所有认证相关配置移到 `config.py`：
+将所有认证相关配置移到 `../config/config.py`：
 
 ```python
 # JWT 认证配置
@@ -51,7 +51,7 @@ api_secrets = {
 修改 `user_manage.py` 从配置导入：
 
 ```python
-from config import Config
+from config.config import Config
 
 # JWT 配置（从配置文件读取）
 SECRET_KEY = Config.jwt_secret_key
@@ -94,8 +94,8 @@ app_secrets = Config.api_secrets
 ## 📦 交付成果
 
 ### 修改文件 (3个)
-- ✅ `config.py` - 新增 JWT 和 API Key 配置
-- ✅ `config_example.py` - 更新配置模板
+- ✅ `../config/config.py` - 新增 JWT 和 API Key 配置
+- ✅ `../config/config_example.py` - 更新配置模板
 - ✅ `function_system/user_manage.py` - 从配置文件读取
 
 ### 新增文件 (2个)
@@ -201,7 +201,7 @@ curl -X POST http://localhost:8080/api/endpoint \
    ```
 
 3. **密钥管理**
-   - 不要将 `config.py` 提交到版本控制
+   - 不要将 `../config/config.py` 提交到版本控制
    - 使用密钥管理服务（如 AWS Secrets Manager）
    - 定期轮换密钥（建议 3-6 个月）
 

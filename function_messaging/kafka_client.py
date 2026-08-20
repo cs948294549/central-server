@@ -2,7 +2,7 @@ from kafka import KafkaConsumer, KafkaProducer
 import json
 import logging
 from typing import Optional, List, Dict, Any, Union
-from config import Config
+from config.config import Config
 import time
 
 logger = logging.getLogger(__name__)

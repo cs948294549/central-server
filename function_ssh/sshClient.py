@@ -19,7 +19,7 @@ try:
 except ImportError as e:
     logging.error(f"导入厂商设备类失败: {e}")
 
-from config import Config
+from config.config import Config
 
 COMMON_COMMUNITY = Config.snmp_community
 

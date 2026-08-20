@@ -42,7 +42,7 @@ apps
 .DS_STORE
 .idea/
 env/
-config.py
+config/config.py
 private_config.py
 
 # test

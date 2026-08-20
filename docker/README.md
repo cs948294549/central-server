@@ -282,7 +282,7 @@ docker exec central-server date
 
 ### 单容器模式配置
 
-编辑 `config.py` 文件：
+编辑 `../config/config.py` 文件：
 
 ```python
 class Config:

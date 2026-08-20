@@ -12,7 +12,7 @@ from function_messaging.redis_client import get_redis_client
 from hashlib import md5
 
 # 从配置文件导入
-from config import Config
+from config.config import Config
 
 
 # 配置日志

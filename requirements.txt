@@ -9,3 +9,4 @@ pymysql
 apscheduler
 kafka-python
 redis
+pyyaml

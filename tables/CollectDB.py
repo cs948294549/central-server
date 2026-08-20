@@ -675,5 +675,70 @@ class CollectDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def get_gate_v4_list(self, searchKey):
+        """
+        获取IPv4网关列表
+        用于IPAM地址更新任务
+        """
+        searchKey = waf(searchKey)
+        sql = 'SELECT ip, gateway, port_id, mask, startip, endip, timestamp FROM gates'
+
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    result["ip"] = i[0] if i[0] != None else ""
+                    result["gateway"] = i[1] if i[1] != None else ""
+                    result["port_id"] = i[2] if i[2] != None else ""
+                    result["mask"] = i[3] if i[3] != None else ""
+                    result["startip"] = i[4] if i[4] != None else ""
+                    result["endip"] = i[5] if i[5] != None else ""
+                    result["timestamp"] = i[6] if i[6] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as e:
+            print("get gate v4 list error=", e)
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def get_arp_list(self, searchKey):
+        """
+        获取ARP列表
+        用于IPAM地址更新任务
+        """
+        searchKey = waf(searchKey)
+        sql = 'SELECT ip, arp_mac, arp_ip, port_id, timestamp FROM arps'
+
+        try:
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    result["ip"] = i[0] if i[0] != None else ""
+                    result["arp_mac"] = i[1] if i[1] != None else ""
+                    result["arp_ip"] = i[2] if i[2] != None else ""
+                    result["port_id"] = i[3] if i[3] != None else ""
+                    result["timestamp"] = i[4] if i[4] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as e:
+            print("get arp list error=", e)
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+
 if __name__ == '__main__':
     pass

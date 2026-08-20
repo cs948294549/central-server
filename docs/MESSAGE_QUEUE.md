@@ -185,7 +185,7 @@ ValueError: 不支持的消息队列类型: xxx，请配置为 'kafka' 或 'redi
 ```
 
 **解决方案**：
-- 检查 `config.py` 中 `queue_type` 的值
+- 检查 `../config/config.py` 中 `queue_type` 的值
 - 只能是 `"kafka"` 或 `"redis"`（注意引号和小写）
 
 ### Kafka 连接失败

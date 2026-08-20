@@ -572,7 +572,7 @@ curl http://localhost:8080/health
 ## 🎯 优化建议
 
 ### 1. 配置管理
-**现状**: 配置硬编码在 `config.py`  
+**现状**: 配置硬编码在 `config/config.py`  
 **建议**: 
 - 使用环境变量（12-factor app）
 - 分离 dev/test/prod 配置

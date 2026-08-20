@@ -3,9 +3,9 @@ from core.scheduler import scheduler
 from core.app import create_app
 from core.logger import setup_logger
 from core.websocket_server import WebSocketServer
-from config import Config
+from config.config import Config
 # 导入任务管理器
-from task_core.task_manager import task_manager
+from tasks.task_manager import task_manager
 from services.syslog_main import SyslogService
 from services.data_main import DataService
 
@@ -62,6 +62,18 @@ def main():
     # 启动调度器
     scheduler.start()
     logger.info("✓ 任务调度器已启动")
+
+    # 注册所有定时任务
+    task_manager.register_all_tasks()
+
+    # 显示已注册的任务
+    tasks = task_manager.get_task_info()
+    if tasks:
+        logger.info(f"✓ 已注册 {len(tasks)} 个定时任务:")
+        for task in tasks:
+            logger.info(f"  - {task['id']} ({task['trigger_type']}) - 下次运行: {task['next_run_time']}")
+    else:
+        logger.info("✓ 没有启用的定时任务")
 
     # 启动 WebSocket 服务器
     websocket_server = None
@@ -151,10 +163,6 @@ def main():
         if collect_service:
             collect_service.stop()
             logger.info("✓ 数据采集服务已停止")
-
-        # 停止所有任务
-        task_manager.stop_all_tasks()
-        logger.info("✓ 所有任务已停止")
 
         # 关闭调度器
         scheduler.shutdown()

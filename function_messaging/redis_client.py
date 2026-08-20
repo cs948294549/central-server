@@ -1,5 +1,5 @@
 import redis
-from config import Config
+from config.config import Config
 
 # 定义redis连接池
 _pool = redis.ConnectionPool(host=Config.redis_host, port=6379, db=1)

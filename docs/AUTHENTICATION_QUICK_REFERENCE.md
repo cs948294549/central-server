@@ -123,7 +123,7 @@ VALUES ('collector', 'random_secret_abc123', '采集服务', 'system');
 
 - [ ] 生产环境使用 HTTPS
 - [ ] 妥善保管 identify 字段（等同于密码）
-- [ ] 定期轮换 JWT Secret Key（`config.py`）
+- [ ] 定期轮换 JWT Secret Key（`../config/config.py`）
 - [ ] API用户按需分配最小权限
 - [ ] 定期审计访问日志
 - [ ] 服务器时间使用 NTP 同步

@@ -129,7 +129,7 @@ class Config:
 
 ### 完整配置
 
-参考 `config_example.py` 文件。
+参考 `../config/config_example.py` 文件。
 
 ---
 

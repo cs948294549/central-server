@@ -145,7 +145,7 @@ docker restart central-server
 - [ ] JWT Secret Key 已更换为强随机密钥
 - [ ] 密钥长度至少 64 字节
 - [ ] 密钥未提交到版本控制系统
-- [ ] `.gitignore` 包含 `config.py`
+- [ ] `.gitignore` 包含 `../config/config.py`
 - [ ] 生产环境使用环境变量或密钥管理服务
 
 ### 运行中检查
