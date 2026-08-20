@@ -65,16 +65,18 @@ def get_network_address_tree(data):
         total_ips = end_ip - start_ip - 1  # 排除网络地址和广播地址
 
         if total_ips > 0:
-            # 查询该网段内已使用的IP数量
+            # 查询该网段内已使用的IP数量（每次查询创建新的数据库连接）
             query_data = {
                 "start_ip": start_ip,
                 "end_ip": end_ip
             }
-            used_ips = db.get_ipaddr_list(query_data)
+            db_ipaddr = IpamDB()
+            used_ips = db_ipaddr.get_ipaddr_list(query_data)
             if used_ips != "failed" and isinstance(used_ips, list):
                 used_count = len(used_ips)
                 used_per = round((used_count / total_ips) * 100, 2)
                 new_item["used_per"] = str(used_per)
+                logger.debug(f"网段 {item['ip']}/{item['mask']}: 总IP={total_ips}, 已使用={used_count}, 使用率={used_per}%")
             else:
                 new_item["used_per"] = "0"
         else:
