@@ -108,6 +108,29 @@ def batch_delete_iplist(data):
         return "failed"
 
 
+@decorator_checkparams(key_array=["ip_list"])
+def batch_add_or_update_iplist(data):
+    """
+    批量添加或更新设备IP（如果已存在则更新）
+    :param data: 包含ip_list字段（设备列表）
+    :return: success/failed
+    """
+    try:
+        ip_list = data.get('ip_list', [])
+
+        if not ip_list or not isinstance(ip_list, list):
+            logger.warning("批量添加或更新设备IP失败: ip_list为空或格式不正确")
+            return "failed"
+
+        db = IplistDB()
+        result = db.batchAddOrUpdateIp(ip_list)
+        return result
+
+    except Exception as e:
+        logger.error(f"批量添加或更新设备IP失败: {e}")
+        return "failed"
+
+
 def get_all_active_iplist():
     """
     获取所有状态为正常的设备IP列表

@@ -5,7 +5,8 @@ from function_collector.func_iplist import (
     add_iplist,
     update_iplist,
     delete_iplist,
-    batch_delete_iplist
+    batch_delete_iplist,
+    batch_add_or_update_iplist
 )
 import logging
 
@@ -106,4 +107,24 @@ def batch_delete():
 
     except Exception as e:
         logger.error(f"批量删除设备IP异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
+@iplist_bp.route('/batch_add_or_update', methods=['POST'])
+def batch_add_or_update():
+    """批量添加或更新设备IP"""
+    try:
+        data = request.json
+        ip_list = data.get('ip_list', [])
+        logger.info(f"{str(g.user)}批量添加或更新设备IP，数量: {len(ip_list)}")
+
+        result = batch_add_or_update_iplist(data)
+
+        if result == "success":
+            return APIResponse.success(message=f"批量处理成功，共 {len(ip_list)} 条")
+        else:
+            return APIResponse.error(message="批量处理失败")
+
+    except Exception as e:
+        logger.error(f"批量添加或更新设备IP异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")

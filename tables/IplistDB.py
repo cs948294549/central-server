@@ -73,7 +73,7 @@ class IplistDB(mysqldb_netops):
 
     def addIp(self, data):
         """
-        添加设备IP
+        添加设备IP（如果已存在则更新）
         :param data: 设备数据 {ip, sysname, community, admin_status, timestamp}
         :return: lastrowid或"failed"
         """
@@ -91,10 +91,17 @@ class IplistDB(mysqldb_netops):
                 data["sysname"],
                 data.get("community", "public"),
                 data.get("admin_status", "0"),
-                data.get("timestamp", str(int(time.time() * 1000)))
+                data.get("timestamp", str(int(time.time())))
             ))
 
-            sql = "INSERT INTO iplist (ip, sysname, community, admin_status, timestamp) VALUES (%s, %s, %s, %s, %s)"
+            sql = """INSERT INTO iplist (ip, sysname, community, admin_status, timestamp)
+                     VALUES (%s, %s, %s, %s, %s)
+                     ON DUPLICATE KEY UPDATE
+                     sysname = VALUES(sysname),
+                     community = VALUES(community),
+                     admin_status = VALUES(admin_status),
+                     timestamp = VALUES(timestamp)"""
+
             self.cursor.executemany(sql, sqlParam)
             self.conn.commit()
             return self.cursor.lastrowid
@@ -222,7 +229,47 @@ class IplistDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
-    def getAllActiveIps(self):
+    def batchAddOrUpdateIp(self, data_list):
+        """
+        批量添加或更新设备IP（如果已存在则更新）
+        :param data_list: 设备数据列表
+        :return: "success"或"failed"
+        """
+        try:
+            if not data_list or not isinstance(data_list, list):
+                return "failed"
+
+            sqlParam = []
+            for data in data_list:
+                data = waf(data)
+                sqlParam.append((
+                    data["ip"],
+                    data["sysname"],
+                    data.get("community", "vdiannet"),
+                    data.get("admin_status", "0"),
+                    data.get("timestamp", str(int(time.time())))
+                ))
+
+            sql = """INSERT INTO iplist (ip, sysname, community, admin_status, timestamp)
+                     VALUES (%s, %s, %s, %s, %s)
+                     ON DUPLICATE KEY UPDATE
+                     sysname = VALUES(sysname),
+                     community = VALUES(community),
+                     admin_status = VALUES(admin_status),
+                     timestamp = VALUES(timestamp)"""
+
+            self.cursor.executemany(sql, sqlParam)
+            self.conn.commit()
+            return "success"
+
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======IplistDB batchAddOrUpdateIp error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
         """
         获取所有状态为正常的设备IP列表
         :return: IP列表或"failed"
