@@ -1,74 +1,406 @@
-# Central-Server 项目架构文档
+# Central-Server
 
-> **🎉 特性**: 单进程统一管理 API + WebSocket，支持 Docker 一键部署！  
-> 详见：[快速启动](docs/QUICKSTART.md) | [Docker 部署](docs/DOCKER_DEPLOY.md)
+基于 Flask 的网络运维平台控制中心，提供设备日志收集、数据采集、告警管理、任务调度等功能。
 
-## 🚀 快速开始
+> **💡 提示**: 本项目是完整网络运维平台的后端组件，需配合前端和数据采集器一起部署才能实现完整功能。  
+> 快速开始请查看 [完整平台部署指南](#-完整平台部署指南)
 
-### Docker 部署（推荐）
+---
+
+## 🏗️ 完整平台部署指南
+
+完整的网络运维平台由三个独立组件构成，需要配合部署才能实现完整功能。
+
+### 项目组件
+
+| 组件 | 仓库地址 | 说明 |
+|------|---------|------|
+| **前端** | `git@github.com:cs948294549/chen_vue.git` | 集成用户权限管理，支持在框架下自由增减页面，灵活开发自定义功能页面 |
+| **后端**（本项目） | `git@github.com:cs948294549/central-server.git` | 对接数据库，提供 API 接口，统一管理 WebSocket 接入 |
+| **数据采集** | `git@github.com:cs948294549/collector.git` | 独立功能模块，定时任务采集设备数据，直接写入数据库 |
+
+**数据流向**: 数据采集器定时采集设备数据 → 写入数据库 → 后端从数据库读取数据，提供 API → 前端调用 API 展示数据
+
+### 整体架构
+
+```
+                    ┌─────────────┐
+                    │    Nginx    │  统一入口（本例端口 9090）
+                    └──────┬──────┘
+              ┌────────────┼────────────┐
+              │            │            │
+        location /   location /api/  location /sock/
+              │            │            │
+              ▼            ▼            ▼
+        ┌──────────┐  ┌──────────┐  ┌──────────┐
+        │  前端静态  │  │ 后端 API │  │ WebSocket│
+        │  资源文件  │  │  :28000  │  │  :28001  │
+        └──────────┘  └────┬─────┘  └────┬─────┘
+                            └──────┬───────┘
+                                   ▼
+                            ┌──────────┐       ┌──────────┐
+                            │  MySQL   │◄──────│ 数据采集器 │
+                            │ (netops) │       │ (独立部署) │
+                            └──────────┘       └──────────┘
+```
+
+### 1. 配置 Nginx 统一入口
+
+本例使用如下端口分配：
+- Nginx 入口: `9090`
+- 后端 API: `28000`
+- 后端 WebSocket: `28001`
+
+```nginx
+upstream api {
+    server 127.0.0.1:28000;
+}
+
+upstream websock {
+    server 127.0.0.1:28001;
+}
+
+server {
+    listen 9090;                    # Nginx 监听端口
+    server_name your_domain_or_ip;  # 替换为实际域名或服务器 IP
+
+    # WebSocket 转发
+    location ^~ /sock/ {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $host;
+        proxy_pass http://websock/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # API 转发
+    location ^~ /api/ {
+        proxy_pass http://api/;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host              $http_host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_send_timeout 180;
+        proxy_read_timeout 180;
+    }
+
+    # 前端静态资源
+    location / {
+        root   /var/www/netops;   # 前端 dist 目录实际路径
+        index  index.html index.htm;
+        error_page 404 /index.html;
+    }
+}
+```
+
+> ⚠️ 前端、API、WebSocket 的转发路径必须与前端项目实际请求的路径（`/`、`/api/`、`/sock/`）保持一致，否则会出现跨域或 404 问题。
+
+### 2. 部署前端
+
+**方式一：直接使用项目自带的编译产物（推荐，无需 Node 环境）**
 
 ```bash
-# 1. 构建镜像
+# chen_vue 项目已包含编译好的 dist 目录
+cd chen_vue
+sh deploy.sh   # 将 dist 目录内容部署到 /var/www/netops
+```
+
+**方式二：自行开发后重新编译**
+
+```bash
+# 需要 Node v16.20.2
+cd chen_vue
+npm install
+npm run build
+sh deploy.sh
+```
+
+### 3. 初始化数据库
+
+三个组件共用同一个数据库 `netops`，需要分别执行两处的初始化脚本：
+
+```bash
+# 创建数据库
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS netops DEFAULT CHARACTER SET utf8mb4;"
+
+# 后端初始化脚本（central-server 项目）
+mysql -u root -p netops < central-server/scripts/db_create.sql
+mysql -u root -p netops < central-server/scripts/db_page.sql
+mysql -u root -p netops < central-server/scripts/db_user_init.sql
+
+# 采集器初始化脚本（collector 项目）
+mysql -u root -p netops < collector/sql/init.sql
+```
+
+### 4. 启动后端（central-server）
+
+```bash
+cd central-server
+# 修改 config/config.py 中的数据库、Redis、Kafka 等配置
+sh docker/app_build.sh
+sh docker/app_start.sh
+```
+
+### 5. 启动数据采集器（collector）
+
+```bash
+cd collector
+# 修改采集器自身的配置文件（数据库连接等）
+sh docker/app_build.sh
+sh docker/app_start.sh
+```
+
+### 6. 开放访问
+
+确保 Nginx 配置的端口（本例 `9090`）已在防火墙/安全组中开放，浏览器访问：
+
+```
+http://your_domain_or_ip:9090
+```
+
+即可看到登录页面，使用默认账号 `admin` / `123456` 登录（见 [首次登录](#首次登录) 说明）。
+
+---
+
+## 🚀 快速开始（单独部署后端）
+
+以下内容仅针对 **central-server 后端组件** 单独部署调试的场景。如需部署完整平台（前端 + 后端 + 数据采集器），请参考上方 [完整平台部署指南](#-完整平台部署指南)。
+
+### 方式一：Docker 部署（推荐）
+
+适合生产环境和快速体验，无需手动配置 Python 环境。
+
+```bash
+# 1. 修改配置文件
+cd /path/to/central-server
+cp config/config_example.py config/config.py
+vim config/config.py  # 修改数据库、Redis、Kafka 等配置
+
+# 2. 构建镜像
 ./docker/app_build.sh
 
-# 2. 配置外部依赖服务（MySQL、Redis、Kafka）
-export MYSQL_HOST=your_mysql_host
-export REDIS_HOST=your_redis_host
-export KAFKA_SERVER=your_kafka_host:9092
-
-# 3. 启动容器
-./docker/app_start.sh
+# 3. 启动容器（可选指定版本和端口）
+./docker/app_start.sh v1 28000 28001
+# 参数说明：v1=镜像版本，28000=API端口，28001=WebSocket端口
 ```
 
-更多 Docker 部署选项请参考 [docker/README.md](docker/README.md)
+容器启动后访问：
+- API 服务: `http://localhost:28000`
+- WebSocket 服务: `ws://localhost:28001`
+- 健康检查: `curl http://localhost:28000/health`
 
-### 本地开发部署
+**Docker 部署详细说明**: [docker/README.md](docker/README.md)
+
+---
+
+### 方式二：本地开发部署
+
+适合开发调试和功能测试。
+
+#### 1. 环境准备
 
 ```bash
-# 1. 安装依赖
-pip install -r requirements.txt
+# Python 版本要求: 3.8+
+python3 --version
 
-# 2. 配置文件
-cp config_example.py config.py
-# 编辑 config.py，修改数据库连接等配置
-
-# ⚠️ 重要：生产环境请务必修改 JWT 密钥
-python scripts/generate_secret_key.py
-# 详细说明请查看：docs/JWT_SECURITY.md
-
-# 3. 启动服务（单进程，包含 API + WebSocket）
-python main.py
+# 克隆项目（如果还没有）
+git clone <repository_url>
+cd central-server
 ```
 
-更多详情请参考 [快速启动指南](docs/QUICKSTART.md) | [配置说明](docs/CONFIG.md) | [JWT 安全](docs/JWT_SECURITY.md)
+#### 2. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+<details>
+<summary>依赖列表（点击展开）</summary>
+
+- `flask==2.2.5` - Web 框架
+- `flask-socketio==5.3.6` - WebSocket 支持
+- `eventlet==0.33.3` - 异步网络库
+- `pyjwt` - JWT 认证
+- `apscheduler` - 任务调度
+- `kafka-python` - Kafka 客户端
+- `redis` - Redis 客户端
+- `pymysql` - MySQL 客户端
+- `paramiko==2.10.4` - SSH 客户端
+- `puresnmp==1.11.0` - SNMP 客户端
+- `pyyaml` - YAML 配置解析
+
+</details>
+
+#### 3. 配置文件
+
+```bash
+# 复制配置模板
+cp config/config_example.py config/config.py
+
+# 编辑配置文件，修改关键配置项
+vim config/config.py
+```
+
+**必须修改的配置项**:
+
+```python
+# MySQL 数据库配置
+mysql_config = {
+    "db_host": "localhost",      # 数据库地址
+    "db_user": "root",            # 数据库用户
+    "db_token": "your_password",  # 数据库密码
+    "db_port": 3306,
+    "db_name": "netops"           # 数据库名称
+}
+
+# Redis 配置
+redis_host = "localhost"
+redis_port = 6379
+redis_password = ""  # 如有密码请填写
+
+# Kafka 配置（可选，如不使用可关闭）
+kafka_server = ["localhost:9092"]
+```
+
+#### 4. 数据库初始化
+
+```bash
+# 执行数据库初始化脚本（首次部署）
+mysql -u root -p < scripts/db_create.sql
+```
+
+#### 5. JWT 密钥配置（生产环境必做）
+
+```bash
+# 生成安全的 JWT 密钥
+python scripts/generate_secret_key.py
+
+# 将生成的密钥复制到 config/config.py 中的 jwt_secret_key
+```
+
+⚠️ **安全警告**: 默认密钥仅供测试使用，生产环境必须更换！详见 [docs/JWT_SECURITY.md](docs/JWT_SECURITY.md)
+
+#### 6. 启动服务
+
+```bash
+# 前台启动（适合开发调试）
+python main.py
+
+# 后台启动（适合生产环境）
+nohup python3 -u main.py > logs/central-server.log 2>&1 &
+
+# 查看日志
+tail -f logs/central-server.log
+```
+
+#### 7. 验证服务
+
+```bash
+# 健康检查
+curl http://localhost:8080/health
+
+# 预期返回
+{"status": "healthy", "timestamp": "2026-08-20T10:30:00"}
+```
 
 ---
 
-## 📋 项目概述
+### 首次登录
 
-这是一个基于 Flask 的网络运维平台控制中心，用于处理网络设备的 syslog 日志和采集数据，提供告警管理、任务调度、数据处理等功能。
+**默认管理员账号**:
+- 用户名: `admin`
+- 密码: `123456`
 
-**项目规模**: 约 8945 行 Python 代码
+⚠️ **安全提示**: 
+- 首次登录后必须立即修改默认密码
+- 新建用户的默认密码也是 `123456`，需要在首次登录后修改
 
-**主要功能**:
-- 网络设备 Syslog 日志收集与处理
-- 设备数据采集与存储
-- 告警规则管理（黑名单、日志聚合）
-- 任务调度系统
-- RESTful API 接口
-- WebSocket 实时消息推送
-- 用户认证与权限管理
-
-**核心特性**:
-- ✅ 单进程统一管理（API + WebSocket）
-- ✅ Docker 一键部署
-- ✅ 健康检查支持
-- ✅ 时区自动配置 (UTC+8)
-- ✅ 优雅启动和关闭
+**登录方式**:
+- 通过前端页面登录（推荐）
+- 通过 API 登录需要提交密码的 hash 值，请参考前端实现或 [API 文档](docs/API.md)
 
 ---
 
-## 🏗️ 核心架构
+## 📋 项目介绍
+
+### 项目定位
+
+Central-Server 是一个专为网络运维场景设计的数据处理和管理平台，核心功能包括：
+
+1. **日志收集与处理**：接收网络设备 Syslog 日志，支持黑名单过滤和日志聚合
+2. **数据采集与存储**：处理来自监控 Agent 的设备性能数据（CPU、内存、接口等）
+3. **告警管理**：基于规则的告警触发、分组、处理和历史查询
+4. **任务调度**：支持定时任务和周期任务的动态管理
+5. **API 服务**：提供 RESTful API 供前端和第三方系统调用
+6. **WebSocket 推送**：实时消息推送和 SSH 终端交互
+
+### 技术架构
+
+**核心技术栈**:
+- **Web 框架**: Flask 2.2.5 + Flask-SocketIO 5.3.6
+- **任务调度**: APScheduler（支持 interval 和 cron 两种调度方式）
+- **消息队列**: Kafka / Redis Queue（双实现，可切换）
+- **数据存储**: MySQL（业务数据）+ Elasticsearch（日志存储）
+- **网络协议**: Paramiko（SSH）、PureSNMP（SNMP）
+- **认证授权**: JWT Token + Session 双重认证
+
+**架构特点**:
+- ✅ 单进程多线程架构（API + WebSocket + 任务调度统一管理）
+- ✅ 策略模式设计（数据处理可扩展）
+- ✅ 双消息队列支持（Kafka 高性能 / Redis 轻量级）
+- ✅ 反向代理透明支持（自动识别 X-Forwarded-For）
+- ✅ 优雅启停机制（信号处理 + 资源清理）
+
+### 项目规模
+
+```
+代码统计（Python）:
+- 总行数: ~8945 行
+- 核心模块: 18 个
+- API 接口: 40+ 个
+- 任务类型: 可扩展（基于工厂模式）
+```
+
+### 核心功能模块
+
+| 模块 | 说明 | 关键文件 |
+|------|------|---------|
+| **API 服务** | RESTful 接口，支持认证、权限控制 | `core/app.py`, `api/*` |
+| **任务调度** | 基于 APScheduler 的动态任务管理 | `tasks/task_manager.py` |
+| **日志处理** | Syslog 黑名单过滤、日志聚合 | `services/syslog_main.py` |
+| **数据采集** | 设备性能数据处理（CPU、内存等） | `services/data_main.py` |
+| **告警管理** | 告警规则、分组处理、历史查询 | `api/api_alarm.py` |
+| **用户系统** | JWT 认证、角色权限、API Key 管理 | `function_system/user_manage.py` |
+| **WebSocket** | 实时消息推送、SSH 终端交互 | `core/websocket_server.py` |
+| **SSH 管理** | 交互式 SSH 终端、命令执行 | `function_ssh/interactive_ssh.py` |
+
+### 应用场景
+
+- **网络设备管理**: 批量管理交换机、路由器、防火墙等网络设备
+- **日志分析**: 实时收集和分析设备 Syslog 日志，快速定位故障
+- **性能监控**: 采集设备 CPU、内存、接口流量等性能指标
+- **告警响应**: 根据规则自动触发告警，支持告警分组和批量处理
+- **运维自动化**: 通过 API 集成到运维平台，实现设备配置自动化
+
+---
+
+## 📚 深入了解
+
+### 快速导航
+
+- [架构设计](#-架构设计) - 了解系统整体架构和数据流
+- [目录结构](#-目录结构) - 快速定位代码模块
+- [API 接口](#-api-接口文档) - 查看可用的 API 接口
+- [开发指南](#-开发指南) - 贡献代码和开发新功能
+- [部署运维](#-部署与运维) - 生产环境部署建议
+- [常见问题](docs/FAQ.md) - 常见问题解答
+
+---
+
+## 🏗️ 架构设计
 
 ### 整体架构图
 
@@ -196,8 +528,6 @@ central-server/
 ---
 
 ## 🔧 核心模块详解
-
-### 1. 应用层（Flask Web）
 
 #### main.py - 应用入口
 ```python
@@ -479,11 +809,277 @@ task_manager.register_task(
 )
 ```
 
+### 生产环境部署建议
+
+#### 1. 环境准备
+
+**硬件要求**:
+- CPU: 4 核心以上
+- 内存: 8GB 以上
+- 磁盘: 100GB 以上（日志和数据存储）
+
+**软件依赖**:
+- Python 3.8+
+- MySQL 5.7+ / 8.0+
+- Redis 5.0+
+- Kafka 2.8+（可选，可用 Redis 替代）
+
+#### 2. 安全配置
+
+**必须修改的配置**:
+```python
+# config/config.py
+
+# 1. 修改 JWT 密钥（使用脚本生成）
+jwt_secret_key = "YOUR_GENERATED_SECRET_KEY"
+
+# 2. 修改默认管理员密码
+# 首次登录后立即修改
+
+# 3. 配置数据库强密码
+mysql_config = {
+    "db_token": "STRONG_PASSWORD_HERE"
+}
+
+# 4. Redis 密码保护
+redis_password = "REDIS_PASSWORD"
+```
+
+**网络安全**:
+- 使用防火墙限制访问端口（仅开放必要端口）
+- 配置 HTTPS（使用 Nginx 反向代理）
+- 启用 API 访问频率限制
+
+#### 3. 反向代理配置（Nginx）
+
+```nginx
+upstream central_server {
+    server 127.0.0.1:8080;
+}
+
+server {
+    listen 80;
+    server_name central-server.example.com;
+    
+    # 重定向到 HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name central-server.example.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://central_server;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    # WebSocket 支持
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+#### 4. Systemd 服务配置
+
+```ini
+# /etc/systemd/system/central-server.service
+[Unit]
+Description=Central Server
+After=network.target mysql.service redis.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/central-server
+Environment="PATH=/opt/central-server/venv/bin"
+ExecStart=/opt/central-server/venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**启动服务**:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable central-server
+sudo systemctl start central-server
+sudo systemctl status central-server
+```
+
+#### 5. 日志管理
+
+**日志轮转配置** (`/etc/logrotate.d/central-server`):
+```
+/opt/central-server/logs/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 0644 www-data www-data
+    sharedscripts
+    postrotate
+        systemctl reload central-server > /dev/null 2>&1 || true
+    endscript
+}
+```
+
+#### 6. 监控与健康检查
+
+**健康检查端点**:
+```bash
+# 基础健康检查
+curl http://localhost:8080/health
+
+# 详细健康检查（包含依赖服务状态）
+curl http://localhost:8080/health/detailed
+```
+
+**监控脚本** (`scripts/cron_health_check.py`):
+```bash
+# 添加到 crontab
+*/5 * * * * /opt/central-server/venv/bin/python /opt/central-server/scripts/cron_health_check.py
+```
+
+**Prometheus 监控**（推荐）:
+```python
+# 安装依赖
+pip install prometheus-flask-exporter
+
+# 在 main.py 中添加
+from prometheus_flask_exporter import PrometheusMetrics
+metrics = PrometheusMetrics(app)
+```
+
+#### 7. 备份策略
+
+**数据库备份**:
+```bash
+#!/bin/bash
+# backup_mysql.sh
+BACKUP_DIR="/backup/mysql"
+DATE=$(date +%Y%m%d_%H%M%S)
+mysqldump -u root -p netops > $BACKUP_DIR/netops_$DATE.sql
+# 保留最近 30 天的备份
+find $BACKUP_DIR -name "netops_*.sql" -mtime +30 -delete
+```
+
+**配置文件备份**:
+```bash
+# 定期备份配置文件
+tar -czf /backup/config_$(date +%Y%m%d).tar.gz config/
+```
+
+#### 8. 性能优化
+
+**数据库优化**:
+- 为高频查询字段添加索引
+- 定期执行 `ANALYZE TABLE` 更新统计信息
+- 配置合理的连接池大小
+
+**Redis 优化**:
+- 配置持久化策略（RDB + AOF）
+- 设置合理的内存限制和淘汰策略
+- 监控慢查询日志
+
+**应用层优化**:
+- 使用连接池管理数据库连接
+- 启用 Redis 缓存热点数据
+- 配置合理的线程池大小
+
+---
+
+## 🐛 故障排查
+
+### 常见问题
+
+#### 1. 服务无法启动
+
+**检查端口占用**:
+```bash
+lsof -i:8080
+netstat -tunlp | grep 8080
+```
+
+**检查日志**:
+```bash
+tail -f logs/central-server.log
+```
+
+#### 2. 数据库连接失败
+
+**测试数据库连接**:
+```bash
+mysql -h localhost -u root -p -e "SELECT 1"
+```
+
+**检查配置**:
+```python
+# config/config.py 中的数据库配置是否正确
+mysql_config = {
+    "db_host": "localhost",
+    "db_user": "root",
+    "db_token": "password",
+    ...
+}
+```
+
+#### 3. Kafka/Redis 连接失败
+
+**测试 Redis 连接**:
+```bash
+redis-cli -h localhost -p 6379 ping
+```
+
+**测试 Kafka 连接**:
+```bash
+kafka-topics.sh --bootstrap-server localhost:9092 --list
+```
+
+#### 4. 任务不执行
+
+**检查任务状态**:
+```bash
+curl http://localhost:8080/api/scheduler/jobs \
+  -H "Authorization: Bearer <token>"
+```
+
+**查看调度器日志**:
+```bash
+grep "APScheduler" logs/central-server.log
+```
+
+#### 5. 内存占用过高
+
+**检查进程内存**:
+```bash
+ps aux | grep python | grep main.py
+```
+
+**优化建议**:
+- 减少 APScheduler 线程池大小
+- 限制消息队列消费者数量
+- 增加服务器内存或启用 swap
+
 ---
 
 ## 📦 技术栈
 
-### 核心框架
+### 核心依赖
 - **Web**: Flask 2.2.5
 - **WebSocket**: Flask-SocketIO 5.3.6 + Eventlet 0.33.3
 - **调度**: APScheduler
@@ -541,221 +1137,364 @@ class Config:
 
 ---
 
-## 🚀 部署运行
+## 🔌 API 接口文档
 
-### 安装依赖
+### 认证机制
+
+**用户登录认证**:
 ```bash
+# 1. 登录获取 Token
+curl -X POST http://localhost:8080/system/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 返回示例
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "session_id": "abc123def456",
+    "user_info": {...}
+  }
+}
+
+# 2. 后续请求携带认证信息
+curl -X GET http://localhost:8080/api/scheduler/jobs \
+  -H "Authorization: Bearer <token>" \
+  -H "Sessionid: <session_id>" \
+  -H "Apptime: $(date +%s)"
+```
+
+**API Key 认证**（用于系统间调用）:
+```bash
+curl -X GET http://localhost:8080/api/scheduler/jobs \
+  -H "key: <your_api_key>" \
+  -H "secret: <your_api_secret>" \
+  -H "Apptime: $(date +%s)"
+```
+
+### 主要接口列表
+
+#### 任务调度管理 (`/api/scheduler/*`)
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/scheduler/jobs` | GET | 获取所有任务列表 |
+| `/api/scheduler/jobs` | POST | 添加新任务 |
+| `/api/scheduler/jobs/<job_id>` | DELETE | 删除指定任务 |
+| `/api/scheduler/jobs/<job_id>/pause` | POST | 暂停任务 |
+| `/api/scheduler/jobs/<job_id>/resume` | POST | 恢复任务 |
+| `/api/scheduler/jobs/<job_id>/execute` | POST | 立即执行任务 |
+
+#### 告警管理 (`/alarm/*`)
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/alarm/blacklist` | GET | 获取黑名单列表 |
+| `/alarm/blacklist` | POST | 添加黑名单规则 |
+| `/alarm/blacklist/<id>` | PUT | 更新黑名单规则 |
+| `/alarm/blacklist/<id>` | DELETE | 删除黑名单规则 |
+| `/alarm/mergelist` | GET | 获取聚合规则列表 |
+| `/alarm/mergelist` | POST | 添加聚合规则 |
+| `/alarm/current` | GET | 获取当前告警 |
+| `/alarm/history` | GET | 获取历史告警 |
+| `/alarm/handle/<group_id>` | POST | 处理告警组 |
+| `/alarm/check_blacklist` | POST | 测试黑名单规则 |
+| `/alarm/check_mergelist` | POST | 测试聚合规则 |
+
+#### 系统管理 (`/system/*`)
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/system/login` | POST | 用户登录 |
+| `/system/users` | GET | 获取用户列表 |
+| `/system/users` | POST | 创建用户 |
+| `/system/users/<id>` | PUT | 更新用户信息 |
+| `/system/users/<id>` | DELETE | 删除用户 |
+| `/system/roles` | GET | 获取角色列表 |
+
+#### 工具接口 (`/tools/*`)
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/tools/ip/prefix` | POST | IP 地址前缀计算 |
+| `/tools/text/diff` | POST | 文本对比工具 |
+
+### 统一响应格式
+
+所有接口返回统一的 JSON 格式：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": { ... }
+}
+```
+
+**状态码说明**:
+- `200`: 请求成功
+- `400`: 请求参数错误
+- `401`: 认证失败（Token 无效或过期）
+- `403`: 权限不足
+- `404`: 资源不存在
+- `500`: 服务器内部错误
+
+**完整 API 文档**: 详见 [docs/API.md](docs/API.md)
+
+---
+
+## 🛠️ 开发指南
+
+### 添加新的任务类型
+
+1. 在 `tasks/` 目录下创建新的任务类：
+
+```python
+# tasks/MyCustomTask.py
+from tasks.task_base import BaseTask
+
+class MyCustomTask(BaseTask):
+    TASK_ID = "my_custom_task"
+    TASK_NAME = "我的自定义任务"
+    TASK_DESCRIPTION = "执行某项自定义操作"
+    
+    def execute(self):
+        """任务执行逻辑"""
+        # 实现你的业务逻辑
+        self.logger.info("执行自定义任务")
+        return {"status": "success"}
+```
+
+2. 在 `tasks/task_factory.py` 中注册任务：
+
+```python
+from tasks.MyCustomTask import MyCustomTask
+
+# 注册到工厂
+task_factory.register_task("my_custom_task", MyCustomTask)
+```
+
+3. 通过 API 添加任务实例：
+
+```bash
+curl -X POST http://localhost:8080/api/scheduler/jobs \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_instance_id": "my_task_1",
+    "task_class_id": "my_custom_task",
+    "schedule_type": "interval",
+    "schedule_config": {"minutes": 5},
+    "task_config": {"param1": "value1"}
+  }'
+```
+
+### 添加新的数据处理策略
+
+1. 在 `services/dataStrategy/` 创建新策略：
+
+```python
+# services/dataStrategy/my_strategy.py
+from services.dataStrategy.base_strategy import DataStrategy
+
+class MyDataStrategy(DataStrategy):
+    def process_data(self, data):
+        """处理数据逻辑"""
+        metric_name = data.get("metric_name")
+        device_ip = data.get("device_ip")
+        
+        # 处理数据
+        processed_data = self._transform(data)
+        
+        # 存储到数据库
+        self._save_to_db(processed_data)
+```
+
+2. 在 `services/dataStrategy/__init__.py` 注册：
+
+```python
+from .my_strategy import MyDataStrategy
+
+strategy_factory.register_strategy("my_metric", MyDataStrategy())
+```
+
+### 开发环境配置
+
+```bash
+# 1. 创建虚拟环境
+python3 -m venv venv
+source venv/bin/activate
+
+# 2. 安装开发依赖
 pip install -r requirements.txt
+pip install pytest pytest-cov black flake8
+
+# 3. 代码格式化
+black .
+
+# 4. 代码检查
+flake8 --max-line-length=120 .
+
+# 5. 运行测试
+pytest tests/ -v
 ```
 
-### 数据库初始化
-```bash
-db_create.sql
+### 代码规范
+
+- **风格指南**: 遵循 [PEP 8](https://peps.python.org/pep-0008/)
+- **格式化工具**: Black (line-length=120)
+- **类型注解**: 推荐使用 Type Hints
+- **文档字符串**: 使用 Google 风格
+
+**Git 提交规范**:
 ```
-
-### 启动服务
-```bash
-# 前台运行
-python main.py
-
-# 后台运行
-nohup python3 -u main.py > lweb.log 2>&1 &
-```
-
-### 健康检查
-```bash
-curl http://localhost:8080/health
-```
-
----
-
-## 🎯 优化建议
-
-### 1. 配置管理
-**现状**: 配置硬编码在 `config/config.py`  
-**建议**: 
-- 使用环境变量（12-factor app）
-- 分离 dev/test/prod 配置
-- 敏感信息使用密钥管理服务
-
-```python
-# 推荐方案
-import os
-from dotenv import load_env
-
-class Config:
-    KAFKA_SERVER = os.getenv('KAFKA_SERVER', 'localhost:9092')
-    MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
-```
-
-### 2. 错误处理与重试
-**现状**: 部分代码缺少统一错误处理  
-**建议**:
-- 使用装饰器统一异常捕获
-- 实现指数退避重试机制
-- 添加熔断器（Circuit Breaker）
-
-```python
-from tenacity import retry, stop_after_attempt, wait_exponential
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def connect_to_kafka():
-    pass
-```
-
-### 3. 连接池管理
-**现状**: MySQL/Redis 连接未使用池化  
-**建议**:
-```python
-# MySQL 连接池
-from DBUtils.PooledDB import PooledDB
-pool = PooledDB(
-    creator=pymysql,
-    maxconnections=20,
-    mincached=2,
-    ...
-)
-
-# Redis 连接池
-from redis import ConnectionPool
-pool = ConnectionPool(host='localhost', port=6379, max_connections=50)
-```
-
-### 4. 监控与可观测性
-**建议添加**:
-- Prometheus 指标导出
-- 健康检查端点
-- 分布式追踪（OpenTelemetry）
-- 结构化日志（JSON 格式）
-
-```python
-from prometheus_flask_exporter import PrometheusMetrics
-metrics = PrometheusMetrics(app)
-```
-
-### 5. 测试覆盖
-**现状**: 缺少单元测试  
-**建议**:
-- pytest + pytest-cov
-- 单元测试覆盖率 > 80%
-- 集成测试（Docker Compose）
-- API 接口测试
-
-### 6. API 文档
-**建议**:
-- 使用 Flask-RESTX 或 Flasgger
-- 自动生成 OpenAPI/Swagger 文档
-- 接口版本管理
-
-```python
-from flask_restx import Api, Resource
-api = Api(app, version='1.0', title='Central Server API')
-```
-
-### 7. 容器化部署
-**建议完善**:
-```dockerfile
-# 多阶段构建
-FROM python:3.9-slim as builder
-COPY requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
-
-FROM python:3.9-slim
-COPY --from=builder /wheels /wheels
-RUN pip install --no-cache /wheels/*
-COPY . /app
-WORKDIR /app
-CMD ["python", "main.py"]
-```
-
-### 8. 异步化改造
-**现状**: 同步阻塞 I/O  
-**建议**: 
-- 迁移到 FastAPI + asyncio
-- 异步数据库驱动（asyncpg, motor）
-- 异步消息队列客户端（aiokafka）
-
-```python
-# FastAPI 示例
-from fastapi import FastAPI
-app = FastAPI()
-
-@app.get("/api/tasks")
-async def get_tasks():
-    tasks = await task_manager.get_all_tasks_async()
-    return tasks
-```
-
-### 9. 安全加固
-- 密码加盐哈希（bcrypt）
-- SQL 注入防护（ORM 或参数化查询）
-- XSS 防护
-- 速率限制（Flask-Limiter）
-- HTTPS 强制
-- 敏感信息脱敏
-
-### 10. 性能优化
-- Redis 缓存热点数据
-- 数据库索引优化
-- 批量操作减少 I/O
-- 异步任务队列（Celery）
-- 数据库读写分离
-
----
-
-## 📝 开发规范
-
-### 代码风格
-- 遵循 PEP 8
-- 使用 Black 格式化
-- 使用 Flake8 静态检查
-- 类型注解（Type Hints）
-
-### Git 提交规范
-```
-feat: 新功能
+feat: 新增功能
 fix: 修复 bug
 docs: 文档更新
-refactor: 重构
+refactor: 代码重构
 test: 测试相关
-chore: 构建/工具链
+chore: 构建/工具更新
+perf: 性能优化
 ```
 
-### 日志规范
-```python
-# 使用结构化日志
-logger.info(
-    "任务执行完成",
-    extra={
-        "task_id": task_id,
-        "duration": duration,
-        "status": "success"
-    }
-)
-```
+---
+
+## 🚢 部署与运维
+
+---
+
+## 🎯 后续优化计划
+
+### 短期计划（1-3 个月）
+
+1. **测试覆盖**
+   - 添加单元测试（pytest）
+   - API 接口测试
+   - 目标覆盖率 > 80%
+
+2. **文档完善**
+   - 补充 API 文档（Swagger/OpenAPI）
+   - 添加开发者指南
+   - 完善部署文档
+
+3. **性能优化**
+   - 实现数据库连接池
+   - 添加 Redis 缓存层
+   - 优化数据库查询
+
+4. **监控增强**
+   - 集成 Prometheus 指标
+   - 添加分布式追踪（OpenTelemetry）
+   - 结构化日志输出（JSON）
+
+### 中期计划（3-6 个月）
+
+1. **架构演进**
+   - 考虑迁移到 FastAPI（异步化）
+   - 实现服务容器化和编排（Kubernetes）
+   - 微服务拆分（按功能模块）
+
+2. **功能增强**
+   - 实现告警规则引擎
+   - 添加数据可视化面板
+   - 支持多租户隔离
+
+3. **安全加固**
+   - 实现 RBAC 细粒度权限控制
+   - 添加操作审计日志
+   - 集成 OAuth2/OIDC
+
+### 长期计划（6-12 个月）
+
+1. **高可用架构**
+   - 支持集群部署
+   - 实现故障自动切换
+   - 数据库读写分离
+
+2. **AI 赋能**
+   - 日志智能分析
+   - 异常模式识别
+   - 告警智能降噪
 
 ---
 
 ## 🤝 贡献指南
 
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'feat: Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+欢迎贡献代码、报告问题或提出建议！
+
+### 贡献流程
+
+1. **Fork 项目**
+   ```bash
+   git clone https://github.com/your-username/central-server.git
+   cd central-server
+   ```
+
+2. **创建特性分支**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+3. **编写代码并测试**
+   ```bash
+   # 确保代码符合规范
+   black .
+   flake8 .
+   
+   # 运行测试
+   pytest tests/
+   ```
+
+4. **提交更改**
+   ```bash
+   git add .
+   git commit -m "feat: 添加某某功能"
+   git push origin feature/your-feature-name
+   ```
+
+5. **创建 Pull Request**
+   - 在 GitHub 上创建 PR
+   - 详细描述改动内容
+   - 等待代码审查
+
+### 报告问题
+
+如果发现 Bug 或有功能建议，请：
+1. 在 GitHub Issues 中搜索是否已有相关问题
+2. 如果没有，创建新 Issue，包含：
+   - 问题描述
+   - 复现步骤
+   - 预期行为
+   - 实际行为
+   - 环境信息（操作系统、Python 版本等）
 
 ---
 
 ## 📄 许可证
 
-[待补充]
+本项目采用 [MIT License](LICENSE)
 
 ---
 
 ## 📞 联系方式
 
-[待补充]
+- **项目维护者**: NetOps Team
+- **Email**: netops@example.com
+- **文档**: [项目 Wiki](https://github.com/your-org/central-server/wiki)
+- **问题反馈**: [GitHub Issues](https://github.com/your-org/central-server/issues)
 
 ---
 
-**最后更新**: 2026-08-14
+## 🙏 致谢
+
+感谢以下开源项目：
+- [Flask](https://flask.palletsprojects.com/) - Web 框架
+- [APScheduler](https://apscheduler.readthedocs.io/) - 任务调度
+- [Paramiko](http://www.paramiko.org/) - SSH 协议实现
+- 以及所有 `requirements.txt` 中列出的依赖项
+
+---
+
+**最后更新**: 2026-08-20
