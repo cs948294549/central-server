@@ -108,6 +108,42 @@ def changePasswdByUser(username: str, old_pass: str, new_pass: str):
                 return {"status": "failed", "data": None, "message": "密码错误"}
         else:
             return {"status": "failed", "data": None, "message": "用户冲突"}
+
+# 管理员重置用户凭证（无需验证旧密码）
+@decorator_checkparams(key_array=["username", "new_identify"])
+def resetUserIdentify(data):
+    """
+    管理员重置用户凭证
+    参数:
+        username: 用户名
+        new_identify: 新凭证（已加密的密码）
+    返回:
+        {"status": "success/failed", "data": None, "message": "提示信息"}
+    """
+    try:
+        username = data["username"]
+        new_identify = data["new_identify"]
+
+        db = UsersDB()
+        user_infos = db.getUser({"username": username})
+
+        if len(user_infos) == 0:
+            return {"status": "failed", "data": None, "message": "用户不存在"}
+        elif len(user_infos) > 1:
+            return {"status": "failed", "data": None, "message": "用户冲突"}
+
+        # 执行重置
+        ret = db.updateUser({"username": username, "identify": new_identify})
+        if ret != "failed":
+            logger.info(f"管理员重置用户凭证: {username}")
+            return {"status": "success", "data": None, "message": "凭证重置成功"}
+        else:
+            return {"status": "failed", "data": None, "message": "凭证重置失败"}
+
+    except Exception as e:
+        logger.error(f"重置用户凭证异常: {str(e)}")
+        return {"status": "failed", "data": None, "message": f"内部错误: {str(e)}"}
+
 # 验证user
 def authenticate_user(username: str, secret: str, timestamp: int):
     current_time = int(time.time())

@@ -58,7 +58,7 @@ def getuser():
 @system_bp.route('/change_passwd', methods=['POST'])
 def changePasswd():
     """
-    获取当前用户基本信息
+    用户自行修改密码
     """
     try:
         data = request.json
@@ -71,6 +71,22 @@ def changePasswd():
             return APIResponse.error(message=ret["message"])
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+@system_bp.route('/reset_user_identify', methods=['POST'])
+def resetUserIdentify():
+    """
+    管理员重置用户凭证
+    """
+    try:
+        data = request.json
+        ret = user_manage.resetUserIdentify(data)
+        if ret["status"] == "success":
+            return APIResponse.success(data=ret["data"], message=ret["message"])
+        else:
+            return APIResponse.error(message=ret["message"])
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
 
 # 角色表相关接口
 @system_bp.route('/add_role', methods=['POST'])
