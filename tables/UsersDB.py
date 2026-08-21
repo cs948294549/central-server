@@ -69,15 +69,21 @@ class UsersDB(mysqldb_netops):
             conditions = []
             params = []
 
+            # 标记是否更新了 identify，用于自动更新 update_time
+            identify_updated = False
+
             update_key = ["identify", "subname", "phone", "mail", "rid", "last_login"]
             for key in update_key:
                 if key in data.keys():
                     conditions.append(key + " = %s")
                     params.append(data[key])
                     if key == "identify":
-                        conditions.append("update_time = %s")
-                        params.append(str(int(time.time())))
+                        identify_updated = True
 
+            # 如果更新了密码（identify），自动更新 update_time
+            if identify_updated:
+                conditions.append("update_time = %s")
+                params.append(str(int(time.time())))
 
             if len(conditions) > 0:
                 sql = "update users set " + ",".join(conditions) + " where username='{}'".format(str(data["username"]))

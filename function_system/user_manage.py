@@ -124,16 +124,19 @@ def resetUserIdentify(data):
         username = data["username"]
         new_identify = data["new_identify"]
 
-        db = UsersDB()
-        user_infos = db.getUser({"username": username})
+        # 先检查用户是否存在
+        db_check = UsersDB()
+        user_infos = db_check.getUser({"username": username})
 
         if len(user_infos) == 0:
             return {"status": "failed", "data": None, "message": "用户不存在"}
         elif len(user_infos) > 1:
             return {"status": "failed", "data": None, "message": "用户冲突"}
 
-        # 执行重置
-        ret = db.updateUser({"username": username, "identify": new_identify})
+        # 执行重置（使用新的数据库连接）
+        db_update = UsersDB()
+        ret = db_update.updateUser({"username": username, "identify": new_identify})
+
         if ret != "failed":
             logger.info(f"管理员重置用户凭证: {username}")
             return {"status": "success", "data": None, "message": "凭证重置成功"}
