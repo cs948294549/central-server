@@ -40,25 +40,8 @@ CREATE TABLE ipam_ipaddr(
 '''
 
 
-class IpamDB:
+class IpamDB(mysqldb_netops):
     """IPAM 数据库操作类"""
-
-    def __init__(self):
-        self.db = mysqldb_netops()
-        self.conn = self.db.conn
-        self.cursor = self.db.cursor
-
-    def ping(self):
-        """保持数据库连接"""
-        self.db.ping()
-
-    def close(self):
-        """关闭数据库连接"""
-        try:
-            self.cursor.close()
-            self.conn.close()
-        except Exception as e:
-            logger.error(f"关闭数据库连接失败: {e}")
 
     # ==================== 网络地址管理 ====================
 
@@ -107,7 +90,8 @@ class IpamDB:
             logger.error(f"添加网络地址记录失败: {e}")
             return "failed"
         finally:
-            self.close()
+            self.cursor.close()
+            self.conn.close()
 
     def update_network_item(self, data):
         """更新网络地址记录"""
@@ -143,7 +127,8 @@ class IpamDB:
             logger.error(f"更新网络地址记录失败: {e}")
             return "failed"
         finally:
-            self.close()
+            self.cursor.close()
+            self.conn.close()
 
     def delete_network_item(self, data):
         """删除网络地址记录"""
@@ -161,7 +146,8 @@ class IpamDB:
             logger.error(f"删除网络地址记录失败: {e}")
             return "failed"
         finally:
-            self.close()
+            self.cursor.close()
+            self.conn.close()
 
     def get_network_list(self, data):
         """查询网络地址记录"""
@@ -200,34 +186,30 @@ class IpamDB:
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
 
+            proper = ["ip", "mask", "start_ip", "end_ip", "status", "location", "isp", "role", "label",
+                     "comment", "manage_user", "create_time", "update_time", "gateway", "used_per"]
             self.cursor.execute(sql, params)
-            rows = self.cursor.fetchall()
-
+            result1 = self.cursor.fetchall()
             results = []
-            for row in rows:
-                results.append({
-                    "ip": row[0] if row[0] else "",
-                    "mask": row[1] if row[1] else "",
-                    "start_ip": row[2] if row[2] else "",
-                    "end_ip": row[3] if row[3] else "",
-                    "status": row[4] if row[4] else "",
-                    "location": row[5] if row[5] else "",
-                    "isp": row[6] if row[6] else "",
-                    "role": row[7] if row[7] else "",
-                    "label": row[8] if row[8] else "",
-                    "comment": row[9] if row[9] else "",
-                    "manage_user": row[10] if row[10] else "",
-                    "create_time": row[11] if row[11] else "",
-                    "update_time": row[12] if row[12] else "",
-                    "gateway": row[13] if row[13] else "",
-                    "used_per": row[14] if row[14] else "0"
-                })
+
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        if proper[num] == "used_per":
+                            # used_per 字段如果为空则默认为 "0"
+                            result[proper[num]] = i[num] if i[num] else "0"
+                        else:
+                            result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+
             return results
-        except Exception as e:
-            logger.error(f"查询网络地址记录失败: {e}")
+        except Exception as err:
+            logger.error("======IpamDB get_network_list error========\n{}".format(str(err)))
             return "failed"
         finally:
-            self.close()
+            self.cursor.close()
+            self.conn.close()
 
     # ==================== IP地址管理 ====================
 
@@ -260,7 +242,8 @@ class IpamDB:
             logger.error(f"批量添加IP地址记录失败: {e}")
             return "failed"
         finally:
-            self.close()
+            self.cursor.close()
+            self.conn.close()
 
     def get_ipaddr_list(self, data):
         """查询IP地址记录"""
@@ -290,25 +273,25 @@ class IpamDB:
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
 
+            proper = ["ip_deci", "ip_addr", "collect_type", "admin_status", "comment", "update_time"]
             self.cursor.execute(sql, params)
-            rows = self.cursor.fetchall()
-
+            result1 = self.cursor.fetchall()
             results = []
-            for row in rows:
-                results.append({
-                    "ip_deci": row[0] if row[0] else "",
-                    "ip_addr": row[1] if row[1] else "",
-                    "collect_type": row[2] if row[2] else "",
-                    "admin_status": row[3] if row[3] else "",
-                    "comment": row[4] if row[4] else "",
-                    "update_time": row[5] if row[5] else ""
-                })
+
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+
             return results
-        except Exception as e:
-            logger.error(f"查询IP地址记录失败: {e}")
+        except Exception as err:
+            logger.error("======IpamDB get_ipaddr_list error========\n{}".format(str(err)))
             return "failed"
         finally:
-            self.close()
+            self.cursor.close()
+            self.conn.close()
 
     def delete_ipaddr_item(self, data):
         """删除IP地址记录"""
@@ -326,4 +309,5 @@ class IpamDB:
             logger.error(f"删除IP地址记录失败: {e}")
             return "failed"
         finally:
-            self.close()
+            self.cursor.close()
+            self.conn.close()
