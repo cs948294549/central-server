@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 topology_bp = Blueprint('topology', __name__, url_prefix='/topology')
 
 
-@topology_bp.route('/list', methods=['GET'])
+@topology_bp.route('/list', methods=['POST'])
 def get_list():
     """获取拓扑列表"""
     try:
@@ -31,11 +31,15 @@ def get_list():
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
-@topology_bp.route('/detail/<int:topology_id>', methods=['GET'])
-def get_detail(topology_id):
+@topology_bp.route('/detail', methods=['POST'])
+def get_detail():
     """获取拓扑详情"""
     try:
-        result = get_topology_detail(topology_id)
+        data = request.json
+        if not data or not data.get('topology_id'):
+            return APIResponse.param_error(message="拓扑ID不能为空")
+
+        result = get_topology_detail(data['topology_id'])
 
         if result != "failed":
             return APIResponse.success(data=result, message="查询成功")
@@ -114,14 +118,18 @@ def update():
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
-@topology_bp.route('/delete/<int:topology_id>', methods=['DELETE'])
-def delete(topology_id):
+@topology_bp.route('/delete', methods=['POST'])
+def delete():
     """删除拓扑"""
     try:
-        username = str(g.user) if hasattr(g, 'user') else 'system'
-        logger.info(f"{username}删除拓扑，ID: {topology_id}")
+        data = request.json
+        if not data or not data.get('topology_id'):
+            return APIResponse.param_error(message="拓扑ID不能为空")
 
-        result = delete_topology(topology_id)
+        username = str(g.user) if hasattr(g, 'user') else 'system'
+        logger.info(f"{username}删除拓扑，ID: {data['topology_id']}")
+
+        result = delete_topology(data['topology_id'])
 
         if result == "success":
             return APIResponse.success(message="删除成功")

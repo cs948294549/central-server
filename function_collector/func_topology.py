@@ -86,10 +86,9 @@ def update_topology(data):
     :return: success/version_conflict/not_found/duplicate/failed
     """
     try:
-        db = TopologyDB()
-
         # 检查拓扑是否存在
-        existing = db.get_topology_by_id(data['topology_id'])
+        db_check = TopologyDB()
+        existing = db_check.get_topology_by_id(data['topology_id'])
         if not existing or existing == "failed":
             logger.warning(f"拓扑不存在: {data['topology_id']}")
             return "not_found"
@@ -102,7 +101,8 @@ def update_topology(data):
 
         # 如果修改了名称，检查新名称是否已存在
         if 'topology_name' in data and data['topology_name'] != existing.get('topology_name'):
-            name_check = db.get_topology_by_name(data['topology_name'])
+            db_name = TopologyDB()
+            name_check = db_name.get_topology_by_name(data['topology_name'])
             if name_check and name_check != "failed":
                 logger.warning(f"拓扑名称已存在: {data['topology_name']}")
                 return "duplicate"
@@ -111,7 +111,9 @@ def update_topology(data):
         data['updated_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         data['version'] = existing.get('version', 1) + 1
 
-        result = db.update_topology(data)
+        # 执行更新
+        db_update = TopologyDB()
+        result = db_update.update_topology(data)
         return result
 
     except Exception as e:
