@@ -128,15 +128,16 @@ def delete_topology(topology_id):
     :return: success/not_found/failed
     """
     try:
-        db = TopologyDB()
-
         # 检查拓扑是否存在
-        existing = db.get_topology_by_id(topology_id)
+        db_check = TopologyDB()
+        existing = db_check.get_topology_by_id(topology_id)
         if not existing or existing == "failed":
             logger.warning(f"拓扑不存在: {topology_id}")
             return "not_found"
 
-        result = db.delete_topology(topology_id)
+        # 执行删除
+        db_delete = TopologyDB()
+        result = db_delete.delete_topology(topology_id)
         return result
 
     except Exception as e:
