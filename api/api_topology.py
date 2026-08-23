@@ -64,10 +64,11 @@ def create():
             return APIResponse.param_error(message="拓扑名称不能为空")
 
         # 设置创建人
-        data['created_by'] = str(g.user) if hasattr(g, 'user') else 'system'
-        data['updated_by'] = data['created_by']
+        username = g.user.get('username') if hasattr(g, 'user') and isinstance(g.user, dict) else 'system'
+        data['created_by'] = username
+        data['updated_by'] = username
 
-        logger.info(f"{data['created_by']}创建拓扑，名称: {data.get('topology_name')}")
+        logger.info(f"{username}创建拓扑，名称: {data.get('topology_name')}")
 
         result = create_topology(data)
 
@@ -96,9 +97,10 @@ def update():
             return APIResponse.param_error(message="拓扑ID不能为空")
 
         # 设置更新人
-        data['updated_by'] = str(g.user) if hasattr(g, 'user') else 'system'
+        username = g.user.get('username') if hasattr(g, 'user') and isinstance(g.user, dict) else 'system'
+        data['updated_by'] = username
 
-        logger.info(f"{data['updated_by']}更新拓扑，ID: {data.get('topology_id')}")
+        logger.info(f"{username}更新拓扑，ID: {data.get('topology_id')}")
 
         result = update_topology(data)
 
@@ -126,7 +128,7 @@ def delete():
         if not data or not data.get('topology_id'):
             return APIResponse.param_error(message="拓扑ID不能为空")
 
-        username = str(g.user) if hasattr(g, 'user') else 'system'
+        username = g.user.get('username') if hasattr(g, 'user') and isinstance(g.user, dict) else 'system'
         logger.info(f"{username}删除拓扑，ID: {data['topology_id']}")
 
         result = delete_topology(data['topology_id'])
