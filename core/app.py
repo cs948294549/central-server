@@ -15,6 +15,7 @@ from api.api_collector import collector_bp
 from api.api_command import command
 from api.api_ipam import ipam_bp
 from api.api_iplist import iplist_bp
+from api.api_topology import topology_bp
 
 # 导入 SSH 终端蓝图
 from api.websocket_ssh_bp import websocket_ssh_bp
@@ -63,6 +64,7 @@ def create_app():
     app.register_blueprint(command)
     app.register_blueprint(ipam_bp)
     app.register_blueprint(iplist_bp)
+    app.register_blueprint(topology_bp)
 
     # 注册 SSH 终端蓝图
     app.register_blueprint(websocket_ssh_bp)

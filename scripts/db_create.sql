@@ -178,5 +178,26 @@ CREATE TABLE ipam_ipaddr(
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网段内实际使用地址';
 
 -- ============================================
+-- 拓扑管理表
+-- ============================================
+
+-- 拓扑数据表
+DROP TABLE IF EXISTS topology_data;
+CREATE TABLE topology_data (
+    topology_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '拓扑ID',
+    topology_name VARCHAR(100) NOT NULL COMMENT '拓扑名称',
+    category_types JSON COMMENT '分类标签数组，如["按机房","IDC-A","核心网络"]',
+    description TEXT COMMENT '描述',
+    topology_json LONGTEXT NOT NULL COMMENT '拓扑JSON数据',
+    created_by VARCHAR(50) COMMENT '创建人',
+    created_at VARCHAR(20) COMMENT '创建时间',
+    updated_by VARCHAR(50) COMMENT '最后修改人',
+    updated_at VARCHAR(20) COMMENT '更新时间',
+    version INT DEFAULT 1 COMMENT '版本号(乐观锁)',
+    UNIQUE KEY uk_name (topology_name),
+    INDEX idx_updated (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='拓扑数据表';
+
+-- ============================================
 -- 数据库初始化完成
 -- ============================================
