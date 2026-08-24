@@ -199,5 +199,26 @@ CREATE TABLE topology_data (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='拓扑数据表';
 
 -- ============================================
+-- 流量看板表
+-- ============================================
+
+-- 流量看板数据表
+DROP TABLE IF EXISTS flow_data;
+CREATE TABLE flow_data (
+    flow_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '看板ID',
+    flow_name VARCHAR(100) NOT NULL COMMENT '看板名称',
+    category_types JSON COMMENT '分类标签数组，如["按机房","IDC-A","核心网络"]',
+    description TEXT COMMENT '描述',
+    flow_json LONGTEXT NOT NULL COMMENT '面板配置',
+    created_by VARCHAR(50) COMMENT '创建人',
+    created_at VARCHAR(20) COMMENT '创建时间',
+    updated_by VARCHAR(50) COMMENT '最后修改人',
+    updated_at VARCHAR(20) COMMENT '更新时间',
+    version INT DEFAULT 1 COMMENT '版本号(乐观锁)',
+    UNIQUE KEY uk_name (flow_name),
+    INDEX idx_updated (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='流量看板数据表';
+
+-- ============================================
 -- 数据库初始化完成
 -- ============================================
