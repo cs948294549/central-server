@@ -465,6 +465,8 @@ class CollectDB(mysqldb_netops):
     def getLLDPs(self, searchKey):
         searchKey = waf(searchKey)
         conditions = []
+        if "ip" in searchKey.keys():
+            conditions.append("lldps.ip ='" + searchKey["ip"] + "'")
         if "loc_ip" in searchKey.keys():
             conditions.append("lldps.ip regexp'" + searchKey["loc_ip"] + "'")
         if "loc_portname" in searchKey.keys():
