@@ -1,7 +1,7 @@
 import json
-from function_collector.func_search import func_fulltext
+from function_collector.func_search import func_fulltext, get_deviceslist
 
-def search_device_list(search_key):
+def location_device(search_key):
     """
     通过设备名、SN、IP等信息快速搜索设备
     返回设备列表、ARP列表、LLDP信息、mac地址表、接口地址表等相关信息
@@ -27,3 +27,6 @@ def search_device_list(search_key):
             "msg": "搜索失败: " + str(e),
             "data": []
         }, ensure_ascii=False)
+
+def search_device_list(search_key):
+    get_deviceslist(search_key)
