@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from functools import wraps
 from function_mcp.mcp_interface import MCP_TOOLS, MCP_TOOLS_prompt
 from api.api_response import APIResponse
+from tables.UsersDB import UsersDB
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,40 +11,46 @@ logger = logging.getLogger(__name__)
 mcp_bp = Blueprint("mcp", __name__, url_prefix='/mcp')
 
 # ======================
-# OAuth2 认证装饰器（可选，用于独立的 MCP 认证）
+# MCP 专用认证装饰器
 # ======================
-# 注意：如果使用 central-server 的统一认证，可以不需要这个装饰器
-# 这里保留是为了兼容独立的 MCP 客户端访问
-VALID_MCP_TOKENS = {
-    "mcp-token-1": {"username": "mcp_admin1", "user_id": 1},
-    "mcp-token-2": {"username": "mcp_admin2", "user_id": 2},
-}
-
+# /mcp、/mcp/tools、/mcp/health 不走 before_request 的主认证流程
+# （已在 core/app.py 的 excluded_routes 中排除），
+# 因此需要在这里单独校验。认证信息通过 Authorization 头传递，
+# 格式为 "Bearer <key>:<secret>"，不做时间戳校验，仅比对 key/secret
 def mcp_auth_required(f):
-    """
-    MCP 专用的 OAuth2 认证装饰器
-    如果请求带有 Bearer token，则使用 MCP 专用认证
-    否则依赖 central-server 的统一认证（before_request）
-    """
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return APIResponse.error("未提供认证信息", 401)
 
-        # 如果带有 Bearer token，使用 MCP 专用认证
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split("Bearer ")[-1].strip()
-            user = VALID_MCP_TOKENS.get(token)
+        token = auth_header.split("Bearer ", 1)[-1].strip()
+        if ":" not in token:
+            return APIResponse.error("认证格式错误", 401)
 
-            if not user:
-                return jsonify({"error": "Unauthorized - invalid MCP token"}), 401
+        api_key, api_secret = token.split(":", 1)
+        if not api_key or not api_secret:
+            return APIResponse.error("未提供认证信息", 401)
 
-            # 把用户信息传到视图函数
-            request.mcp_user = user
-            logger.info(f"MCP 独立认证成功: {user['username']}")
-        else:
-            # 否则依赖 central-server 的统一认证
-            # 由 before_request 中间件处理
-            pass
+        try:
+            db = UsersDB()
+            user_infos = db.getUser({"username": api_key})
+        except Exception as e:
+            logger.error(f"MCP 认证异常: {str(e)}")
+            return APIResponse.error("MCP 认证失败", 401)
+
+        if len(user_infos) != 1 or user_infos[0]["identify"] != api_secret:
+            logger.warning(f"MCP 认证失败: key={api_key}")
+            return APIResponse.error("MCP 认证失败", 401)
+
+        user_info = user_infos[0]
+        g.user = {
+            "username": user_info["username"],
+            "rid": user_info["rid"],
+            "subname": user_info.get("subname", ""),
+            "auth_type": "mcp_key",
+        }
+        logger.info(f"MCP 认证成功: 用户 {user_info['username']} ({user_info['rid']}) 访问接口 {request.path}")
 
         return f(*args, **kwargs)
     return decorated
@@ -189,6 +196,7 @@ def handle_mcp_request(req):
 # 额外的辅助端点（可选）
 # --------------------------
 @mcp_bp.route("/tools", methods=["GET"])
+@mcp_auth_required
 def list_tools():
     """
     列出所有可用的 MCP 工具
@@ -200,6 +208,7 @@ def list_tools():
 
 
 @mcp_bp.route("/health", methods=["GET"])
+@mcp_auth_required
 def health_check():
     """
     健康检查端点
