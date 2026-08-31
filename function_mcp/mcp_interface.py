@@ -22,7 +22,7 @@ MCP_TOOLS_prompt = [
     },
     {
         "name": "location_device",
-        "description": "通过设备名、SN、IP等信息快速定位设备，返回设备列表、ARP列表、LLDP信息、mac地址表、接口地址表等相关信息，返回数据数量有限制无法返回精确的列表",
+        "description": "用于定位设备并获取详细网络信息。输入设备名/SN/IP等关键字，返回该设备的多维度数据（设备信息、ARP表、LLDP邻居、MAC地址表、接口IP表等）。注意：返回数据有数量限制，适合查询单个或少量设备的详细信息，不适合批量获取完整列表。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -33,7 +33,7 @@ MCP_TOOLS_prompt = [
     },
     {
         "name": "search_device_list",
-        "description": "通过设备名搜索，返回完整的匹配设备列表，可选筛选项 设备名、设备描述，可组合搜索",
+        "description": "用于搜索并返回完整的设备列表。仅通过设备名（sysname）和设备自身描述信息（sysdesc，包含型号、版本等）进行筛选。返回完整的匹配设备列表，但仅包含设备基本信息（IP、设备名、型号、版本等），不包含ARP/LLDP/MAC表等详细数据。适合需要获取完整设备清单的场景。",
         "inputSchema": {
             "type": "object",
             "properties": {
