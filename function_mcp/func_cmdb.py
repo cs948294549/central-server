@@ -28,5 +28,26 @@ def location_device(search_key):
             "data": []
         }, ensure_ascii=False)
 
-def search_device_list(search_key):
-    get_deviceslist(search_key)
+def search_device_list(sysname, sysdesc_reg=None):
+    try:
+        # 直接调用内部方法，不通过 HTTP
+        if sysdesc_reg:
+            result = get_deviceslist({"sysname": sysname, "sysdesc_reg": sysdesc_reg})
+        else:
+            result = get_deviceslist({"sysname": sysname})
+
+        # 返回 JSON 格式的结果
+        if isinstance(result, (dict, list)):
+            return json.dumps(result, ensure_ascii=False)
+        else:
+            return json.dumps({
+                "code": 0,
+                "msg": "查询成功",
+                "data": result
+            }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({
+            "code": -1,
+            "msg": "搜索失败: " + str(e),
+            "data": []
+        }, ensure_ascii=False)
