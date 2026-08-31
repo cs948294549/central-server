@@ -24,12 +24,6 @@ Central-Server 应用独立部署，MySQL、Redis、Kafka 等依赖服务使用�
 # 1. 构建镜像
 ./docker/app_build.sh
 
-# 2. 配置环境变量
-export MYSQL_HOST=192.168.1.100
-export MYSQL_PASSWORD=your_password
-export REDIS_HOST=192.168.1.101
-export KAFKA_SERVER=192.168.1.102:9092
-
 # 3. 启动容器
 ./docker/app_start.sh
 
@@ -73,31 +67,6 @@ export KAFKA_SERVER=192.168.1.102:9092
 # 示例
 ./docker/app_start.sh          # 启动 v1 版本（默认）
 ./docker/app_start.sh v2.0     # 启动 v2.0 版本
-```
-
-**环境变量配置**:
-```bash
-# 服务端口
-API_PORT=8080                  # API 服务端口（默认 8080）
-WEBSOCKET_PORT=8081            # WebSocket 端口（默认 8081）
-
-# MySQL 配置
-MYSQL_HOST=localhost           # MySQL 主机（默认 localhost）
-MYSQL_PORT=3306                # MySQL 端口（默认 3306）
-MYSQL_USER=root                # MySQL 用户（默认 root）
-MYSQL_PASSWORD=root            # MySQL 密码（默认 root）
-MYSQL_DATABASE=netops          # 数据库名（默认 netops）
-
-# Redis 配置
-REDIS_HOST=localhost           # Redis 主机（默认 localhost）
-REDIS_PORT=6379                # Redis 端口（默认 6379）
-REDIS_DB=0                     # Redis 数据库（默认 0）
-
-# Kafka 配置
-KAFKA_SERVER=localhost:9092    # Kafka 服务器（默认 localhost:9092）
-
-# 数据目录
-CENTRAL_DATA_DIR=/data         # 数据根目录（默认为当前目录）
 ```
 
 **功能**:
@@ -362,14 +331,6 @@ services:
 5. **启用 HTTPS**
    - 在前端配置 Nginx 反向代理
    - 配置 SSL 证书
-
----
-
-## 📚 相关文档
-
-- [快速启动指南](../docs/QUICKSTART.md)
-- [完整部署指南](../docs/DOCKER_DEPLOY.md)
-- [项目架构文档](../README.md)
 
 ---
 
