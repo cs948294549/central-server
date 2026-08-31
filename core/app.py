@@ -17,6 +17,7 @@ from api.api_ipam import ipam_bp
 from api.api_iplist import iplist_bp
 from api.api_topology import topology_bp
 from api.api_flowboard import flowboard_bp
+from api.api_mcp import mcp_bp
 
 # 导入 SSH 终端蓝图
 from api.websocket_ssh_bp import websocket_ssh_bp
@@ -67,10 +68,12 @@ def create_app():
     app.register_blueprint(iplist_bp)
     app.register_blueprint(topology_bp)
     app.register_blueprint(flowboard_bp)
+    app.register_blueprint(mcp_bp)
 
     # 注册 SSH 终端蓝图
     app.register_blueprint(websocket_ssh_bp)
     logger.info("SSH 终端蓝图已注册")
+    logger.info("MCP 蓝图已注册")
 
     def check_url_privilege(path):
         """
@@ -104,7 +107,10 @@ def create_app():
         excluded_routes = [
             '/system/login',  # 登录路由
             '/system/health',  # 健康检查
-            '/tools/ip'
+            '/tools/ip',
+            '/mcp',
+            '/mcp/tools',
+            '/mcp/health',
         ]
 
         # 获取请求路径
