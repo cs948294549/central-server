@@ -222,7 +222,7 @@ if __name__ == "__main__":
     import sys
 
     # 默认参数
-    query_month = "2026-08"
+    query_month = "2026-09"
     tag_key = DEFAULT_TAG_KEY
     tag_value = DEFAULT_TAG_VALUE
     show_details = False

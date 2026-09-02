@@ -53,7 +53,7 @@ def search_device_list(sysname, sysdesc_reg=None):
         }, ensure_ascii=False)
 
 
-def query_cloud_bill(cloud_provider, month, tag_key=None, tag_value=None, include_details=False):
+def query_cloud_bill(cloud_provider, month, tag_key="24H 网络带宽", tag_value="24H 网络带宽", include_details=False):
     """
     查询云平台账单
     :param cloud_provider: 云平台标识 (tencent/volcano)
@@ -68,8 +68,8 @@ def query_cloud_bill(cloud_provider, month, tag_key=None, tag_value=None, includ
             from function_clouds.tencent_bill import analyze_tencent_bill, format_tencent_report
             result = analyze_tencent_bill(
                 month=month,
-                tag_key=tag_key or "",
-                tag_value=tag_value or "",
+                tag_key=tag_key if tag_key else "",
+                tag_value=tag_value if tag_value else "",
                 include_details=include_details
             )
             return format_tencent_report(result)
@@ -86,3 +86,7 @@ def query_cloud_bill(cloud_provider, month, tag_key=None, tag_value=None, includ
             return f"❌ 不支持的云平台: {cloud_provider}\n当前支持: tencent（腾讯云）, volcano（火山云）"
     except Exception as e:
         return f"❌ 查询云账单失败: {str(e)}"
+
+
+if __name__ == '__main__':
+    print(query_cloud_bill("tencent", "2026-09"))
