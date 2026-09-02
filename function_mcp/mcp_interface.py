@@ -1,6 +1,6 @@
 from function_mcp.func_switch import run_cmd, get_vendor
 from function_mcp.func_message import sendMessage
-from function_mcp.func_cmdb import search_device_list, location_device
+from function_mcp.func_cmdb import search_device_list, location_device, query_cloud_bill
 
 
 # --------------------------
@@ -66,6 +66,21 @@ MCP_TOOLS_prompt = [
             },
             "required": ["ip"]
         }
+    },
+    {
+        "name": "query_cloud_bill",
+        "description": "查询云平台账单信息，支持腾讯云和火山云。可按标签筛选，返回费用汇总、产品分类、支付方式等信息。默认不返回明细账单以节省内容。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cloud_provider": {"type": "string", "description": "云平台标识：tencent（腾讯云）或 volcano（火山云）"},
+                "month": {"type": "string", "description": "账单月份，格式：yyyy-MM，如 2026-08"},
+                "tag_key": {"type": "string", "description": "标签键（可选），用于筛选特定标签的资源，如：24H 网络带宽"},
+                "tag_value": {"type": "string", "description": "标签值（可选），配合tag_key使用，如：24H 网络带宽"},
+                "include_details": {"type": "boolean", "description": "是否包含明细账单（默认false），设为true时返回每条资源的详细信息"}
+            },
+            "required": ["cloud_provider", "month"]
+        }
     }
 ]
 
@@ -75,5 +90,6 @@ MCP_TOOLS = {
     "location_device": location_device,
     "send_message": sendMessage,
     "get_vendor": get_vendor,
-    "search_device_list": search_device_list
+    "search_device_list": search_device_list,
+    "query_cloud_bill": query_cloud_bill
 }

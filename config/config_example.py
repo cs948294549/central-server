@@ -66,3 +66,11 @@ class Config:
     # SSH配置
     ssh_username = "admin"  # SSH用户名（必须修改）
     ssh_password = "password"  # SSH密码（必须修改）
+
+    # tencent 影响腾讯云查询
+    tencent_SECRET_ID = ""
+    tencent_SECRET_KEY = ""
+
+    # ark 影响火山云查询
+    volcano_ACCESS_KEY_ID = ""
+    volcano_SECRET_ACCESS_KEY = ""

@@ -10,3 +10,5 @@ apscheduler
 kafka-python
 redis
 pyyaml
+tencentcloud-sdk-python
+volcengine
