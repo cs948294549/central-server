@@ -93,3 +93,4 @@ if __name__ == "__main__":
               f"资源ID:{item.get('ResourceID', '-'):30s} "
               f"地域:{item.get('Region', '-'):15s} "
               f"实付:{float(item.get('RealCost', 0)):10,.2f}")
+        
