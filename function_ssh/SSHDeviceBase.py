@@ -70,10 +70,11 @@ class SSHDeviceBase(ABC):
             paramiko_version = tuple(map(int, paramiko.__version__.split('.')[:2]))
 
             if paramiko_version >= (3, 0):
-                # Paramiko 3.x/5.x: 使用 disabled_algorithms 启用老旧算法
+                # Paramiko 3.x/5.x: 需要显式禁用算法限制
                 logger.info(f"使用 Paramiko {paramiko.__version__}，启用老旧设备兼容模式")
 
-                # 通过 disabled_algorithms 为空来启用所有算法（包括 ssh-rsa）
+                # Paramiko 5.x 需要显式指定要移除的禁用算法
+                # 通过传入禁用列表为空来启用这些算法
                 self.client.connect(
                     hostname=self.host,
                     port=self.port,
@@ -82,7 +83,14 @@ class SSHDeviceBase(ABC):
                     allow_agent=False,
                     look_for_keys=False,
                     timeout=self.connect_timeout,
-                    disabled_algorithms={}  # 空字典表示不禁用任何算法
+                    disabled_algorithms={
+                        'pubkeys': [],      # 启用所有公钥算法
+                        'keys': [],         # 启用所有密钥算法
+                        'kex': [],          # 启用所有密钥交换算法
+                        'ciphers': [],      # 启用所有加密算法
+                        'macs': [],         # 启用所有 MAC 算法
+                        'compression': []   # 启用所有压缩算法
+                    }
                 )
 
             else:
