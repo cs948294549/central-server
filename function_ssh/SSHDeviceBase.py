@@ -65,18 +65,38 @@ class SSHDeviceBase(ABC):
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         try:
-            # 兼容老旧设备的SSH算法配置
-            # 解决 "Incompatible ssh peer (no acceptable host key)" 错误
-            self.client.connect(
-                hostname=self.host,
-                port=self.port,
-                username=self.username,
-                password=self.password,
-                allow_agent=False,
-                look_for_keys=False,
-                timeout=self.connect_timeout,
-                disabled_algorithms={'pubkeys': [], 'keys': []}  # 允许所有算法
-            )
+            # 先创建 Transport 对象以支持老旧设备的 SSH 算法
+            transport = paramiko.Transport((self.host, self.port))
+
+            # 启用所有密钥算法（包括旧的 ssh-rsa 和 ssh-dss）
+            transport.get_security_options().key_types = [
+                'ssh-rsa',
+                'rsa-sha2-256',
+                'rsa-sha2-512',
+                'ssh-dss',
+                'ecdsa-sha2-nistp256',
+                'ecdsa-sha2-nistp384',
+                'ecdsa-sha2-nistp521',
+                'ssh-ed25519'
+            ]
+
+            # 启用所有密钥交换算法（包括旧的 diffie-hellman-group1-sha1）
+            transport.get_security_options().kex = [
+                'diffie-hellman-group-exchange-sha256',
+                'diffie-hellman-group-exchange-sha1',
+                'diffie-hellman-group14-sha256',
+                'diffie-hellman-group14-sha1',
+                'diffie-hellman-group1-sha1',
+                'ecdh-sha2-nistp256',
+                'ecdh-sha2-nistp384',
+                'ecdh-sha2-nistp521',
+            ]
+
+            # 连接 Transport
+            transport.connect(username=self.username, password=self.password)
+
+            # 将 transport 绑定到 SSHClient
+            self.client._transport = transport
 
             # 创建交互式shell
             self.ssh_shell = self.client.invoke_shell(width=300)
