@@ -37,7 +37,7 @@ class TaskManager:
             logger.error(f"加载配置文件失败: {e}")
             return []
 
-    def register_task(self, task_id: str, func, trigger_type: str = 'cron', **kwargs):
+    def register_task(self, task_id: str, func, trigger_type: str = 'cron', func_kwargs=None, **trigger_kwargs):
         """
         注册单个定时任务
 
@@ -45,18 +45,22 @@ class TaskManager:
             task_id: 任务唯一标识
             func: 任务执行函数
             trigger_type: 触发器类型，'cron' 或 'interval'
-            **kwargs: 触发器参数
+            func_kwargs: 传递给任务函数的参数字典
+            **trigger_kwargs: 触发器参数
                 cron: hour, minute, day, month, day_of_week 等
                 interval: seconds, minutes, hours, days 等
         """
         try:
+            func_kwargs = func_kwargs or {}
+
             if trigger_type == 'cron':
                 job = scheduler.add_job(
                     func,
                     trigger='cron',
                     id=task_id,
                     replace_existing=True,
-                    **kwargs
+                    kwargs=func_kwargs,  # 传递给函数的参数
+                    **trigger_kwargs      # 触发器参数
                 )
             elif trigger_type == 'interval':
                 job = scheduler.add_job(
@@ -64,7 +68,8 @@ class TaskManager:
                     trigger='interval',
                     id=task_id,
                     replace_existing=True,
-                    **kwargs
+                    kwargs=func_kwargs,  # 传递给函数的参数
+                    **trigger_kwargs      # 触发器参数
                 )
             else:
                 logger.error(f"不支持的触发器类型: {trigger_type}")
@@ -74,7 +79,8 @@ class TaskManager:
                 'job': job,
                 'func': func,
                 'trigger_type': trigger_type,
-                'kwargs': kwargs
+                'trigger_kwargs': trigger_kwargs,
+                'func_kwargs': func_kwargs
             }
 
             return True
@@ -127,10 +133,14 @@ class TaskManager:
 
                     minute, hour, day, month, day_of_week = parts
 
+                    # 获取任务函数参数（如果有）
+                    func_kwargs = task.get('kwargs', {})
+
                     success = self.register_task(
                         task_id=task_id,
                         func=func,
                         trigger_type='cron',
+                        func_kwargs=func_kwargs,  # 传递给函数的参数
                         minute=minute,
                         hour=hour,
                         day=day,
@@ -139,7 +149,8 @@ class TaskManager:
                     )
 
                     if success:
-                        logger.info(f"✓ 注册 cron 任务: {task_id} - {description} - {schedule}")
+                        args_info = f" (参数: {func_kwargs})" if func_kwargs else ""
+                        logger.info(f"✓ 注册 cron 任务: {task_id} - {description} - {schedule}{args_info}")
                         registered_count += 1
                     else:
                         logger.error(f"✗ 注册 cron 任务失败: {task_id}")
@@ -150,10 +161,14 @@ class TaskManager:
                     minutes = schedule.get('minutes', 0)
                     seconds = schedule.get('seconds', 0)
 
+                    # 获取任务函数参数（如果有）
+                    func_kwargs = task.get('kwargs', {})
+
                     success = self.register_task(
                         task_id=task_id,
                         func=func,
                         trigger_type='interval',
+                        func_kwargs=func_kwargs,  # 传递给函数的参数
                         hours=hours,
                         minutes=minutes,
                         seconds=seconds

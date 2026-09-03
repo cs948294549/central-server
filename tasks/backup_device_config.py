@@ -9,8 +9,9 @@
 - 配置无变化：更新最后采集时间
 
 使用方式：
-1. 作为定时任务：在 tasks/task_manager.py 中配置 cron 表达式（每晚22点执行）
-2. 单独运行：python3 tasks/backup_device_config.py
+1. 作为定时任务：在 config/task_config.yaml 中配置任务和参数
+2. 单独运行（备份所有设备）：python3 tasks/backup_device_config.py
+3. 单独运行（备份指定设备）：通过 kwargs 传递 filter_ips 参数
 """
 import logging
 import sys
@@ -29,6 +30,10 @@ from function_snmp.snmp_collector import identify_device_vendor
 from config.config import Config
 
 logger = logging.getLogger(__name__)
+
+# ============================================
+# 任务配置
+# ============================================
 
 # 任务配置
 TASK_CONFIG = {
@@ -50,9 +55,12 @@ VENDOR_CONFIG_COMMANDS = {
 }
 
 
-def get_device_list():
+def get_device_list(filter_ips=None):
     """
     从数据库获取设备列表
+
+    Args:
+        filter_ips: IP地址列表，如果提供则只返回这些IP的设备
 
     Returns:
         list: 设备列表，每个设备包含 ip, sysname, sys_type, sysdesc 等信息
@@ -61,14 +69,27 @@ def get_device_list():
         logger.info("开始获取设备列表...")
         db = CollectDB()
         # 获取所有非屏蔽设备（admin_status <> '1'）
-        devices = db.get_device_list()
+        all_devices = db.get_device_list()
 
-        if not devices:
+        if not all_devices:
             logger.warning("获取设备列表失败或为空")
             return []
 
-        logger.info(f"成功获取 {len(devices)} 台设备")
-        return devices
+        # 如果指定了过滤IP，则只返回匹配的设备
+        if filter_ips:
+            filtered_devices = [d for d in all_devices if d.get('ip') in filter_ips]
+            logger.info(f"根据IP过滤后，获取 {len(filtered_devices)} 台设备（总共 {len(all_devices)} 台）")
+
+            # 检查哪些IP没有找到
+            found_ips = {d.get('ip') for d in filtered_devices}
+            not_found_ips = set(filter_ips) - found_ips
+            if not_found_ips:
+                logger.warning(f"以下IP在设备列表中未找到: {', '.join(not_found_ips)}")
+
+            return filtered_devices
+        else:
+            logger.info(f"成功获取 {len(all_devices)} 台设备")
+            return all_devices
 
     except Exception as e:
         logger.error(f"获取设备列表异常: {e}")
@@ -219,9 +240,12 @@ def backup_device(device):
     return result
 
 
-def run():
+def run(filter_ips=None):
     """
     主执行函数 - 并发备份所有设备配置
+
+    Args:
+        filter_ips: IP地址列表，如果提供则只备份这些IP的设备，否则备份所有设备
 
     执行流程：
     1. 从数据库获取设备列表
@@ -239,7 +263,7 @@ def run():
     start_time = time.time()
 
     # 获取设备列表
-    devices = get_device_list()
+    devices = get_device_list(filter_ips)
     if not devices:
         logger.warning("没有需要备份的设备")
         return
@@ -319,7 +343,8 @@ if __name__ == "__main__":
     )
 
     try:
-        run()
+        filter_ips = ["10.39.224.72"]
+        run(filter_ips=filter_ips)
         sys.exit(0)
     except KeyboardInterrupt:
         logger.info("\n任务被用户中断")
