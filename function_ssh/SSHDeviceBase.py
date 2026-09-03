@@ -60,43 +60,64 @@ class SSHDeviceBase(ABC):
         """
         建立SSH连接
         内部方法，由子类继承使用
+        兼容 Paramiko 2.x 和 3.x/5.x 版本
         """
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         try:
-            # 先创建 Transport 对象以支持老旧设备的 SSH 算法
-            transport = paramiko.Transport((self.host, self.port))
+            # 检查 Paramiko 版本
+            paramiko_version = tuple(map(int, paramiko.__version__.split('.')[:2]))
 
-            # 启用所有密钥算法（包括旧的 ssh-rsa 和 ssh-dss）
-            transport.get_security_options().key_types = [
-                'ssh-rsa',
-                'rsa-sha2-256',
-                'rsa-sha2-512',
-                'ssh-dss',
-                'ecdsa-sha2-nistp256',
-                'ecdsa-sha2-nistp384',
-                'ecdsa-sha2-nistp521',
-                'ssh-ed25519'
-            ]
+            if paramiko_version >= (3, 0):
+                # Paramiko 3.x/5.x: 需要手动配置 Transport 支持老旧算法
+                logger.info(f"使用 Paramiko {paramiko.__version__}，启用老旧设备兼容模式")
 
-            # 启用所有密钥交换算法（包括旧的 diffie-hellman-group1-sha1）
-            transport.get_security_options().kex = [
-                'diffie-hellman-group-exchange-sha256',
-                'diffie-hellman-group-exchange-sha1',
-                'diffie-hellman-group14-sha256',
-                'diffie-hellman-group14-sha1',
-                'diffie-hellman-group1-sha1',
-                'ecdh-sha2-nistp256',
-                'ecdh-sha2-nistp384',
-                'ecdh-sha2-nistp521',
-            ]
+                transport = paramiko.Transport((self.host, self.port))
 
-            # 连接 Transport
-            transport.connect(username=self.username, password=self.password)
+                # 启用所有密钥算法（包括旧的 ssh-rsa 和 ssh-dss）
+                transport.get_security_options().key_types = [
+                    'ssh-rsa',
+                    'rsa-sha2-256',
+                    'rsa-sha2-512',
+                    'ssh-dss',
+                    'ecdsa-sha2-nistp256',
+                    'ecdsa-sha2-nistp384',
+                    'ecdsa-sha2-nistp521',
+                    'ssh-ed25519'
+                ]
 
-            # 将 transport 绑定到 SSHClient
-            self.client._transport = transport
+                # 启用所有密钥交换算法（包括旧的 diffie-hellman-group1-sha1）
+                transport.get_security_options().kex = [
+                    'diffie-hellman-group-exchange-sha256',
+                    'diffie-hellman-group-exchange-sha1',
+                    'diffie-hellman-group14-sha256',
+                    'diffie-hellman-group14-sha1',
+                    'diffie-hellman-group1-sha1',
+                    'ecdh-sha2-nistp256',
+                    'ecdh-sha2-nistp384',
+                    'ecdh-sha2-nistp521',
+                ]
+
+                # 连接 Transport
+                transport.connect(username=self.username, password=self.password)
+
+                # 将 transport 绑定到 SSHClient
+                self.client._transport = transport
+
+            else:
+                # Paramiko 2.x: 使用传统的 connect 方法（默认支持旧算法）
+                logger.info(f"使用 Paramiko {paramiko.__version__}，使用传统连接方式")
+
+                self.client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.username,
+                    password=self.password,
+                    allow_agent=False,
+                    look_for_keys=False,
+                    timeout=self.connect_timeout
+                )
 
             # 创建交互式shell
             self.ssh_shell = self.client.invoke_shell(width=300)
