@@ -220,5 +220,29 @@ CREATE TABLE flow_data (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='流量看板数据表';
 
 -- ============================================
+-- 设备配置备份表
+-- ============================================
+
+-- 设备配置备份表
+DROP TABLE IF EXISTS dev_config;
+CREATE TABLE dev_config (
+    log_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+    ip VARCHAR(64) COLLATE utf8_bin NOT NULL COMMENT 'IP地址',
+    sysname VARCHAR(300) COLLATE utf8_bin NULL COMMENT '设备名',
+    dev_type VARCHAR(20) COLLATE utf8_bin NULL COMMENT '设备类型',
+    detail LONGTEXT COLLATE utf8_bin NOT NULL COMMENT '配置内容',
+    created_at VARCHAR(15) COLLATE utf8_bin NOT NULL COMMENT '创建时间(时间戳)',
+    updated_at VARCHAR(15) COLLATE utf8_bin NOT NULL COMMENT '更新时间(时间戳)',
+    change_id VARCHAR(50) COLLATE utf8_bin NULL COMMENT '变更单号',
+
+    PRIMARY KEY (log_id),
+    INDEX idx_ip (ip),
+    INDEX idx_sysname (sysname),
+    INDEX idx_change_id (change_id),
+    INDEX idx_created_at (created_at),
+    INDEX idx_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='设备配置备份表';
+
+-- ============================================
 -- 数据库初始化完成
 -- ============================================

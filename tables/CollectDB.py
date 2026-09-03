@@ -131,6 +131,55 @@ CREATE TABLE IF NOT EXISTS dev_sn (
 
 class CollectDB(mysqldb_netops):
 
+    def get_device_list(self, admin_status=None):
+        """
+        获取设备列表（从iplist和devices表联合查询）
+
+        Args:
+            admin_status: 设备状态过滤，None表示获取所有非屏蔽设备
+
+        Returns:
+            设备列表，包含 ip, sysname, community, sys_type, sysdesc 等字段
+        """
+        try:
+            if admin_status is not None:
+                sql = """
+                    SELECT i.ip, i.sysname, i.community, d.sys_type, d.sysdesc
+                    FROM iplist i
+                    LEFT JOIN devices d ON i.ip = d.ip
+                    WHERE i.admin_status = %s
+                """
+                self.cursor.execute(sql, (admin_status,))
+            else:
+                # 默认获取所有非屏蔽设备（admin_status <> '1'）
+                sql = """
+                    SELECT i.ip, i.sysname, i.community, d.sys_type, d.sysdesc
+                    FROM iplist i
+                    LEFT JOIN devices d ON i.ip = d.ip
+                    WHERE i.admin_status <> '1'
+                """
+                self.cursor.execute(sql)
+
+            proper = ["ip", "sysname", "community", "sys_type", "sysdesc"]
+            result1 = self.cursor.fetchall()
+            results = []
+
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+
+            return results
+
+        except Exception as err:
+            logger.error("======CollectDB get_device_list error========\n{}".format(str(err)))
+            return []
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def getfulltextDeviceList(self, searchKey):
         searchKey = waf(searchKey)
         conditions = []
