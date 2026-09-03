@@ -70,53 +70,20 @@ class SSHDeviceBase(ABC):
             paramiko_version = tuple(map(int, paramiko.__version__.split('.')[:2]))
 
             if paramiko_version >= (3, 0):
-                # Paramiko 3.x/5.x: 需要手动配置 Transport 支持老旧算法
+                # Paramiko 3.x/5.x: 使用 disabled_algorithms 启用老旧算法
                 logger.info(f"使用 Paramiko {paramiko.__version__}，启用老旧设备兼容模式")
 
-                transport = paramiko.Transport((self.host, self.port))
-
-                # 启用所有密钥算法（包括旧的 ssh-rsa 和 ssh-dss）
-                transport.get_security_options().key_types = [
-                    'ssh-rsa',
-                    'rsa-sha2-256',
-                    'rsa-sha2-512',
-                    'ssh-dss',
-                    'ecdsa-sha2-nistp256',
-                    'ecdsa-sha2-nistp384',
-                    'ecdsa-sha2-nistp521',
-                    'ssh-ed25519'
-                ]
-
-                # 启用所有密钥交换算法（包括旧的 diffie-hellman-group1-sha1）
-                transport.get_security_options().kex = [
-                    'diffie-hellman-group-exchange-sha256',
-                    'diffie-hellman-group-exchange-sha1',
-                    'diffie-hellman-group14-sha256',
-                    'diffie-hellman-group14-sha1',
-                    'diffie-hellman-group1-sha1',
-                    'ecdh-sha2-nistp256',
-                    'ecdh-sha2-nistp384',
-                    'ecdh-sha2-nistp521',
-                ]
-
-                # 启用所有加密算法（包括旧的 3des-cbc、aes128-cbc 等）
-                transport.get_security_options().ciphers = [
-                    'aes128-ctr',
-                    'aes192-ctr',
-                    'aes256-ctr',
-                    'aes128-cbc',
-                    'aes192-cbc',
-                    'aes256-cbc',
-                    '3des-cbc',
-                    'blowfish-cbc',
-                    'cast128-cbc',
-                ]
-
-                # 连接 Transport
-                transport.connect(username=self.username, password=self.password)
-
-                # 将 transport 绑定到 SSHClient
-                self.client._transport = transport
+                # 通过 disabled_algorithms 为空来启用所有算法（包括 ssh-rsa）
+                self.client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.username,
+                    password=self.password,
+                    allow_agent=False,
+                    look_for_keys=False,
+                    timeout=self.connect_timeout,
+                    disabled_algorithms={}  # 空字典表示不禁用任何算法
+                )
 
             else:
                 # Paramiko 2.x: 使用传统的 connect 方法（默认支持旧算法）
