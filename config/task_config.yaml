@@ -19,7 +19,13 @@ tasks:
     schedule: "0 2 * * *"  # 每天凌晨2点执行
     description: "从采集数据更新IPAM地址表"
     enabled: true
-
+  - id: backup_all_devices
+    type: cron
+    module: tasks.backup_device_config
+    function: run
+    schedule: "0 22 * * *"  # 每天凌晨10点执行
+    description: "从采集数据更新IPAM地址表"
+    enabled: true
   # 示例：间隔任务（默认禁用）
   # - id: example_interval_task
   #   type: interval
