@@ -99,6 +99,19 @@ class SSHDeviceBase(ABC):
                     'ecdh-sha2-nistp521',
                 ]
 
+                # 启用所有加密算法（包括旧的 3des-cbc、aes128-cbc 等）
+                transport.get_security_options().ciphers = [
+                    'aes128-ctr',
+                    'aes192-ctr',
+                    'aes256-ctr',
+                    'aes128-cbc',
+                    'aes192-cbc',
+                    'aes256-cbc',
+                    '3des-cbc',
+                    'blowfish-cbc',
+                    'cast128-cbc',
+                ]
+
                 # 连接 Transport
                 transport.connect(username=self.username, password=self.password)
 
