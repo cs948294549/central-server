@@ -252,6 +252,7 @@ def run():
     failed_count = 0
     no_change_count = 0
     changed_count = 0
+    failed_devices = []  # 记录失败的设备详情
 
     with ThreadPoolExecutor(max_workers=TASK_CONFIG["max_workers"]) as executor:
         futures = {executor.submit(backup_device, device): device for device in devices}
@@ -268,11 +269,24 @@ def run():
                         changed_count += 1
                 else:
                     failed_count += 1
+                    # 记录失败设备的详细信息
+                    failed_devices.append({
+                        "ip": result["ip"],
+                        "sysname": result["sysname"],
+                        "reason": result["message"]
+                    })
                     logger.warning(f"设备备份失败: {result['ip']}({result['sysname']}) - {result['message']}")
 
             except Exception as e:
                 failed_count += 1
-                logger.error(f"设备 {device.get('ip')} 备份任务异常: {e}")
+                device_ip = device.get('ip', 'unknown')
+                device_name = device.get('sysname', 'unknown')
+                failed_devices.append({
+                    "ip": device_ip,
+                    "sysname": device_name,
+                    "reason": f"任务异常: {str(e)}"
+                })
+                logger.error(f"设备 {device_ip} 备份任务异常: {e}")
 
     elapsed_time = time.time() - start_time
 
@@ -282,6 +296,14 @@ def run():
     logger.info(f"成功: {success_count} (配置有变化: {changed_count}, 无变化: {no_change_count})")
     logger.info(f"失败: {failed_count}")
     logger.info(f"耗时: {elapsed_time:.2f} 秒")
+
+    # 输出失败设备详情
+    if failed_devices:
+        logger.info("-" * 60)
+        logger.info("失败设备详情：")
+        for idx, dev in enumerate(failed_devices, 1):
+            logger.info(f"  {idx}. {dev['ip']} ({dev['sysname']}) - {dev['reason']}")
+
     logger.info("=" * 60)
 
 
