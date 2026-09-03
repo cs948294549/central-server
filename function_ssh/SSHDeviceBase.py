@@ -65,17 +65,26 @@ class SSHDeviceBase(ABC):
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         try:
-            self.client.connect(hostname=self.host, port=self.port, username=self.username,
-                               password=self.password, allow_agent=False, look_for_keys=False,
-                               timeout=self.connect_timeout)
-            
+            # 兼容老旧设备的SSH算法配置
+            # 解决 "Incompatible ssh peer (no acceptable host key)" 错误
+            self.client.connect(
+                hostname=self.host,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                allow_agent=False,
+                look_for_keys=False,
+                timeout=self.connect_timeout,
+                disabled_algorithms={'pubkeys': [], 'keys': []}  # 允许所有算法
+            )
+
             # 创建交互式shell
             self.ssh_shell = self.client.invoke_shell(width=300)
             self.ssh_shell.settimeout(self.timeout)
-            
+
             # 读取初始提示符
             self._init_terminal()
-            
+
         except Exception as e:
             print(f"SSH连接失败: {e}")
             self.close()
