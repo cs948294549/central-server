@@ -2,9 +2,150 @@ import difflib
 import re
 import logging
 from tables.ConfigDB import ConfigDB
+from tables.CollectDB import CollectDB
+from function_ssh.sshClient import run_ssh_command, SSHClientFactory
+from function_snmp.snmp_collector import identify_device_vendor
 
 logger = logging.getLogger(__name__)
 
+# 不同厂商的配置查询命令映射
+VENDOR_CONFIG_COMMANDS = {
+    'h3c': ['display current-configuration'],
+    'huawei': ['display current-configuration'],
+    'cisco_nx': ['show running-config'],
+    'cisco_ios': ['show running-config'],
+    'cisco_xr': ['show running-config'],
+    'juniper': ['show configuration'],
+    'arista': ['show running-config'],
+    'ruijie': ['show running-config'],
+}
+
+# 部分厂商输出的配置头部包含采集时间等动态内容（例如NX-OS的
+# "!Time: ..."），每次采集都会变化，需要从固定不变的行开始截取，
+# 避免配置实际未变化时被误判为有变更
+VENDOR_CONFIG_STABLE_START = {
+    'cisco_nx': re.compile(r'^version\s'),
+}
+
+
+def _strip_unstable_header(config_content, vendor):
+    """
+    去除配置头部的动态内容（如采集时间戳），避免配置未变化时被误判为变更
+    :param config_content: 原始配置内容
+    :param vendor: 设备厂商
+    :return: 处理后的配置内容
+    """
+    pattern = VENDOR_CONFIG_STABLE_START.get(vendor)
+    if not pattern:
+        return config_content
+
+    lines = config_content.split("\n")
+    for idx, line in enumerate(lines):
+        if pattern.match(line):
+            return "\n".join(lines[idx:])
+
+    # 未找到稳定起始行，原样返回
+    return config_content
+
+
+def get_device_config(ip, sysname, vendor):
+    """
+    通过SSH获取设备配置
+
+    Args:
+        ip: 设备IP
+        sysname: 设备名称
+        vendor: 设备厂商
+
+    Returns:
+        str: 配置内容，失败返回None
+    """
+    try:
+        # 获取配置命令
+        commands = VENDOR_CONFIG_COMMANDS.get(vendor)
+        if not commands:
+            logger.warning(f"设备 {ip}({sysname}) 不支持的厂商: {vendor}")
+            return None
+
+        # 执行SSH命令
+        logger.debug(f"连接设备 {ip}({sysname}) - {vendor}")
+        result = run_ssh_command(host=ip, commands=commands, vendor=vendor)
+
+        if result.get("status") == "success":
+            data = result.get("data", {})
+            if data and len(data) > 0:
+                # 合并多个命令的输出
+                config_content = '\n'.join(data.values())
+                # 去除部分厂商配置头部的动态内容（如采集时间戳）
+                config_content = _strip_unstable_header(config_content, vendor)
+                logger.info(f"设备 {ip}({sysname}) 配置获取成功，大小: {len(config_content)} 字节")
+                return config_content
+            else:
+                logger.error(f"设备 {ip}({sysname}) 配置获取失败，命令无输出")
+                return None
+        else:
+            logger.error(f"设备 {ip}({sysname}) SSH执行失败: {result.get('msg')}")
+            return None
+
+    except Exception as e:
+        logger.error(f"设备 {ip}({sysname}) 配置获取异常: {e}")
+        return None
+
+def save_config_by_opid(ip, op_id):
+    """
+    根据变更单号采集并保存单台设备的配置（用于变更前后的配置采集）
+    :param ip: 设备IP
+    :param op_id: 变更单号
+    :return: dict {"status": "success/failed", "message": ""}
+    """
+    result = {"status": "failed", "message": ""}
+    try:
+        db_collect = CollectDB()
+        all_devices = db_collect.get_device_list()
+
+        device = next((d for d in all_devices if d.get("ip") == ip), None)
+        if not device:
+            result["message"] = f"设备 {ip} 不在设备列表中"
+            logger.warning(result["message"])
+            return result
+
+        sysname = device.get("sysname", "")
+        sysdesc = device.get("sysdesc", "")
+
+        vendor = identify_device_vendor(sysdesc)
+        if not vendor or vendor == 'unknown' or vendor not in SSHClientFactory.VENDOR_CLASS_MAP:
+            result["message"] = f"无法识别设备厂商或厂商不支持: {vendor}"
+            logger.warning(f"设备 {ip}({sysname}) 识别厂商为 {vendor}，不支持采集")
+            return result
+
+        config_content = get_device_config(ip, sysname, vendor)
+        if not config_content:
+            result["message"] = "配置获取失败"
+            return result
+
+        db_config = ConfigDB()
+        add_result = db_config.add_config({
+            "ip": ip,
+            "sysname": sysname,
+            "dev_type": vendor,
+            "detail": config_content,
+            "change_id": op_id
+        })
+
+        if add_result == "success":
+            result["status"] = "success"
+            result["message"] = "配置采集成功"
+            logger.info(f"设备 {ip}({sysname}) 变更单 {op_id} 配置采集成功")
+        else:
+            result["message"] = "保存配置失败"
+            logger.error(f"设备 {ip}({sysname}) 变更单 {op_id} 保存配置失败")
+
+        return result
+
+    except Exception as e:
+        result["message"] = f"配置采集异常: {str(e)}"
+        logger.error(f"设备 {ip} 变更单 {op_id} 配置采集异常: {e}")
+        return result
 
 def get_config_list_by_device(data):
     """

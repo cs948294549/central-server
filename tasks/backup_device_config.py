@@ -25,9 +25,9 @@ sys.path.insert(0, str(project_root))
 
 from tables.CollectDB import CollectDB
 from tables.ConfigDB import ConfigDB
-from function_ssh.sshClient import run_ssh_command, SSHClientFactory
+from function_ssh.sshClient import SSHClientFactory
 from function_snmp.snmp_collector import identify_device_vendor
-from config.config import Config
+from function_collector.func_config import get_device_config
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +40,6 @@ TASK_CONFIG = {
     "enabled": True,  # 是否启用任务
     "max_workers": 10,  # 并发线程数
     "timeout": 60,  # SSH连接超时时间（秒）
-}
-
-# 不同厂商的配置查询命令映射
-VENDOR_CONFIG_COMMANDS = {
-    'h3c': ['display current-configuration'],
-    'huawei': ['display current-configuration'],
-    'cisco_nx': ['show running-config'],
-    'cisco_ios': ['show running-config'],
-    'cisco_xr': ['show running-config'],
-    'juniper': ['show configuration'],
-    'arista': ['show running-config'],
-    'ruijie': ['show running-config'],
 }
 
 
@@ -94,51 +82,6 @@ def get_device_list(filter_ips=None):
     except Exception as e:
         logger.error(f"获取设备列表异常: {e}")
         return []
-
-
-
-
-def get_device_config(ip, sysname, vendor):
-    """
-    通过SSH获取设备配置
-
-    Args:
-        ip: 设备IP
-        sysname: 设备名称
-        vendor: 设备厂商
-
-    Returns:
-        str: 配置内容，失败返回None
-    """
-    try:
-        # 获取配置命令
-        commands = VENDOR_CONFIG_COMMANDS.get(vendor)
-        if not commands:
-            logger.warning(f"设备 {ip}({sysname}) 不支持的厂商: {vendor}")
-            return None
-
-        # 执行SSH命令
-        logger.debug(f"连接设备 {ip}({sysname}) - {vendor}")
-        result = run_ssh_command(host=ip, commands=commands, vendor=vendor)
-
-        if result.get("status") == "success":
-            data = result.get("data", {})
-            if data and len(data) > 0:
-                # 合并多个命令的输出
-                config_content = '\n'.join(data.values())
-                logger.info(f"设备 {ip}({sysname}) 配置获取成功，大小: {len(config_content)} 字节")
-                return config_content
-            else:
-                logger.error(f"设备 {ip}({sysname}) 配置获取失败，命令无输出")
-                return None
-        else:
-            logger.error(f"设备 {ip}({sysname}) SSH执行失败: {result.get('msg')}")
-            return None
-
-    except Exception as e:
-        logger.error(f"设备 {ip}({sysname}) 配置获取异常: {e}")
-        return None
-
 
 def backup_device(device):
     """
@@ -238,7 +181,6 @@ def backup_device(device):
         logger.error(f"设备 {ip}({sysname}) 备份异常: {e}")
 
     return result
-
 
 def run(filter_ips=None):
     """
