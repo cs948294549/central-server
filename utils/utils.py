@@ -9,6 +9,16 @@ def waf(dic):
     else:
         return dic
 
+def unwaf(text):
+    """
+    还原waf()对字符串做的引号转义
+    waf()转义顺序为: ' -> \\'  再  " -> \\"
+    因此反转时需按相反顺序还原: 先还原 \\" -> "  再还原 \\' -> '
+    """
+    if not isinstance(text, str):
+        return text
+    return text.replace('\\"', '"').replace("\\'", "'")
+
 # 检查参数数量
 def checkParams(datas, key_array):
     flag = True

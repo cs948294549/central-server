@@ -151,7 +151,7 @@ def get_config_list_by_device(data):
     """
     获取设备的配置备份列表
     :param data: {"ip": "xxx"} 或 {"sysname": "xxx"}
-    :return: 配置列表
+    :return: 配置列表，字段直接来自数据库，格式化(时间/备份类型等)交由前端处理
     """
     try:
         db = ConfigDB()
@@ -159,33 +159,6 @@ def get_config_list_by_device(data):
 
         if config_list == "failed":
             return []
-
-        # 处理返回数据，添加格式化字段
-        for config in config_list:
-            # 格式化时间
-            if config.get("created_at"):
-                import time
-                timestamp = int(config["created_at"])
-                config["backup_time"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
-            else:
-                config["backup_time"] = ""
-
-            # 计算文件大小（如果有detail字段）
-            if "detail" in config:
-                size_bytes = len(config["detail"].encode('utf-8'))
-                config["file_size"] = format_file_size(size_bytes)
-                # 移除detail字段，减少数据传输
-                del config["detail"]
-            else:
-                config["file_size"] = "-"
-
-            # 备份类型（可以根据change_id判断）
-            if config.get("change_id"):
-                config["backup_type"] = "变更"
-                config["note"] = f"变更单号: {config['change_id']}"
-            else:
-                config["backup_type"] = "自动"
-                config["note"] = "定期自动备份"
 
         return config_list
 
@@ -355,19 +328,5 @@ def calculate_diff_stats(text_src, text_target):
     except Exception as e:
         logger.error(f"计算diff统计失败: {e}")
         return {"added": 0, "deleted": 0, "modified": 0}
-
-
-def format_file_size(size_bytes):
-    """
-    格式化文件大小
-    :param size_bytes: 字节数
-    :return: 格式化后的大小字符串
-    """
-    if size_bytes < 1024:
-        return f"{size_bytes}B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f}KB"
-    else:
-        return f"{size_bytes / (1024 * 1024):.1f}MB"
 
 

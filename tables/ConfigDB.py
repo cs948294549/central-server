@@ -1,5 +1,5 @@
 from daos.database import mysqldb_netops
-from utils.utils import waf
+from utils.utils import waf, unwaf
 import time
 import logging
 import hashlib
@@ -92,6 +92,7 @@ class ConfigDB(mysqldb_netops):
                 result = {}
                 for num in range(len(proper)):
                     result[proper[num]] = result1[num] if result1[num] != None else ""
+                result["detail"] = unwaf(result["detail"])
                 return result
             return None
         except Exception as err:
@@ -170,6 +171,7 @@ class ConfigDB(mysqldb_netops):
                 result = {}
                 for num in range(len(proper)):
                     result[proper[num]] = result1[num] if result1[num] != None else ""
+                result["detail"] = unwaf(result["detail"])
                 return result
             return None
         except Exception as err:
