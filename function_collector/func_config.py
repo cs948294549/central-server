@@ -330,3 +330,18 @@ def calculate_diff_stats(text_src, text_target):
         return {"added": 0, "deleted": 0, "modified": 0}
 
 
+def delete_config_by_id(log_id):
+    """
+    根据log_id删除配置记录
+    :param log_id: 配置记录ID
+    :return: "success" 或 "failed"
+    """
+    try:
+        db = ConfigDB()
+        result = db.delete_config(log_id)
+        return result
+    except Exception as e:
+        logger.error(f"删除配置记录失败: {e}")
+        return "failed"
+
+

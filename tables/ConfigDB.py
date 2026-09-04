@@ -75,6 +75,21 @@ class ConfigDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def delete_config(self, log_id):
+        """删除配置记录"""
+        try:
+            sql = "DELETE FROM dev_config WHERE log_id = %s"
+            self.cursor.execute(sql, (log_id,))
+            self.conn.commit()
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"删除配置记录失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def get_latest_config(self, ip):
         """获取设备最新的配置记录"""
         try:

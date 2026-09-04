@@ -4,7 +4,8 @@ import logging
 from function_collector.func_config import (
     get_config_list_by_device,
     get_config_detail_by_id,
-    compare_configs_by_id
+    compare_configs_by_id,
+    delete_config_by_id
 )
 
 # 配置日志
@@ -138,4 +139,29 @@ def get_latest_config():
 
     except Exception as e:
         logger.error(f"获取最新配置失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@config_bp.route('/config/delete', methods=['POST'])
+def delete_config():
+    """
+    删除配置记录
+    """
+    try:
+        data = request.json or {}
+        log_id = data.get('log_id')
+        if not log_id:
+            return APIResponse.error(message="缺少参数 log_id")
+
+        logger.info(f"{str(g.user)}删除配置记录，log_id={log_id}")
+
+        result = delete_config_by_id(log_id)
+
+        if result == "success":
+            return APIResponse.success(data=None, message="删除成功")
+        else:
+            return APIResponse.error(message="删除失败")
+
+    except Exception as e:
+        logger.error(f"删除配置记录失败: {e}")
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
