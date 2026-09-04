@@ -15,6 +15,33 @@ def add_network_address(data):
     return result
 
 
+def batch_add_network_address(data_list):
+    """批量添加网络地址"""
+    if not isinstance(data_list, list):
+        logger.error("批量添加网络地址失败：数据格式错误，需要列表")
+        return {
+            "status": "failed",
+            "message": "数据格式错误",
+            "success_count": 0,
+            "failed_count": 0,
+            "failed_items": []
+        }
+
+    if len(data_list) == 0:
+        logger.warning("批量添加网络地址：数据列表为空")
+        return {
+            "status": "failed",
+            "message": "数据列表为空",
+            "success_count": 0,
+            "failed_count": 0,
+            "failed_items": []
+        }
+
+    db = IpamDB()
+    result = db.add_network_batch(data_list)
+    return result
+
+
 @decorator_checkparams(key_array=["ip", "mask"])
 def update_network_address(data):
     """更新网络地址"""

@@ -93,6 +93,126 @@ class IpamDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def add_network_batch(self, data_list):
+        """批量添加网络地址记录（带事务支持，全部成功或全部失败）"""
+        try:
+            if not isinstance(data_list, list) or len(data_list) == 0:
+                return {
+                    "status": "failed",
+                    "message": "数据列表为空或格式错误",
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "failed_items": []
+                }
+
+            timestamp = str(int(time.time()))
+            sql = '''INSERT INTO ipam_net
+                     (ip, mask, start_ip, end_ip, status, location, isp, role, label,
+                      comment, manage_user, create_time, update_time, gateway, used_per)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+
+            params_list = []
+            failed_items = []
+
+            # 预处理所有数据
+            for item in data_list:
+                try:
+                    data = waf(item)
+
+                    # 验证必需字段
+                    if "ip" not in data or "mask" not in data:
+                        failed_items.append({
+                            "ip": data.get("ip", "未知"),
+                            "mask": data.get("mask", "未知"),
+                            "error": "缺少必需字段: ip 或 mask"
+                        })
+                        continue
+
+                    # 计算起始和结束IP（仅对IPv4）
+                    if ":" not in data["ip"]:
+                        start_ip, end_ip = getstartend(data["ip"], length2netmask(int(data["mask"])))
+                        data["start_ip"] = str(start_ip)
+                        data["end_ip"] = str(end_ip)
+                        data["ip"] = decimalism2ip(start_ip)
+                    else:
+                        data["start_ip"] = "0"
+                        data["end_ip"] = "0"
+
+                    params = (
+                        data["ip"],
+                        data["mask"],
+                        data["start_ip"],
+                        data["end_ip"],
+                        data.get("status", "1"),
+                        data.get("location", ""),
+                        data.get("isp", ""),
+                        data.get("role", ""),
+                        data.get("label", ""),
+                        data.get("comment", ""),
+                        data.get("manage_user", ""),
+                        timestamp,
+                        timestamp,
+                        data.get("gateway", ""),
+                        data.get("used_per", "0")
+                    )
+                    params_list.append(params)
+
+                except Exception as e:
+                    failed_items.append({
+                        "ip": item.get("ip", "未知"),
+                        "mask": item.get("mask", "未知"),
+                        "error": f"数据预处理失败: {str(e)}"
+                    })
+                    logger.error(f"批量添加网段预处理失败: {item.get('ip')}/{item.get('mask')}, 错误: {str(e)}")
+
+            # 如果有预处理失败的，直接返回失败
+            if len(failed_items) > 0:
+                logger.error(f"批量添加网络地址预处理失败，共 {len(failed_items)} 条数据有误")
+                return {
+                    "status": "failed",
+                    "message": f"数据验证失败，共 {len(failed_items)} 条数据有误",
+                    "success_count": 0,
+                    "failed_count": len(failed_items),
+                    "failed_items": failed_items
+                }
+
+            # 批量执行插入（事务）
+            if len(params_list) > 0:
+                self.cursor.executemany(sql, params_list)
+                self.conn.commit()
+                success_count = len(params_list)
+                logger.info(f"批量添加网络地址成功: {success_count} 个")
+
+                return {
+                    "status": "success",
+                    "message": f"批量添加成功，共 {success_count} 个网段",
+                    "success_count": success_count,
+                    "failed_count": 0,
+                    "failed_items": []
+                }
+            else:
+                return {
+                    "status": "failed",
+                    "message": "没有有效的数据可以插入",
+                    "success_count": 0,
+                    "failed_count": len(data_list),
+                    "failed_items": []
+                }
+
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"批量添加网络地址异常: {e}")
+            return {
+                "status": "failed",
+                "message": f"批量添加失败: {str(e)}",
+                "success_count": 0,
+                "failed_count": len(data_list) if isinstance(data_list, list) else 0,
+                "failed_items": []
+            }
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def update_network_item(self, data):
         """更新网络地址记录"""
         try:

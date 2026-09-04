@@ -285,7 +285,7 @@ if __name__ == "__main__":
     )
 
     try:
-        filter_ips = ["10.26.252.15", "10.26.252.16"]
+        filter_ips = ["10.26.252.15", "10.26.252.16", "10.26.252.23", "10.26.252.24"]
         run(filter_ips=filter_ips)
         sys.exit(0)
     except KeyboardInterrupt:

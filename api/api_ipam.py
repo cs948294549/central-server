@@ -2,6 +2,7 @@ from flask import Blueprint, request, g
 from api.api_response import APIResponse
 from function_collector.func_ipam import (
     add_network_address,
+    batch_add_network_address,
     update_network_address,
     delete_network_address,
     get_network_address_list,
@@ -33,6 +34,28 @@ def add_address():
             return APIResponse.error(message="添加失败")
     except Exception as e:
         logger.error(f"添加网络地址异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
+@ipam_bp.route('/batch_add_address', methods=['POST'])
+def batch_add_address():
+    """批量添加网络地址"""
+    try:
+        data = request.json
+        networks = data.get("networks", [])
+        logger.info(f"{str(g.user)}批量添加网络地址，数量: {len(networks)}")
+
+        if not isinstance(networks, list) or len(networks) == 0:
+            return APIResponse.error(message="networks参数必须是非空列表")
+
+        result = batch_add_network_address(networks)
+
+        if result["status"] == "success":
+            return APIResponse.success(data=result, message=result["message"])
+        else:
+            return APIResponse.error(data=result, message=result["message"])
+    except Exception as e:
+        logger.error(f"批量添加网络地址异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
