@@ -1,8 +1,9 @@
 import json
 import time
-
 import requests
 from hashlib import md5
+from config.config import LocalConfig
+
 
 def sign_key(secret, timestamp):
     expected_signature = md5((str(secret) + str(timestamp)).encode("utf-8")).hexdigest()
@@ -14,7 +15,7 @@ def test_syslog_simple():
     headers = {
         "Content-Type": "application/json",
         "key": "chensong",
-        "secret":sign_key("90f82219ae7f3452ec84762395b7b51c", t),
+        "secret":sign_key(LocalConfig.sign_key, t),
         "Apptime": t
     }
     data = {
