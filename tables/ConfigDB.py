@@ -135,10 +135,6 @@ class ConfigDB(mysqldb_netops):
                 sql += " WHERE " + " AND ".join(conditions)
             sql += " ORDER BY created_at DESC"
 
-            # 限制数量
-            if "limit" in data:
-                sql += f" LIMIT {int(data['limit'])}"
-
             proper = ["log_id", "ip", "sysname", "dev_type", "created_at", "updated_at", "change_id"]
             self.cursor.execute(sql, params)
             result1 = self.cursor.fetchall()
