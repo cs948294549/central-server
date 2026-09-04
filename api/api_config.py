@@ -142,7 +142,7 @@ def get_latest_config():
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
 
 
-@config_bp.route('/config/delete', methods=['POST'])
+@config_bp.route('/delete', methods=['POST'])
 def delete_config():
     """
     删除配置记录
