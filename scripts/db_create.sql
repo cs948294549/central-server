@@ -244,5 +244,115 @@ CREATE TABLE dev_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='设备配置备份表';
 
 -- ============================================
+-- 变更工单管理表
+-- ============================================
+
+-- 工单类型表
+DROP TABLE IF EXISTS op_types;
+CREATE TABLE op_types (
+    pid BIGINT NOT NULL AUTO_INCREMENT COMMENT '类型ID',
+    name VARCHAR(100) COLLATE utf8_bin NOT NULL COMMENT '类型名称',
+    op_group1 BIGINT COLLATE utf8_bin NULL COMMENT '审批组1',
+    op_group2 BIGINT COLLATE utf8_bin NULL COMMENT '审批组2',
+    op_group3 BIGINT COLLATE utf8_bin NULL COMMENT '审批组3',
+    PRIMARY KEY (pid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='工单类型配置表';
+
+-- 审批分组表
+DROP TABLE IF EXISTS op_groups;
+CREATE TABLE op_groups (
+    pid BIGINT NOT NULL AUTO_INCREMENT COMMENT '分组ID',
+    name VARCHAR(100) COLLATE utf8_bin NOT NULL COMMENT '分组名称',
+    op_list TEXT COLLATE utf8_bin NULL COMMENT '成员列表(逗号分隔)',
+    PRIMARY KEY (pid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='审批分组表';
+
+-- 工单列表表
+DROP TABLE IF EXISTS op_lists;
+CREATE TABLE op_lists (
+    op_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '工单ID',
+    op_type BIGINT COLLATE utf8_bin NOT NULL COMMENT '工单类型ID',
+    title VARCHAR(200) COLLATE utf8_bin NOT NULL COMMENT '工单标题',
+    descrip TEXT COLLATE utf8_bin NULL COMMENT '工单描述',
+    status VARCHAR(2) COLLATE utf8_bin NOT NULL DEFAULT '00' COMMENT '工单状态',
+    username VARCHAR(40) COLLATE utf8_bin NOT NULL COMMENT '创建人',
+    assigner VARCHAR(40) COLLATE utf8_bin NULL COMMENT '指定执行人',
+    is_auto TINYINT NULL DEFAULT 0 COMMENT '是否自动执行',
+    popo VARCHAR(100) COLLATE utf8_bin NULL COMMENT '通知群组',
+    create_time VARCHAR(10) COLLATE utf8_bin NULL COMMENT '创建时间',
+    update_time VARCHAR(10) COLLATE utf8_bin NULL COMMENT '更新时间',
+    begin_time VARCHAR(10) COLLATE utf8_bin NULL COMMENT '变更开始时间',
+    finish_time VARCHAR(10) COLLATE utf8_bin NULL COMMENT '变更结束时间',
+    cur_group TEXT COLLATE utf8_bin NULL COMMENT '当前审批组成员列表',
+    cur_user VARCHAR(40) COLLATE utf8_bin NULL COMMENT '当前处理人',
+    step_name VARCHAR(50) COLLATE utf8_bin NULL COMMENT '当前步骤名称',
+    step_id INT NULL COMMENT '当前步骤ID',
+    node_info TEXT COLLATE utf8_bin NULL COMMENT '流程节点信息(JSON)',
+    PRIMARY KEY (op_id),
+    INDEX idx_status (status),
+    INDEX idx_username (username),
+    INDEX idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='工单列表表';
+
+-- 设备命令表
+DROP TABLE IF EXISTS op_devs;
+CREATE TABLE op_devs (
+    pid BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+    op_id BIGINT COLLATE utf8_bin NOT NULL COMMENT '工单ID',
+    batch INT COLLATE utf8_bin NULL DEFAULT 1 COMMENT '批次号',
+    ip VARCHAR(50) COLLATE utf8_bin NOT NULL COMMENT '设备IP',
+    sysname VARCHAR(100) COLLATE utf8_bin NULL COMMENT '设备名称',
+    model VARCHAR(100) COLLATE utf8_bin NULL COMMENT '设备型号',
+    assert VARCHAR(200) COLLATE utf8_bin NULL COMMENT '资产号',
+    status VARCHAR(2) COLLATE utf8_bin NULL COMMENT '执行状态',
+    cmd_exec TEXT COLLATE utf8_bin NULL COMMENT '执行命令',
+    cmd_roll TEXT COLLATE utf8_bin NULL COMMENT '回滚命令',
+    result TEXT COLLATE utf8_bin NULL COMMENT '执行结果',
+    tag VARCHAR(50) COLLATE utf8_bin NULL COMMENT '标签',
+    is_auto TINYINT NULL DEFAULT 0 COMMENT '是否自动执行',
+    pre_check TEXT COLLATE utf8_bin NULL COMMENT '预检查结果',
+    timestamp VARCHAR(10) COLLATE utf8_bin NULL COMMENT '时间戳',
+    PRIMARY KEY (pid),
+    INDEX idx_op_id (op_id),
+    INDEX idx_batch (op_id, batch)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='设备命令执行表';
+
+-- 审批记录表
+DROP TABLE IF EXISTS op_approve;
+CREATE TABLE op_approve (
+    pid BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+    op_id BIGINT COLLATE utf8_bin NOT NULL COMMENT '工单ID',
+    op_group BIGINT COLLATE utf8_bin NOT NULL COMMENT '审批分组ID',
+    username VARCHAR(40) COLLATE utf8_bin NOT NULL COMMENT '审批人',
+    status VARCHAR(2) COLLATE utf8_bin NULL COMMENT '审批状态',
+    timestamp VARCHAR(10) COLLATE utf8_bin NULL COMMENT '审批时间',
+    PRIMARY KEY (pid),
+    INDEX idx_op_id (op_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='审批记录表';
+
+-- 操作日志表
+DROP TABLE IF EXISTS op_logs;
+CREATE TABLE op_logs (
+    pid BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+    op_id BIGINT COLLATE utf8_bin NOT NULL COMMENT '工单ID',
+    tag VARCHAR(2) COLLATE utf8_bin NULL COMMENT '日志标签',
+    msg LONGTEXT COLLATE utf8_bin NOT NULL COMMENT '日志内容',
+    username VARCHAR(40) COLLATE utf8_bin NULL COMMENT '操作人',
+    timestamp VARCHAR(10) COLLATE utf8_bin NULL COMMENT '操作时间',
+    PRIMARY KEY (pid),
+    INDEX idx_op_id (op_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='操作日志表';
+
+-- 通知群组表
+DROP TABLE IF EXISTS op_notify;
+CREATE TABLE op_notify (
+    pid BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+    name VARCHAR(100) COLLATE utf8_bin NOT NULL COMMENT '群组名称',
+    descrip VARCHAR(200) COLLATE utf8_bin NULL COMMENT '描述',
+    target VARCHAR(100) COLLATE utf8_bin NOT NULL COMMENT '群组号',
+    PRIMARY KEY (pid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin COMMENT='通知群组表';
+
+-- ============================================
 -- 数据库初始化完成
 -- ============================================

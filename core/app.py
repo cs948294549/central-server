@@ -19,6 +19,7 @@ from api.api_topology import topology_bp
 from api.api_flowboard import flowboard_bp
 from api.api_mcp import mcp_bp
 from api.api_config import config_bp
+from api.api_change_mgmt import change_mgmt_bp
 
 # 导入 SSH 终端蓝图
 from api.websocket_ssh_bp import websocket_ssh_bp
@@ -71,6 +72,7 @@ def create_app():
     app.register_blueprint(flowboard_bp)
     app.register_blueprint(mcp_bp)
     app.register_blueprint(config_bp)
+    app.register_blueprint(change_mgmt_bp)
 
     # 注册 SSH 终端蓝图
     app.register_blueprint(websocket_ssh_bp)
