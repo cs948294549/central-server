@@ -19,7 +19,7 @@ def get_type_list():
     """获取工单类型列表"""
     try:
         data = request.json or {}
-        logger.info(f"{str(g.user)}查询工单类型列表")
+        logger.info(f"{g.user.get('username', '')}查询工单类型列表")
 
         result = type_manage.get_type_list(data)
 
@@ -42,7 +42,7 @@ def add_type():
         if not data.get('name'):
             return APIResponse.param_error(message="缺少参数 name")
 
-        logger.info(f"{str(g.user)}创建工单类型: {data.get('name')}")
+        logger.info(f"{g.user.get('username', '')}创建工单类型: {data.get('name')}")
 
         result = type_manage.add_type(data)
 
@@ -68,7 +68,7 @@ def update_type():
         if not data.get('name'):
             return APIResponse.param_error(message="缺少参数 name")
 
-        logger.info(f"{str(g.user)}更新工单类型: {type_id}")
+        logger.info(f"{g.user.get('username', '')}更新工单类型: {type_id}")
 
         result = type_manage.update_type(type_id, data)
 
@@ -92,7 +92,7 @@ def delete_type():
         if not type_id:
             return APIResponse.param_error(message="缺少参数 pid")
 
-        logger.info(f"{str(g.user)}删除工单类型: {type_id}")
+        logger.info(f"{g.user.get('username', '')}删除工单类型: {type_id}")
 
         result = type_manage.delete_type(type_id)
 
@@ -113,7 +113,7 @@ def get_group_list():
     """获取审批分组列表"""
     try:
         data = request.json or {}
-        logger.info(f"{str(g.user)}查询审批分组列表")
+        logger.info(f"{g.user.get('username', '')}查询审批分组列表")
 
         result = group_manage.get_group_list(data)
 
@@ -136,7 +136,7 @@ def add_group():
         if not data.get('name'):
             return APIResponse.param_error(message="缺少参数 name")
 
-        logger.info(f"{str(g.user)}创建审批分组: {data.get('name')}")
+        logger.info(f"{g.user.get('username', '')}创建审批分组: {data.get('name')}")
 
         result = group_manage.add_group(data)
 
@@ -162,7 +162,7 @@ def update_group():
         if not data.get('name'):
             return APIResponse.param_error(message="缺少参数 name")
 
-        logger.info(f"{str(g.user)}更新审批分组: {group_id}")
+        logger.info(f"{g.user.get('username', '')}更新审批分组: {group_id}")
 
         result = group_manage.update_group(group_id, data)
 
@@ -186,7 +186,7 @@ def delete_group():
         if not group_id:
             return APIResponse.param_error(message="缺少参数 pid")
 
-        logger.info(f"{str(g.user)}删除审批分组: {group_id}")
+        logger.info(f"{g.user.get('username', '')}删除审批分组: {group_id}")
 
         result = group_manage.delete_group(group_id)
 
@@ -207,7 +207,7 @@ def get_notify_list():
     """获取通知群组列表"""
     try:
         data = request.json or {}
-        logger.info(f"{str(g.user)}查询通知群组列表")
+        logger.info(f"{g.user.get('username', '')}查询通知群组列表")
 
         result = notify_manage.get_notify_list(data)
 
@@ -232,7 +232,7 @@ def add_notify():
         if not data.get('target'):
             return APIResponse.param_error(message="缺少参数 target")
 
-        logger.info(f"{str(g.user)}创建通知群组: {data.get('name')}")
+        logger.info(f"{g.user.get('username', '')}创建通知群组: {data.get('name')}")
 
         result = notify_manage.add_notify(data)
 
@@ -260,7 +260,7 @@ def update_notify():
         if not data.get('target'):
             return APIResponse.param_error(message="缺少参数 target")
 
-        logger.info(f"{str(g.user)}更新通知群组: {notify_id}")
+        logger.info(f"{g.user.get('username', '')}更新通知群组: {notify_id}")
 
         result = notify_manage.update_notify(notify_id, data)
 
@@ -284,7 +284,7 @@ def delete_notify():
         if not notify_id:
             return APIResponse.param_error(message="缺少参数 pid")
 
-        logger.info(f"{str(g.user)}删除通知群组: {notify_id}")
+        logger.info(f"{g.user.get('username', '')}删除通知群组: {notify_id}")
 
         result = notify_manage.delete_notify(notify_id)
 
@@ -305,7 +305,7 @@ def get_order_list():
     """获取工单列表"""
     try:
         data = request.json or {}
-        logger.info(f"{str(g.user)}查询工单列表")
+        logger.info(f"{g.user.get('username', '')}查询工单列表")
 
         result = order_manage.get_order_list(data)
 
@@ -329,7 +329,7 @@ def get_order_detail():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}查询工单详情: {op_id}")
+        logger.info(f"{g.user.get('username', '')}查询工单详情: {op_id}")
 
         result = order_manage.get_order_detail(op_id)
 
@@ -354,9 +354,9 @@ def add_order():
         if not data.get('title'):
             return APIResponse.param_error(message="缺少参数 title")
 
-        logger.info(f"{str(g.user)}创建工单: {data.get('title')}")
+        logger.info(f"{g.user.get('username', '')}创建工单: {data.get('title')}")
 
-        result = order_manage.add_order(data, str(g.user))
+        result = order_manage.add_order(data, g.user.get('username', ''))
 
         if result != "failed":
             return APIResponse.success(data={"op_id": result}, message="创建成功")
@@ -378,12 +378,12 @@ def update_order():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}更新工单: {op_id}")
+        logger.info(f"{g.user.get('username', '')}更新工单: {op_id}")
 
         # 移除op_id，避免被更新
         update_data = {k: v for k, v in data.items() if k != 'op_id'}
 
-        result = order_manage.update_order(op_id, update_data, str(g.user))
+        result = order_manage.update_order(op_id, update_data, g.user.get('username', ''))
 
         if result == "success":
             return APIResponse.success(message="更新成功")
@@ -405,7 +405,24 @@ def delete_order():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}删除工单: {op_id}")
+        current_username = g.user.get('username', '')
+        current_rid = g.user.get('rid', '')
+        logger.info(f"{current_username}删除工单: {op_id}")
+
+        # 先查询工单信息，验证权限
+        order_detail = order_manage.get_order_detail(op_id)
+        if not order_detail:
+            return APIResponse.error(message="工单不存在")
+
+        # 判断是否为管理员
+        is_admin = current_rid in ['system', 'admin']
+
+        # 管理员可以删除任意工单，普通用户只能删除草稿状态且是自己创建的工单
+        if not is_admin:
+            if order_detail.get('status') != '00':
+                return APIResponse.error(message="只能删除草稿状态的工单")
+            if order_detail.get('username') != current_username:
+                return APIResponse.error(message="只能删除自己创建的工单")
 
         result = order_manage.delete_order(op_id)
 
@@ -429,9 +446,9 @@ def copy_order():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}复制工单: {op_id}")
+        logger.info(f"{g.user.get('username', '')}复制工单: {op_id}")
 
-        result = order_manage.copy_order(op_id, str(g.user))
+        result = order_manage.copy_order(op_id, g.user.get('username', ''))
 
         if result != "failed":
             return APIResponse.success(data={"op_id": result}, message="复制成功")
@@ -455,9 +472,9 @@ def submit_order():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}提交工单: {op_id}")
+        logger.info(f"{g.user.get('username', '')}提交工单: {op_id}")
 
-        result = order_manage.submit_order(op_id, str(g.user))
+        result = order_manage.submit_order(op_id, g.user.get('username', ''))
 
         if result.get("code") == 0:
             return APIResponse.success(message=result.get("msg"))
@@ -479,9 +496,9 @@ def takeover_order():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}接手工单: {op_id}")
+        logger.info(f"{g.user.get('username', '')}接手工单: {op_id}")
 
-        result = order_manage.takeover_order(op_id, str(g.user))
+        result = order_manage.takeover_order(op_id, g.user.get('username', ''))
 
         if result.get("code") == 0:
             return APIResponse.success(message=result.get("msg"))
@@ -508,9 +525,9 @@ def approve_order():
         if not approve_status or approve_status not in ["10", "92"]:
             return APIResponse.param_error(message="参数 status 必须为 10(通过) 或 92(拒绝)")
 
-        logger.info(f"{str(g.user)}审批工单: {op_id}, 结果: {approve_status}")
+        logger.info(f"{g.user.get('username', '')}审批工单: {op_id}, 结果: {approve_status}")
 
-        result = order_manage.approve_order(op_id, str(g.user), approve_status)
+        result = order_manage.approve_order(op_id, g.user.get('username', ''), approve_status)
 
         if result.get("code") == 0:
             return APIResponse.success(message=result.get("msg"))
@@ -532,9 +549,9 @@ def start_order():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}开始变更: {op_id}")
+        logger.info(f"{g.user.get('username', '')}开始变更: {op_id}")
 
-        result = order_manage.start_change(op_id, str(g.user))
+        result = order_manage.start_change(op_id, g.user.get('username', ''))
 
         if result.get("code") == 0:
             return APIResponse.success(message=result.get("msg"))
@@ -559,9 +576,9 @@ def end_order():
         if final_status not in ["90", "91"]:
             return APIResponse.param_error(message="参数 status 必须为 90(成功) 或 91(失败)")
 
-        logger.info(f"{str(g.user)}结束变更: {op_id}, 结果: {final_status}")
+        logger.info(f"{g.user.get('username', '')}结束变更: {op_id}, 结果: {final_status}")
 
-        result = order_manage.end_change(op_id, str(g.user), final_status)
+        result = order_manage.end_change(op_id, g.user.get('username', ''), final_status)
 
         if result.get("code") == 0:
             return APIResponse.success(message=result.get("msg"))
@@ -583,9 +600,9 @@ def cancel_order():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}取消变更: {op_id}")
+        logger.info(f"{g.user.get('username', '')}取消变更: {op_id}")
 
-        result = order_manage.cancel_change(op_id, str(g.user))
+        result = order_manage.cancel_change(op_id, g.user.get('username', ''))
 
         if result.get("code") == 0:
             return APIResponse.success(message=result.get("msg"))
@@ -609,7 +626,7 @@ def get_device_list():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}查询设备列表: 工单{op_id}")
+        logger.info(f"{g.user.get('username', '')}查询设备列表: 工单{op_id}")
 
         result = device_cmd_manage.get_device_list(op_id)
 
@@ -634,7 +651,7 @@ def add_device():
         if not data.get('ip'):
             return APIResponse.param_error(message="缺少参数 ip")
 
-        logger.info(f"{str(g.user)}添加设备: {data.get('ip')}")
+        logger.info(f"{g.user.get('username', '')}添加设备: {data.get('ip')}")
 
         result = device_cmd_manage.add_device(data)
 
@@ -658,7 +675,7 @@ def update_device():
         if not dev_id:
             return APIResponse.param_error(message="缺少参数 pid")
 
-        logger.info(f"{str(g.user)}更新设备: {dev_id}")
+        logger.info(f"{g.user.get('username', '')}更新设备: {dev_id}")
 
         # 移除pid，避免被更新
         update_data = {k: v for k, v in data.items() if k != 'pid'}
@@ -685,7 +702,7 @@ def delete_device():
         if not dev_id:
             return APIResponse.param_error(message="缺少参数 pid")
 
-        logger.info(f"{str(g.user)}删除设备: {dev_id}")
+        logger.info(f"{g.user.get('username', '')}删除设备: {dev_id}")
 
         result = device_cmd_manage.delete_device(dev_id)
 
@@ -711,7 +728,7 @@ def get_log_list():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}查询工单日志: {op_id}")
+        logger.info(f"{g.user.get('username', '')}查询工单日志: {op_id}")
 
         result = log_manage.get_log_list(op_id)
 
@@ -735,7 +752,7 @@ def get_approval_list():
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
 
-        logger.info(f"{str(g.user)}查询审批记录: {op_id}")
+        logger.info(f"{g.user.get('username', '')}查询审批记录: {op_id}")
 
         result = log_manage.get_approval_list(op_id)
 
