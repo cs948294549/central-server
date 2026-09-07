@@ -186,6 +186,31 @@ def getUserList():
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
+@system_bp.route('/get_user_simple_list', methods=['POST'])
+def getUserSimpleList():
+    """获取用户基本信息列表（仅返回必要字段）"""
+    try:
+        data = request.json
+        ret = user_manage.get_user_list(data)
+        if ret["status"] == "success":
+            # 只返回必要字段
+            simple_list = [
+                {
+                    "username": user.get("username"),
+                    "subname": user.get("subname", ""),
+                    "phone": user.get("phone", ""),
+                    "mail": user.get("mail", ""),
+                    "rid": user.get("rid", ""),
+                    "role_name": user.get("role_name", "")
+                }
+                for user in ret["data"]
+            ]
+            return APIResponse.success(data=simple_list, message="查询成功")
+        else:
+            return APIResponse.error(message=ret["message"])
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
 # 页面增删改查
 @system_bp.route('/add_page', methods=['POST'])
 def addPage():
