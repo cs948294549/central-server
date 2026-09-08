@@ -181,17 +181,21 @@ def copy_order(op_id, username):
                 for dev in devices:
                     dev_data = {
                         "op_id": new_op_id,
+                        "batch": dev.get("batch", 1),
                         "ip": dev["ip"],
                         "sysname": dev["sysname"],
                         "model": dev["model"],
-                        "assert": dev["assert"],
+                        "asset_no": dev.get("asset_no", ""),
                         "cmd_exec": dev["cmd_exec"],
                         "cmd_roll": dev["cmd_roll"],
-                        "tag": dev["tag"],
-                        "is_auto": dev["is_auto"]
+                        "tag": dev.get("tag", ""),
+                        "is_auto": dev.get("is_auto", 0)
                     }
                     db4 = AlterationManageDB()
-                    db4.add_op_device(dev_data)
+                    result = db4.add_op_device(dev_data)
+                    if result == "failed":
+                        logger.error(f"复制设备失败: op_id={new_op_id}, ip={dev['ip']}")
+
 
             # 记录日志
             log_db = AlterationManageDB()
