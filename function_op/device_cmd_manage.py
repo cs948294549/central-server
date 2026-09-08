@@ -136,19 +136,24 @@ def execute_device_command(dev_id, username):
         # 5. 更新设备状态和执行结果
         alter_db2 = AlterationManageDB()
         if result.get('status') == 'success':
+            # 将命令执行结果的data字典转换为字符串
+            output_data = result.get('data', {})
+            output_str = '\n'.join([f"{cmd}:\n{output}" for cmd, output in output_data.items()])
+
             update_data = {
                 'status': '10',  # 执行成功
-                'result': str(result.get('output', ''))
+                'result': output_str
             }
             alter_db2.update_op_device(dev_id, update_data)
-            return {"code": 0, "msg": "执行成功", "output": result.get('output', '')}
+            return {"code": 0, "msg": "执行成功", "output": output_str}
         else:
+            error_msg = result.get('msg', '执行失败')
             update_data = {
                 'status': '90',  # 执行失败
-                'result': str(result.get('error', ''))
+                'result': error_msg
             }
             alter_db2.update_op_device(dev_id, update_data)
-            return {"code": 500, "msg": f"执行失败: {result.get('error', '')}", "output": result.get('error', '')}
+            return {"code": 500, "msg": error_msg, "output": error_msg}
 
     except Exception as e:
         logger.error(f"执行设备命令失败: {e}")
@@ -205,18 +210,23 @@ def rollback_device_command(dev_id, username):
         # 5. 更新设备状态和执行结果
         alter_db2 = AlterationManageDB()
         if result.get('status') == 'success':
+            # 将命令执行结果的data字典转换为字符串
+            output_data = result.get('data', {})
+            output_str = '\n'.join([f"{cmd}:\n{output}" for cmd, output in output_data.items()])
+
             update_data = {
                 'status': '00',  # 回滚后恢复初始状态
-                'result': f"[回滚成功]\n{result.get('output', '')}"
+                'result': f"[回滚成功]\n{output_str}"
             }
             alter_db2.update_op_device(dev_id, update_data)
-            return {"code": 0, "msg": "回滚成功", "output": result.get('output', '')}
+            return {"code": 0, "msg": "回滚成功", "output": output_str}
         else:
+            error_msg = result.get('msg', '回滚失败')
             update_data = {
-                'result': f"[回滚失败]\n{result.get('error', '')}"
+                'result': f"[回滚失败]\n{error_msg}"
             }
             alter_db2.update_op_device(dev_id, update_data)
-            return {"code": 500, "msg": f"回滚失败: {result.get('error', '')}", "output": result.get('error', '')}
+            return {"code": 500, "msg": error_msg, "output": error_msg}
 
     except Exception as e:
         logger.error(f"回滚设备命令失败: {e}")
