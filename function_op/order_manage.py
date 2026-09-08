@@ -114,7 +114,7 @@ def update_order(op_id, data, username):
 
 def delete_order(op_id):
     """
-    删除工单
+    删除工单（级联删除所有关联数据）
 
     Args:
         op_id: 工单ID
@@ -123,17 +123,40 @@ def delete_order(op_id):
         str: "success" 或 "failed"
     """
     try:
-        # 删除关联的设备
+        logger.info(f"开始删除工单: {op_id}")
+
+        # 1. 删除关联的设备配置
         db1 = AlterationManageDB()
-        db1.get_op_device_list(op_id)  # 这里只是检查,实际删除在下面
+        result1 = db1.delete_op_devices_by_order(op_id)
+        if result1 == "failed":
+            logger.error(f"删除工单设备配置失败: op_id={op_id}")
+            return "failed"
 
-        # 删除工单
-        db = AlterationManageDB()
-        result = db.delete_op_order(op_id)
+        # 2. 删除审批记录
+        db2 = AlterationManageDB()
+        result2 = db2.delete_op_approvals_by_order(op_id)
+        if result2 == "failed":
+            logger.error(f"删除工单审批记录失败: op_id={op_id}")
+            return "failed"
 
-        return result
+        # 3. 删除操作日志
+        db3 = AlterationManageDB()
+        result3 = db3.delete_op_logs_by_order(op_id)
+        if result3 == "failed":
+            logger.error(f"删除工单操作日志失败: op_id={op_id}")
+            return "failed"
+
+        # 4. 最后删除工单本身
+        db4 = AlterationManageDB()
+        result4 = db4.delete_op_order(op_id)
+        if result4 == "failed":
+            logger.error(f"删除工单失败: op_id={op_id}")
+            return "failed"
+
+        logger.info(f"成功删除工单及所有关联数据: op_id={op_id}")
+        return "success"
     except Exception as e:
-        logger.error(f"删除工单失败: {e}")
+        logger.error(f"删除工单失败: {e}", exc_info=True)
         return "failed"
 
 
@@ -201,7 +224,7 @@ def copy_order(op_id, username):
             log_db = AlterationManageDB()
             log_db.add_op_log({
                 "op_id": new_op_id,
-                "tag": "11",
+                "tag": "01",
                 "msg": f"{username} 从工单 {op_id} 复制创建",
                 "username": username
             })
@@ -383,12 +406,29 @@ def takeover_order(op_id, username):
         if username not in cur_group.split(","):
             return {"code": 403, "msg": "您不在当前审批组中，无权接手"}
 
+        # 解析并更新 node_info
+        node_info = []
+        node_info_str = order.get("node_info", "")
+        if node_info_str:
+            try:
+                node_info = json.loads(node_info_str)
+                # 更新当前步骤的描述
+                current_step_id = order.get("step_id", 0)
+                if current_step_id > 0 and current_step_id <= len(node_info):
+                    node_info[current_step_id - 1]["description"] = f"{username} 已接手"
+            except:
+                pass
+
         # 更新工单状态
-        update_db = AlterationManageDB()
-        result = update_db.update_op_order(op_id, {
+        update_data = {
             "status": "02",
             "cur_user": username
-        })
+        }
+        if node_info:
+            update_data["node_info"] = json.dumps(node_info, ensure_ascii=False)
+
+        update_db = AlterationManageDB()
+        result = update_db.update_op_order(op_id, update_data)
 
         if result == "success":
             # 记录日志
@@ -459,8 +499,14 @@ def approve_order(op_id, username, approve_status):
 
         # 如果拒绝
         if approve_status == "92":
+            # 更新当前节点描述为拒绝信息
+            current_node["description"] = f"{username} 已拒绝"
+
             update_db = AlterationManageDB()
-            result = update_db.update_op_order(op_id, {"status": "92"})
+            result = update_db.update_op_order(op_id, {
+                "status": "92",
+                "node_info": json.dumps(node_info, ensure_ascii=False)
+            })
 
             if result == "success":
                 # 记录日志
@@ -477,6 +523,9 @@ def approve_order(op_id, username, approve_status):
                 return {"code": 0, "msg": "审批完成"}
             else:
                 return {"code": 500, "msg": "审批失败"}
+
+        # 更新当前节点描述为已审批
+        current_node["description"] = f"{username} 已审批"
 
         # 如果通过，检查是否还有下一轮审批
         next_step_id = current_step_id + 1
@@ -496,7 +545,8 @@ def approve_order(op_id, username, approve_status):
                 "step_id": next_step_id,
                 "step_name": next_node.get("title", ""),
                 "cur_group": next_node.get("data", {}).get("op_list", ""),
-                "cur_user": ""
+                "cur_user": "",
+                "node_info": json.dumps(node_info, ensure_ascii=False)
             })
 
             if result == "success":
@@ -519,7 +569,8 @@ def approve_order(op_id, username, approve_status):
             result = update_db2.update_op_order(op_id, {
                 "status": "20",
                 "cur_group": "",
-                "cur_user": ""
+                "cur_user": "",
+                "node_info": json.dumps(node_info, ensure_ascii=False)
             })
 
             if result == "success":

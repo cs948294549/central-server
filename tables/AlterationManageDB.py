@@ -664,7 +664,7 @@ class AlterationManageDB(mysqldb_netops):
             self.conn.close()
 
     def delete_op_device(self, dev_id):
-        """删除设备"""
+        """删除单个设备"""
         try:
             sql = "DELETE FROM op_devs WHERE pid = %s"
             self.cursor.execute(sql, (dev_id,))
@@ -673,6 +673,23 @@ class AlterationManageDB(mysqldb_netops):
         except Exception as e:
             self.conn.rollback()
             logger.error(f"删除设备失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def delete_op_devices_by_order(self, op_id):
+        """删除工单的所有设备"""
+        try:
+            sql = "DELETE FROM op_devs WHERE op_id = %s"
+            self.cursor.execute(sql, (op_id,))
+            self.conn.commit()
+            deleted_count = self.cursor.rowcount
+            logger.info(f"删除工单 {op_id} 的 {deleted_count} 个设备")
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"批量删除设备失败: {e}")
             return "failed"
         finally:
             self.cursor.close()
@@ -751,6 +768,23 @@ class AlterationManageDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def delete_op_approvals_by_order(self, op_id):
+        """删除工单的所有审批记录"""
+        try:
+            sql = "DELETE FROM op_approve WHERE op_id = %s"
+            self.cursor.execute(sql, (op_id,))
+            self.conn.commit()
+            deleted_count = self.cursor.rowcount
+            logger.info(f"删除工单 {op_id} 的 {deleted_count} 条审批记录")
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"批量删除审批记录失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     # ==================== 操作日志管理 ====================
 
     def add_op_log(self, data):
@@ -796,3 +830,21 @@ class AlterationManageDB(mysqldb_netops):
         finally:
             self.cursor.close()
             self.conn.close()
+
+    def delete_op_logs_by_order(self, op_id):
+        """删除工单的所有操作日志"""
+        try:
+            sql = "DELETE FROM op_logs WHERE op_id = %s"
+            self.cursor.execute(sql, (op_id,))
+            self.conn.commit()
+            deleted_count = self.cursor.rowcount
+            logger.info(f"删除工单 {op_id} 的 {deleted_count} 条操作日志")
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"批量删除操作日志失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
