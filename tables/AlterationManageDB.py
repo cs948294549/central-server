@@ -722,6 +722,31 @@ class AlterationManageDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def get_op_device_by_id(self, dev_id):
+        """根据设备ID获取设备详细信息"""
+        try:
+            sql = """SELECT pid, op_id, batch, ip, sysname, model, asset_no, status,
+                     cmd_exec, cmd_roll, result, tag, is_auto, pre_check, timestamp
+                     FROM op_devs WHERE pid = %s"""
+            proper = ["pid", "op_id", "batch", "ip", "sysname", "model", "asset_no", "status",
+                     "cmd_exec", "cmd_roll", "result", "tag", "is_auto", "pre_check", "timestamp"]
+            self.cursor.execute(sql, (dev_id,))
+            result1 = self.cursor.fetchone()
+
+            if result1:
+                result = {}
+                for num in range(len(proper)):
+                    result[proper[num]] = result1[num] if result1[num] != None else ""
+                return result
+            else:
+                return None
+        except Exception as err:
+            logger.error(f"获取设备信息失败: {err}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     # ==================== 审批记录管理 ====================
 
     def add_op_approval(self, data):

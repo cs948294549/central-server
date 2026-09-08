@@ -1,10 +1,5 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
-# from Module.CommandDevice import get_config_interface, get_interface, get_transceiver
-# from Module.CommandDevice import get_logging, get_arp_brief, get_routes
-# from Module.CommandDevice import get_result_by_template
-# from func.func_offline import clearDeviceSavedConfig
-import json
 from function_collector.func_command import (get_result_by_template, get_config_interface, get_interface,
                                              get_transceiver, get_logging, get_arp_brief, get_routes, exec_diy_cmds)
 

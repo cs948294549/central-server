@@ -3,6 +3,7 @@ from utils.utils import waf
 from utils.ipaddr import ip2decimalism
 import time
 import logging
+logger = logging.getLogger(__name__)
 
 '''
 -- 1. 设备基础信息表

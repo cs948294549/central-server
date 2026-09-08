@@ -767,6 +767,91 @@ def delete_device():
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
 
 
+@change_mgmt_bp.route('/order/execute/batch', methods=['POST'])
+def execute_batch():
+    """批次执行设备命令"""
+    try:
+        data = request.json or {}
+        op_id = data.get('op_id')
+        device_ids = data.get('device_ids', [])
+        username = g.user.get('username', '')
+
+        if not op_id:
+            return APIResponse.param_error(message="缺少参数 op_id")
+        if not device_ids or not isinstance(device_ids, list):
+            return APIResponse.param_error(message="缺少参数 device_ids 或格式错误")
+
+        # 获取工单信息，验证权限
+        order_detail = order_manage.get_order_detail(op_id)
+        if order_detail == "failed":
+            return APIResponse.error(message="工单不存在")
+
+        # 权限检查：只有创建人或指定变更人可以执行
+        creator = order_detail.get('username', '')
+        assigner = order_detail.get('assigner', '')
+        if username != creator and username != assigner:
+            return APIResponse.error(message="无权限执行，仅创建人和指定变更人可执行")
+
+        logger.info(f"{username}批次执行设备: 工单{op_id}, 设备数{len(device_ids)}")
+
+        # 批量执行设备命令
+        success_count = 0
+        failed_count = 0
+        for device_id in device_ids:
+            result = device_cmd_manage.execute_device_command(device_id, username)
+            if result.get('code') == 0:
+                success_count += 1
+            else:
+                failed_count += 1
+                logger.error(f"设备 {device_id} 执行失败: {result.get('msg')}")
+
+        return APIResponse.success(message=f"批次执行完成：成功{success_count}台，失败{failed_count}台")
+
+    except Exception as e:
+        logger.error(f"批次执行失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@change_mgmt_bp.route('/order/execute/device', methods=['POST'])
+def execute_device():
+    """执行单个设备命令"""
+    try:
+        data = request.json or {}
+        op_id = data.get('op_id')
+        device_id = data.get('device_id')
+        username = g.user.get('username', '')
+
+        if not op_id:
+            return APIResponse.param_error(message="缺少参数 op_id")
+        if not device_id:
+            return APIResponse.param_error(message="缺少参数 device_id")
+
+        # 获取工单信息，验证权限
+        order_detail = order_manage.get_order_detail(op_id)
+        if order_detail == "failed":
+            return APIResponse.error(message="工单不存在")
+
+        # 权限检查：只有创建人或指定变更人可以执行
+        creator = order_detail.get('username', '')
+        assigner = order_detail.get('assigner', '')
+        if username != creator and username != assigner:
+            return APIResponse.error(message="无权限执行，仅创建人和指定变更人可执行")
+
+        logger.info(f"{username}执行单个设备: 工单{op_id}, 设备{device_id}")
+
+        # 执行设备命令
+        result = device_cmd_manage.execute_device_command(device_id, username)
+
+        if result.get('code') == 0:
+            return APIResponse.success(data={"output": result.get('output')}, message=result.get('msg'))
+        else:
+            return APIResponse.error(message=result.get('msg'))
+
+    except Exception as e:
+        logger.error(f"执行设备失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
 # ==================== 日志查询 ====================
 
 @change_mgmt_bp.route('/log/list', methods=['POST'])
