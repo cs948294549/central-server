@@ -502,7 +502,11 @@ class AlterationManageDB(mysqldb_netops):
             if result1:
                 result = {}
                 for num in range(len(proper)):
-                    result[proper[num]] = result1[num] if result1[num] != None else ""
+                    value = result1[num] if result1[num] != None else ""
+                    # node_info 需要 unwaf 处理
+                    if proper[num] == "node_info" and value:
+                        value = unwaf(value)
+                    result[proper[num]] = value
                 return result
             return None
         except Exception as err:
@@ -572,7 +576,11 @@ class AlterationManageDB(mysqldb_netops):
                 for i in result1:
                     result = {}
                     for num in range(len(proper)):
-                        result[proper[num]] = i[num] if i[num] != None else ""
+                        value = i[num] if i[num] != None else ""
+                        # node_info 需要 unwaf 处理
+                        if proper[num] == "node_info" and value:
+                            value = unwaf(value)
+                        result[proper[num]] = value
                     results.append(result)
 
             return results

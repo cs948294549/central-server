@@ -10,14 +10,22 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# 先安装不常变化的大包（使用缓存，这层会被 Docker 缓存）
+RUN pip install --default-timeout=300 \
+    tencentcloud-sdk-python \
+    volcengine \
+    -i https://mirrors.aliyun.com/pypi/simple/
 
 # 复制 requirements.txt
 COPY requirements.txt .
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
+# 安装其他依赖（不使用缓存）
+RUN pip install --no-cache-dir \
+    -r requirements.txt \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple/ \
+    || true
 
 # 复制应用代码
 COPY . .

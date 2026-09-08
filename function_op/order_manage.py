@@ -427,9 +427,15 @@ def approve_order(op_id, username, approve_status):
 
         # 解析node_info
         try:
-            node_info = json.loads(order.get("node_info", "[]"))
-        except:
-            return {"code": 500, "msg": "工单流程信息异常"}
+            node_info_str = order.get("node_info", "")
+            if not node_info_str or node_info_str == "":
+                return {"code": 500, "msg": "工单尚未提交，无法审批"}
+            node_info = json.loads(node_info_str)
+            if not node_info or len(node_info) == 0:
+                return {"code": 500, "msg": "工单流程信息为空"}
+        except Exception as e:
+            logger.error(f"解析工单流程信息失败: {e}, node_info: {order.get('node_info', '')}")
+            return {"code": 500, "msg": f"工单流程信息异常: {str(e)}"}
 
         # 获取当前节点
         current_step_id = order.get("step_id", 0)
