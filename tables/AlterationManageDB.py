@@ -55,10 +55,11 @@ CREATE TABLE op_lists (
 CREATE TABLE op_devs (
     pid BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
     op_id BIGINT COLLATE utf8_bin NOT NULL COMMENT '工单ID',
+    batch INT NULL DEFAULT 1 COMMENT '批次号',
     ip VARCHAR(50) COLLATE utf8_bin NOT NULL COMMENT '设备IP',
     sysname VARCHAR(100) COLLATE utf8_bin NULL COMMENT '设备名称',
     model VARCHAR(100) COLLATE utf8_bin NULL COMMENT '设备型号',
-    assert VARCHAR(200) COLLATE utf8_bin NULL COMMENT '断言内容',
+    asset_no VARCHAR(200) COLLATE utf8_bin NULL COMMENT '资产编号',
     status VARCHAR(2) COLLATE utf8_bin NULL COMMENT '执行状态',
     cmd_exec TEXT COLLATE utf8_bin NULL COMMENT '执行命令',
     cmd_roll TEXT COLLATE utf8_bin NULL COMMENT '回滚命令',
@@ -590,15 +591,16 @@ class AlterationManageDB(mysqldb_netops):
             data = waf(data)
             current_time = str(int(time.time()))
             sql = '''INSERT INTO op_devs
-                     (op_id, ip, sysname, model, assert, status, cmd_exec, cmd_roll,
+                     (op_id, batch, ip, sysname, model, asset_no, status, cmd_exec, cmd_roll,
                       result, tag, is_auto, pre_check, timestamp)
-                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
             params = (
                 data["op_id"],
+                data.get("batch", 1),
                 data["ip"],
                 data.get("sysname", ""),
                 data.get("model", ""),
-                data.get("assert", ""),
+                data.get("asset_no", ""),
                 data.get("status", ""),
                 data.get("cmd_exec", ""),
                 data.get("cmd_roll", ""),
@@ -628,7 +630,7 @@ class AlterationManageDB(mysqldb_netops):
             update_fields = []
             params = []
 
-            for key in ['ip', 'sysname', 'model', 'assert', 'status', 'cmd_exec',
+            for key in ['batch', 'ip', 'sysname', 'model', 'asset_no', 'status', 'cmd_exec',
                        'cmd_roll', 'result', 'tag', 'is_auto', 'pre_check']:
                 if key in data:
                     update_fields.append(f"{key} = %s")
@@ -671,10 +673,10 @@ class AlterationManageDB(mysqldb_netops):
     def get_op_device_list(self, op_id):
         """获取工单的设备列表"""
         try:
-            sql = """SELECT pid, op_id, batch, ip, sysname, model, assert, status,
+            sql = """SELECT pid, op_id, batch, ip, sysname, model, asset_no, status,
                      cmd_exec, cmd_roll, result, tag, is_auto, pre_check, timestamp
                      FROM op_devs WHERE op_id = %s ORDER BY batch, pid"""
-            proper = ["pid", "op_id", "batch", "ip", "sysname", "model", "assert", "status",
+            proper = ["pid", "op_id", "batch", "ip", "sysname", "model", "asset_no", "status",
                      "cmd_exec", "cmd_roll", "result", "tag", "is_auto", "pre_check", "timestamp"]
             self.cursor.execute(sql, (op_id,))
             result1 = self.cursor.fetchall()

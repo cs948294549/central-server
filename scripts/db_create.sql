@@ -303,7 +303,7 @@ CREATE TABLE op_devs (
     ip VARCHAR(50) COLLATE utf8_bin NOT NULL COMMENT '设备IP',
     sysname VARCHAR(100) COLLATE utf8_bin NULL COMMENT '设备名称',
     model VARCHAR(100) COLLATE utf8_bin NULL COMMENT '设备型号',
-    assert VARCHAR(200) COLLATE utf8_bin NULL COMMENT '资产号',
+    asset_no VARCHAR(200) COLLATE utf8_bin NULL COMMENT '资产编号',
     status VARCHAR(2) COLLATE utf8_bin NULL COMMENT '执行状态',
     cmd_exec TEXT COLLATE utf8_bin NULL COMMENT '执行命令',
     cmd_roll TEXT COLLATE utf8_bin NULL COMMENT '回滚命令',
