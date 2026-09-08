@@ -2,8 +2,10 @@
 变更工单管理 - 工单业务逻辑层
 """
 from tables.AlterationManageDB import AlterationManageDB
+from function_collector.func_config import save_config_by_opid
 import json
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -701,4 +703,224 @@ def cancel_change(op_id, username):
 
     except Exception as e:
         logger.error(f"取消变更失败: {e}")
+        return {"code": 500, "msg": f"取消失败: {str(e)}"}
+
+
+def backup_devices_config(op_id):
+    """
+    备份工单下所有设备的配置
+
+    Args:
+        op_id: 工单ID
+
+    Returns:
+        dict: {"success": bool, "total": 总数, "success_count": 成功数, "failed_count": 失败数, "details": []}
+    """
+    try:
+        # 获取工单下的所有设备
+        device_db = AlterationManageDB()
+        devices = device_db.get_op_device_list(op_id)
+
+        if not devices or devices == "failed" or len(devices) == 0:
+            return {
+                "success": False,
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "details": [],
+                "message": "工单下没有设备配置"
+            }
+
+        # 按IP去重（多批次可能包含重复设备）
+        unique_devices = {}
+        for device in devices:
+            ip = device.get("ip", "")
+            if ip and ip not in unique_devices:
+                unique_devices[ip] = device
+
+        devices_to_backup = list(unique_devices.values())
+        logger.info(f"工单 {op_id} 共 {len(devices)} 台设备，去重后 {len(devices_to_backup)} 台，准备备份配置")
+
+        # 备份所有设备配置
+        backup_results = []
+        success_count = 0
+        failed_count = 0
+
+        for device in devices_to_backup:
+            ip = device.get("ip", "")
+            sysname = device.get("sysname", "")
+
+            logger.info(f"正在备份设备 {ip}({sysname}) 配置...")
+            result = save_config_by_opid(ip, op_id)
+
+            backup_result = {
+                "ip": ip,
+                "sysname": sysname,
+                "status": result.get("status", "failed"),
+                "message": result.get("message", "")
+            }
+            backup_results.append(backup_result)
+
+            if result.get("status") == "success":
+                success_count += 1
+            else:
+                failed_count += 1
+
+        logger.info(f"工单 {op_id} 配置备份完成: {success_count}成功/{failed_count}失败")
+
+        return {
+            "success": True,
+            "total": len(devices_to_backup),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "details": backup_results
+        }
+
+    except Exception as e:
+        logger.error(f"备份设备配置失败: {e}", exc_info=True)
+        return {
+            "success": False,
+            "total": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "details": [],
+            "message": str(e)
+        }
+
+
+def start_change(op_id, username):
+    """
+    开始变更（变更前备份配置）
+
+    Args:
+        op_id: 工单ID
+        username: 操作人
+
+    Returns:
+        dict: {"code": 0/500, "msg": "消息", "data": {"total": 总数, "success": 成功数, "failed": 失败数, "details": []}}
+    """
+    try:
+        # 获取工单信息
+        db = AlterationManageDB()
+        order = db.get_op_order_by_id(op_id)
+
+        if not order:
+            return {"code": 500, "msg": "工单不存在"}
+
+        # 检查工单状态是否允许开始变更
+        if order.get("status") not in ["20"]:
+            return {"code": 500, "msg": f"工单当前状态({order.get('status')})不允许开始变更"}
+
+        # 备份所有设备配置
+        backup_result = backup_devices_config(op_id)
+
+        if not backup_result.get("success"):
+            return {"code": 500, "msg": backup_result.get("message", "备份配置失败")}
+
+        # 更新工单状态为变更中
+        update_db = AlterationManageDB()
+        update_result = update_db.update_op_order(op_id, {
+            "status": "21",
+            "begin_time": str(int(time.time()))
+        })
+
+        if update_result == "success":
+            # 记录日志
+            success_count = backup_result.get("success_count", 0)
+            failed_count = backup_result.get("failed_count", 0)
+
+            log_db = AlterationManageDB()
+            log_db.add_op_log({
+                "op_id": op_id,
+                "tag": "07",
+                "msg": f"{username} 开始变更 - 备份完成({success_count}成功/{failed_count}失败)",
+                "username": username
+            })
+
+            return {
+                "code": 0,
+                "msg": f"开始变更成功，配置备份完成({success_count}成功/{failed_count}失败)",
+                "data": {
+                    "total": backup_result.get("total", 0),
+                    "success": success_count,
+                    "failed": failed_count,
+                    "details": backup_result.get("details", [])
+                }
+            }
+        else:
+            return {"code": 500, "msg": "更新工单状态失败"}
+
+    except Exception as e:
+        logger.error(f"开始变更失败: {e}", exc_info=True)
+        return {"code": 500, "msg": f"开始变更失败: {str(e)}"}
+
+
+def finish_change(op_id, username, status="90"):
+    """
+    结束变更（变更后备份配置）
+
+    Args:
+        op_id: 工单ID
+        username: 操作人
+        status: 结束状态 "90"=变更完成, "91"=变更失败
+
+    Returns:
+        dict: {"code": 0/500, "msg": "消息", "data": {"total": 总数, "success": 成功数, "failed": 失败数, "details": []}}
+    """
+    try:
+        # 获取工单信息
+        db = AlterationManageDB()
+        order = db.get_op_order_by_id(op_id)
+
+        if not order:
+            return {"code": 500, "msg": "工单不存在"}
+
+        # 检查工单状态是否允许结束变更
+        if order.get("status") not in ["21"]:
+            return {"code": 500, "msg": f"工单当前状态({order.get('status')})不允许结束变更"}
+
+        # 备份所有设备配置
+        backup_result = backup_devices_config(op_id)
+
+        if not backup_result.get("success"):
+            return {"code": 500, "msg": backup_result.get("message", "备份配置失败")}
+
+        # 更新工单状态
+        status_text = "变更完成" if status == "90" else "变更失败"
+        update_db = AlterationManageDB()
+        update_result = update_db.update_op_order(op_id, {
+            "status": status,
+            "finish_time": str(int(time.time()))
+        })
+
+        if update_result == "success":
+            # 记录日志
+            success_count = backup_result.get("success_count", 0)
+            failed_count = backup_result.get("failed_count", 0)
+
+            log_db = AlterationManageDB()
+            log_db.add_op_log({
+                "op_id": op_id,
+                "tag": "08",
+                "msg": f"{username} 结束变更 - {status_text} - 备份完成({success_count}成功/{failed_count}失败)",
+                "username": username
+            })
+
+            return {
+                "code": 0,
+                "msg": f"{status_text}，配置备份完成({success_count}成功/{failed_count}失败)",
+                "data": {
+                    "total": backup_result.get("total", 0),
+                    "success": success_count,
+                    "failed": failed_count,
+                    "details": backup_result.get("details", [])
+                }
+            }
+        else:
+            return {"code": 500, "msg": "更新工单状态失败"}
+
+    except Exception as e:
+        logger.error(f"结束变更失败: {e}", exc_info=True)
+        return {"code": 500, "msg": f"结束变更失败: {str(e)}"}
+
         return {"code": 500, "msg": f"操作失败: {str(e)}"}

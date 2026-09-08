@@ -590,6 +590,57 @@ def end_order():
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
 
 
+@change_mgmt_bp.route('/order/start', methods=['POST'])
+def start_change():
+    """开始变更（变更前备份配置）"""
+    try:
+        data = request.json or {}
+        op_id = data.get('op_id')
+
+        if not op_id:
+            return APIResponse.param_error(message="缺少参数 op_id")
+
+        logger.info(f"{g.user.get('username', '')}开始变更: {op_id}")
+
+        result = order_manage.start_change(op_id, g.user.get('username', ''))
+
+        if result.get("code") == 0:
+            return APIResponse.success(data=result.get("data"), message=result.get("msg"))
+        else:
+            return APIResponse.error(message=result.get("msg"))
+
+    except Exception as e:
+        logger.error(f"开始变更失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@change_mgmt_bp.route('/order/finish', methods=['POST'])
+def finish_change():
+    """结束变更（变更后备份配置）"""
+    try:
+        data = request.json or {}
+        op_id = data.get('op_id')
+        status = data.get('status', '90')  # "90": 变更完成, "91": 变更失败
+
+        if not op_id:
+            return APIResponse.param_error(message="缺少参数 op_id")
+        if status not in ["90", "91"]:
+            return APIResponse.param_error(message="参数 status 必须为 90(变更完成) 或 91(变更失败)")
+
+        logger.info(f"{g.user.get('username', '')}结束变更: {op_id}, 状态: {status}")
+
+        result = order_manage.finish_change(op_id, g.user.get('username', ''), status)
+
+        if result.get("code") == 0:
+            return APIResponse.success(data=result.get("data"), message=result.get("msg"))
+        else:
+            return APIResponse.error(message=result.get("msg"))
+
+    except Exception as e:
+        logger.error(f"结束变更失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
 @change_mgmt_bp.route('/order/cancel', methods=['POST'])
 def cancel_order():
     """取消变更"""
