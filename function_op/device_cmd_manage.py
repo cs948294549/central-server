@@ -179,6 +179,9 @@ def rollback_device_command(dev_id, username):
         if not device_info or device_info == "failed":
             return {"code": 500, "msg": "设备不存在", "output": ""}
 
+        if device_info.get('status') != '10':
+            return {"code": 500, "msg": "设备当前状态不是执行成功，无法回滚", "output": ""}
+
         device_ip = device_info.get('ip')
         cmd_roll = device_info.get('cmd_roll', '')
 

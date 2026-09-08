@@ -609,7 +609,7 @@ class AlterationManageDB(mysqldb_netops):
                 data.get("sysname", ""),
                 data.get("model", ""),
                 data.get("asset_no", ""),
-                data.get("status", ""),
+                data.get("status", "00"),
                 data.get("cmd_exec", ""),
                 data.get("cmd_roll", ""),
                 data.get("result", ""),

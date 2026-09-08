@@ -817,12 +817,37 @@ def start_change(op_id, username):
         if not backup_result.get("success"):
             return {"code": 500, "msg": backup_result.get("message", "备份配置失败")}
 
+        # 解析 node_info 找到"开始变更"节点的 ID
+        node_info = []
+        change_step_id = 0
+        try:
+            node_info_str = order.get("node_info", "")
+            if node_info_str:
+                node_info = json.loads(node_info_str)
+                # 找到标题为"开始变更"的节点
+                for node in node_info:
+                    if node.get("title") == "开始变更":
+                        change_step_id = node.get("id", 0)
+                        # 更新节点描述
+                        node["description"] = f"{username} 开始变更"
+                        break
+        except Exception as e:
+            logger.error(f"解析 node_info 失败: {e}")
+
         # 更新工单状态为变更中
-        update_db = AlterationManageDB()
-        update_result = update_db.update_op_order(op_id, {
+        update_data = {
             "status": "21",
             "begin_time": str(int(time.time()))
-        })
+        }
+
+        # 如果找到了"开始变更"节点，更新 step_id 和 node_info
+        if change_step_id > 0:
+            update_data["step_id"] = change_step_id
+            if node_info:
+                update_data["node_info"] = json.dumps(node_info, ensure_ascii=False)
+
+        update_db = AlterationManageDB()
+        update_result = update_db.update_op_order(op_id, update_data)
 
         if update_result == "success":
             # 记录日志
@@ -885,13 +910,38 @@ def finish_change(op_id, username, status="90"):
         if not backup_result.get("success"):
             return {"code": 500, "msg": backup_result.get("message", "备份配置失败")}
 
+        # 解析 node_info 找到"变更结束"节点的 ID
+        node_info = []
+        finish_step_id = 0
+        try:
+            node_info_str = order.get("node_info", "")
+            if node_info_str:
+                node_info = json.loads(node_info_str)
+                # 找到标题为"变更结束"的节点
+                for node in node_info:
+                    if node.get("title") == "变更结束":
+                        finish_step_id = node.get("id", 0)
+                        # 更新节点描述
+                        node["description"] = f"{username} 结束变更"
+                        break
+        except Exception as e:
+            logger.error(f"解析 node_info 失败: {e}")
+
         # 更新工单状态
         status_text = "变更完成" if status == "90" else "变更失败"
-        update_db = AlterationManageDB()
-        update_result = update_db.update_op_order(op_id, {
+        update_data = {
             "status": status,
             "finish_time": str(int(time.time()))
-        })
+        }
+
+        # 如果找到了"变更结束"节点，更新 step_id 和 node_info
+        if finish_step_id > 0:
+            update_data["step_id"] = finish_step_id
+            if node_info:
+                update_data["node_info"] = json.dumps(node_info, ensure_ascii=False)
+
+        update_db = AlterationManageDB()
+        update_result = update_db.update_op_order(op_id, update_data)
 
         if update_result == "success":
             # 记录日志
