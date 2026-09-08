@@ -188,7 +188,7 @@ class AlterationManageDB(mysqldb_netops):
                 conditions.append("name LIKE %s")
                 params.append(f"%{data['name']}%")
 
-            sql = "SELECT * FROM op_types"
+            sql = "SELECT pid, name, op_group1, op_group2, op_group3 FROM op_types"
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
             sql += " ORDER BY pid DESC"
@@ -278,7 +278,7 @@ class AlterationManageDB(mysqldb_netops):
                 conditions.append("name LIKE %s")
                 params.append(f"%{data['name']}%")
 
-            sql = "SELECT * FROM op_groups"
+            sql = "SELECT pid, name, op_list FROM op_groups"
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
             sql += " ORDER BY pid DESC"
@@ -368,7 +368,7 @@ class AlterationManageDB(mysqldb_netops):
                 conditions.append("name LIKE %s")
                 params.append(f"%{data['name']}%")
 
-            sql = "SELECT * FROM op_notify"
+            sql = "SELECT pid, name, descrip, target FROM op_notify"
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
             sql += " ORDER BY pid DESC"
@@ -488,7 +488,10 @@ class AlterationManageDB(mysqldb_netops):
     def get_op_order_by_id(self, op_id):
         """根据ID获取工单详情"""
         try:
-            sql = "SELECT * FROM op_lists WHERE op_id = %s"
+            sql = """SELECT op_id, op_type, title, descrip, status, username, assigner,
+                     is_auto, popo, create_time, update_time, begin_time, finish_time,
+                     cur_group, cur_user, step_name, step_id, node_info
+                     FROM op_lists WHERE op_id = %s"""
             proper = ["op_id", "op_type", "title", "descrip", "status", "username", "assigner",
                      "is_auto", "popo", "create_time", "update_time", "begin_time", "finish_time",
                      "cur_group", "cur_user", "step_name", "step_id", "node_info"]
@@ -545,7 +548,10 @@ class AlterationManageDB(mysqldb_netops):
                 conditions.append("FIND_IN_SET(%s, cur_group) > 0")
                 params.append(data["cur_user"])
 
-            sql = "SELECT * FROM op_lists"
+            sql = """SELECT op_id, op_type, title, descrip, status, username, assigner,
+                     is_auto, popo, create_time, update_time, begin_time, finish_time,
+                     cur_group, cur_user, step_name, step_id, node_info
+                     FROM op_lists"""
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
             sql += " ORDER BY op_id DESC"
@@ -665,8 +671,10 @@ class AlterationManageDB(mysqldb_netops):
     def get_op_device_list(self, op_id):
         """获取工单的设备列表"""
         try:
-            sql = "SELECT * FROM op_devs WHERE op_id = %s ORDER BY pid"
-            proper = ["pid", "op_id", "ip", "sysname", "model", "assert", "status",
+            sql = """SELECT pid, op_id, batch, ip, sysname, model, assert, status,
+                     cmd_exec, cmd_roll, result, tag, is_auto, pre_check, timestamp
+                     FROM op_devs WHERE op_id = %s ORDER BY batch, pid"""
+            proper = ["pid", "op_id", "batch", "ip", "sysname", "model", "assert", "status",
                      "cmd_exec", "cmd_roll", "result", "tag", "is_auto", "pre_check", "timestamp"]
             self.cursor.execute(sql, (op_id,))
             result1 = self.cursor.fetchall()
@@ -711,7 +719,8 @@ class AlterationManageDB(mysqldb_netops):
     def get_op_approval_list(self, op_id):
         """获取工单的审批记录"""
         try:
-            sql = "SELECT * FROM op_approve WHERE op_id = %s ORDER BY timestamp DESC"
+            sql = """SELECT pid, op_id, op_group, username, status, timestamp
+                     FROM op_approve WHERE op_id = %s ORDER BY timestamp DESC"""
             proper = ["pid", "op_id", "op_group", "username", "status", "timestamp"]
             self.cursor.execute(sql, (op_id,))
             result1 = self.cursor.fetchall()
@@ -756,7 +765,8 @@ class AlterationManageDB(mysqldb_netops):
     def get_op_log_list(self, op_id):
         """获取工单的操作日志"""
         try:
-            sql = "SELECT * FROM op_logs WHERE op_id = %s ORDER BY timestamp DESC"
+            sql = """SELECT pid, op_id, tag, msg, username, timestamp
+                     FROM op_logs WHERE op_id = %s ORDER BY timestamp DESC"""
             proper = ["pid", "op_id", "tag", "msg", "username", "timestamp"]
             self.cursor.execute(sql, (op_id,))
             result1 = self.cursor.fetchall()
