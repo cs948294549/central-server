@@ -26,26 +26,34 @@ def get_log_list(op_id):
         return "failed"
 
 
-def add_log(data):
+def add_op_log(op_id, tag, username, action):
     """
-    添加日志记录
+    记录工单操作日志，将操作人替换为中文名并拼接到日志内容中
 
     Args:
-        data: 日志数据
-            - op_id: 工单ID
-            - tag: 日志标签
-            - msg: 日志内容
-            - username: 操作人
+        op_id: 工单ID
+        tag: 日志标签
+        username: 操作人（登录名）
+        action: 操作描述（不含用户名前缀）
 
     Returns:
         int/str: 成功返回日志ID,失败返回"failed"
     """
     try:
         db = AlterationManageDB()
-        result = db.add_op_log(data)
+        subname = db.get_username_subname(username)
+        display_name = subname if subname else username
+
+        db2 = AlterationManageDB()
+        result = db2.add_op_log({
+            "op_id": op_id,
+            "tag": tag,
+            "msg": f"{display_name} {action}",
+            "username": display_name
+        })
         return result
     except Exception as e:
-        logger.error(f"添加日志失败: {e}")
+        logger.error(f"添加操作日志失败: {e}")
         return "failed"
 
 

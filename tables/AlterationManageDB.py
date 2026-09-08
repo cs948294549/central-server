@@ -831,6 +831,20 @@ class AlterationManageDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def get_username_subname(self, username):
+        """根据登录用户名查询中文名"""
+        try:
+            sql = "SELECT subname FROM users WHERE username = %s"
+            self.cursor.execute(sql, (username,))
+            row = self.cursor.fetchone()
+            return row[0] if row and row[0] else ""
+        except Exception as e:
+            logger.error(f"查询用户中文名失败: {e}")
+            return ""
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def get_op_log_list(self, op_id):
         """获取工单的操作日志"""
         try:

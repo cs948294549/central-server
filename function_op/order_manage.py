@@ -3,6 +3,7 @@
 """
 from tables.AlterationManageDB import AlterationManageDB
 from function_collector.func_config import save_config_by_opid
+from function_op import log_manage
 import json
 import logging
 import time
@@ -68,13 +69,7 @@ def add_order(data, username):
 
         if op_id != "failed":
             # 记录日志
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "01",
-                "msg": f"{username} 创建工单",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "01", username, "创建工单")
 
         return op_id
     except Exception as e:
@@ -100,13 +95,7 @@ def update_order(op_id, data, username):
 
         if result == "success":
             # 记录日志
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "02",
-                "msg": f"{username} 修改工单",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "02", username, "修改工单")
 
         return result
     except Exception as e:
@@ -223,13 +212,7 @@ def copy_order(op_id, username):
 
 
             # 记录日志
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": new_op_id,
-                "tag": "01",
-                "msg": f"{username} 从工单 {op_id} 复制创建",
-                "username": username
-            })
+            log_manage.add_op_log(new_op_id, "01", username, f"从工单 {op_id} 复制创建")
 
         return new_op_id
     except Exception as e:
@@ -365,13 +348,7 @@ def submit_order(op_id, username):
 
         if result == "success":
             # 记录日志
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "03",
-                "msg": f"{username} 提交工单",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "03", username, "提交工单")
 
             # TODO: 发送通知
 
@@ -434,13 +411,7 @@ def takeover_order(op_id, username):
 
         if result == "success":
             # 记录日志
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "04",
-                "msg": f"{username} 接手工单",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "04", username, "接手工单")
 
             return {"code": 0, "msg": "接手成功"}
         else:
@@ -451,7 +422,7 @@ def takeover_order(op_id, username):
         return {"code": 500, "msg": f"接手失败: {str(e)}"}
 
 
-def approve_order(op_id, username, approve_status):
+def approve_order(op_id, username, approve_status, comment=''):
     """
     审批工单
 
@@ -459,11 +430,14 @@ def approve_order(op_id, username, approve_status):
         op_id: 工单ID
         username: 操作人
         approve_status: 审批状态 "10"=通过, "92"=拒绝
+        comment: 审批意见
 
     Returns:
         dict: {"code": 0/500, "msg": "消息"}
     """
     try:
+        comment_suffix = f"，意见：{comment}" if comment else ""
+
         # 获取工单信息
         db = AlterationManageDB()
         order = db.get_op_order_by_id(op_id)
@@ -512,13 +486,7 @@ def approve_order(op_id, username, approve_status):
 
             if result == "success":
                 # 记录日志
-                log_db = AlterationManageDB()
-                log_db.add_op_log({
-                    "op_id": op_id,
-                    "tag": "06",
-                    "msg": f"{username} 审批拒绝",
-                    "username": username
-                })
+                log_manage.add_op_log(op_id, "06", username, f"审批拒绝{comment_suffix}")
 
                 # TODO: 发送通知
 
@@ -553,13 +521,7 @@ def approve_order(op_id, username, approve_status):
 
             if result == "success":
                 # 记录日志
-                log_db = AlterationManageDB()
-                log_db.add_op_log({
-                    "op_id": op_id,
-                    "tag": "05",
-                    "msg": f"{username} 审批通过，进入下一轮审批",
-                    "username": username
-                })
+                log_manage.add_op_log(op_id, "05", username, f"审批通过，进入下一轮审批{comment_suffix}")
 
                 # TODO: 发送通知
 
@@ -577,13 +539,7 @@ def approve_order(op_id, username, approve_status):
 
             if result == "success":
                 # 记录日志
-                log_db = AlterationManageDB()
-                log_db.add_op_log({
-                    "op_id": op_id,
-                    "tag": "05",
-                    "msg": f"{username} 审批通过，所有审批流程完成",
-                    "username": username
-                })
+                log_manage.add_op_log(op_id, "05", username, f"审批通过，所有审批流程完成{comment_suffix}")
 
                 # TODO: 发送通知
 
@@ -613,13 +569,7 @@ def start_change(op_id, username):
 
         if result == "success":
             # 记录日志
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "07",
-                "msg": f"{username} 开始变更",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "07", username, "开始变更")
 
             # TODO: 发送通知
 
@@ -650,14 +600,8 @@ def end_change(op_id, username, final_status):
 
         if result == "success":
             # 记录日志
-            log_db = AlterationManageDB()
             status_text = "变更完成" if final_status == "90" else "变更失败"
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "08",
-                "msg": f"{username} 结束变更 - {status_text}",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "08", username, f"结束变更 - {status_text}")
 
             # TODO: 发送通知
 
@@ -687,13 +631,7 @@ def cancel_change(op_id, username):
 
         if result == "success":
             # 记录日志
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "09",
-                "msg": f"{username} 取消变更",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "09", username, "取消变更")
 
             # TODO: 发送通知
 
@@ -854,13 +792,7 @@ def start_change(op_id, username):
             success_count = backup_result.get("success_count", 0)
             failed_count = backup_result.get("failed_count", 0)
 
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "07",
-                "msg": f"{username} 开始变更 - 备份完成({success_count}成功/{failed_count}失败)",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "07", username, f"开始变更 - 备份完成({success_count}成功/{failed_count}失败)")
 
             return {
                 "code": 0,
@@ -948,13 +880,7 @@ def finish_change(op_id, username, status="90"):
             success_count = backup_result.get("success_count", 0)
             failed_count = backup_result.get("failed_count", 0)
 
-            log_db = AlterationManageDB()
-            log_db.add_op_log({
-                "op_id": op_id,
-                "tag": "08",
-                "msg": f"{username} 结束变更 - {status_text} - 备份完成({success_count}成功/{failed_count}失败)",
-                "username": username
-            })
+            log_manage.add_op_log(op_id, "08", username, f"结束变更 - {status_text} - 备份完成({success_count}成功/{failed_count}失败)")
 
             return {
                 "code": 0,

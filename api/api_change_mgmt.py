@@ -519,6 +519,7 @@ def approve_order():
         data = request.json or {}
         op_id = data.get('op_id')
         approve_status = data.get('status')  # "10": 通过, "92": 拒绝
+        comment = data.get('comment', '')
 
         if not op_id:
             return APIResponse.param_error(message="缺少参数 op_id")
@@ -527,7 +528,7 @@ def approve_order():
 
         logger.info(f"{g.user.get('username', '')}审批工单: {op_id}, 结果: {approve_status}")
 
-        result = order_manage.approve_order(op_id, g.user.get('username', ''), approve_status)
+        result = order_manage.approve_order(op_id, g.user.get('username', ''), approve_status, comment)
 
         if result.get("code") == 0:
             return APIResponse.success(message=result.get("msg"))
