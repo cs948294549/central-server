@@ -718,13 +718,14 @@ def backup_devices_config(op_id):
         devices = device_db.get_op_device_list(op_id)
 
         if not devices or devices == "failed" or len(devices) == 0:
+            logger.info(f"工单 {op_id} 下没有设备配置，跳过备份步骤")
             return {
-                "success": False,
+                "success": True,
                 "total": 0,
                 "success_count": 0,
                 "failed_count": 0,
                 "details": [],
-                "message": "工单下没有设备配置"
+                "message": "工单下没有设备，跳过配置备份"
             }
 
         # 按IP去重（多批次可能包含重复设备）
