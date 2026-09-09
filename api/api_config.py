@@ -5,7 +5,9 @@ from function_collector.func_config import (
     get_config_list_by_device,
     get_config_detail_by_id,
     compare_configs_by_id,
-    delete_config_by_id
+    delete_config_by_id,
+    get_latest_config_by_ip,
+    get_device_config_diff
 )
 
 # 配置日志
@@ -128,9 +130,7 @@ def get_latest_config():
 
         logger.info(f"{str(g.user)}查询最新配置，ip={ip}")
 
-        from tables.ConfigDB import ConfigDB
-        db = ConfigDB()
-        latest_config = db.get_latest_config(ip)
+        latest_config = get_latest_config_by_ip(ip)
 
         if latest_config:
             return APIResponse.success(data=latest_config, message="查询成功")
@@ -165,3 +165,48 @@ def delete_config():
     except Exception as e:
         logger.error(f"删除配置记录失败: {e}")
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@config_bp.route('/compare_by_order', methods=['POST'])
+def compare_config_by_order():
+    """
+    获取设备在指定工单中的配置前后对比
+    请求参数:
+    {
+        "ip": "10.0.0.1",      # 必填，设备IP
+        "op_id": "123",        # 必填，工单ID
+        "full_diff": false     # 可选，是否显示完整对比，默认false（只显示差异部分）
+    }
+    返回:
+    {
+        "html": "HTML格式的对比结果",
+        "stats": {"added": 新增行数, "deleted": 删除行数, "modified": 修改行数},
+        "before": {"log_id": xx, "ip": xx, "sysname": xx, "backup_time": xx},
+        "after": {"log_id": xx, "ip": xx, "sysname": xx, "backup_time": xx}
+    }
+    """
+    try:
+        data = request.json or {}
+        ip = data.get('ip')
+        op_id = data.get('op_id')
+        full_diff = data.get('full_diff', False)
+
+        if not ip:
+            return APIResponse.error(message="缺少参数 ip")
+        if not op_id:
+            return APIResponse.error(message="缺少参数 op_id")
+
+        logger.info(f"{str(g.user)}查询设备配置对比，ip={ip}, op_id={op_id}, full_diff={full_diff}")
+
+        result = get_device_config_diff(ip, op_id, full_diff)
+
+        if result.get("html"):
+            return APIResponse.success(data=result, message="对比成功")
+        else:
+            message = result.get("message", "配置对比失败")
+            return APIResponse.error(message=message)
+
+    except Exception as e:
+        logger.error(f"获取设备配置对比失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+

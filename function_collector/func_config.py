@@ -345,3 +345,109 @@ def delete_config_by_id(log_id):
         return "failed"
 
 
+def get_latest_config_by_ip(ip):
+    """
+    获取设备最新的配置记录
+    :param ip: 设备IP
+    :return: 配置详情或None
+    """
+    try:
+        db = ConfigDB()
+        latest_config = db.get_latest_config(ip)
+
+        if latest_config and latest_config.get("created_at"):
+            import time
+            timestamp = int(latest_config["created_at"])
+            latest_config["backup_time"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
+
+        return latest_config
+    except Exception as e:
+        logger.error(f"获取最新配置失败: {e}")
+        return None
+
+
+def get_device_config_diff(ip, op_id, full_diff=False):
+    """
+    获取设备在指定工单中的配置前后对比
+    :param ip: 设备IP
+    :param op_id: 工单ID
+    :param full_diff: 是否显示完整对比，默认False（只显示差异部分）
+    :return: dict {"html": HTML对比结果, "stats": 统计信息, "before": 变更前配置信息, "after": 变更后配置信息}
+    """
+    try:
+        db = ConfigDB()
+
+        # 查询该工单下该设备的所有配置记录，按时间升序排列
+        configs = db.get_config_list({"ip": ip, "change_id": str(op_id)})
+
+        if not configs or len(configs) < 2:
+            logger.warning(f"设备 {ip} 工单 {op_id} 配置记录不足（需要至少2条记录）")
+            return {
+                "html": "",
+                "stats": {"added": 0, "deleted": 0, "modified": 0},
+                "before": None,
+                "after": None,
+                "message": "配置记录不足，无法对比"
+            }
+
+        # 按时间排序（升序），第一条为变更前，最后一条为变更后
+        configs_sorted = sorted(configs, key=lambda x: int(x.get("created_at", "0")))
+        before_config_info = configs_sorted[0]
+        after_config_info = configs_sorted[-1]
+
+        # 获取完整配置内容
+        before_config = db.get_config_detail(before_config_info["log_id"])
+        after_config = db.get_config_detail(after_config_info["log_id"])
+
+        if not before_config or not after_config:
+            logger.error(f"设备 {ip} 工单 {op_id} 配置详情获取失败")
+            return {
+                "html": "",
+                "stats": {"added": 0, "deleted": 0, "modified": 0},
+                "before": None,
+                "after": None,
+                "message": "配置详情获取失败"
+            }
+
+        before_content = before_config.get("detail", "")
+        after_content = after_config.get("detail", "")
+
+        # 执行对比
+        diff_result = check_diff(before_content, after_content, full_diff=full_diff)
+
+        # 统计变更
+        stats = calculate_diff_stats(before_content, after_content)
+
+        # 格式化时间
+        import time
+        before_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(before_config.get("created_at", "0"))))
+        after_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(after_config.get("created_at", "0"))))
+
+        return {
+            "html": diff_result,
+            "stats": stats,
+            "before": {
+                "log_id": before_config.get("log_id"),
+                "ip": before_config.get("ip"),
+                "sysname": before_config.get("sysname"),
+                "backup_time": before_time
+            },
+            "after": {
+                "log_id": after_config.get("log_id"),
+                "ip": after_config.get("ip"),
+                "sysname": after_config.get("sysname"),
+                "backup_time": after_time
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取设备配置对比失败: {e}")
+        return {
+            "html": "",
+            "stats": {"added": 0, "deleted": 0, "modified": 0},
+            "before": None,
+            "after": None,
+            "message": f"对比失败: {str(e)}"
+        }
+
+
