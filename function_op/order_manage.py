@@ -745,6 +745,12 @@ def start_change(op_id, username):
         if not order:
             return {"code": 500, "msg": "工单不存在"}
 
+        # 权限检查：只有创建人或指定执行人可以开始变更
+        creator = order.get("username", "")
+        assigner = order.get("assigner", "")
+        if username != creator and username != assigner:
+            return {"code": 403, "msg": "无权限操作，仅创建人和指定执行人可以开始变更"}
+
         # 检查工单状态是否允许开始变更
         if order.get("status") not in ["20"]:
             return {"code": 500, "msg": f"工单当前状态({order.get('status')})不允许开始变更"}
@@ -831,6 +837,12 @@ def finish_change(op_id, username, status="90"):
 
         if not order:
             return {"code": 500, "msg": "工单不存在"}
+
+        # 权限检查：只有创建人或指定执行人可以结束变更
+        creator = order.get("username", "")
+        assigner = order.get("assigner", "")
+        if username != creator and username != assigner:
+            return {"code": 403, "msg": "无权限操作，仅创建人和指定执行人可以结束变更"}
 
         # 检查工单状态是否允许结束变更
         if order.get("status") not in ["21"]:

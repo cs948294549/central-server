@@ -151,16 +151,55 @@ class IplistDB(mysqldb_netops):
 
     def delIp(self, data):
         """
-        删除设备IP
+        删除设备IP（级联删除相关表数据）
         :param data: {ip}
         :return: "success"或"failed"
         """
         data = waf(data)
         if "ip" in data.keys():
-            sql = "DELETE FROM iplist WHERE ip='{}'".format(str(data["ip"]))
+            ip = str(data["ip"])
             try:
-                self.cursor.execute(sql)
+                # 级联删除相关表的数据，防止数据污染
+                # 删除顺序：先删除关联表，最后删除主表 iplist
+
+                # 删除 arps 表数据
+                sql_arps = "DELETE FROM arps WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_arps)
+
+                # 删除 dev_sn 表数据
+                sql_dev_sn = "DELETE FROM dev_sn WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_dev_sn)
+
+                # 删除 devices 表数据
+                sql_devices = "DELETE FROM devices WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_devices)
+
+                # 删除 gates 表数据
+                sql_gates = "DELETE FROM gates WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_gates)
+
+                # 删除 gates_ipv6 表数据
+                sql_gates_ipv6 = "DELETE FROM gates_ipv6 WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_gates_ipv6)
+
+                # 删除 lldps 表数据
+                sql_lldps = "DELETE FROM lldps WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_lldps)
+
+                # 删除 macs 表数据
+                sql_macs = "DELETE FROM macs WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_macs)
+
+                # 删除 ports 表数据
+                sql_ports = "DELETE FROM ports WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_ports)
+
+                # 最后删除 iplist 表数据
+                sql_iplist = "DELETE FROM iplist WHERE ip='{}'".format(ip)
+                self.cursor.execute(sql_iplist)
+
                 self.conn.commit()
+                logger.info("成功删除设备IP及其关联数据: {}".format(ip))
                 return "success"
             except Exception as err:
                 self.conn.rollback()
@@ -174,7 +213,7 @@ class IplistDB(mysqldb_netops):
 
     def batchDelIp(self, data):
         """
-        批量删除设备IP
+        批量删除设备IP（级联删除相关表数据）
         :param data: {ip_list: [ip1, ip2, ...]}
         :return: "success"或"failed"
         """
@@ -183,10 +222,49 @@ class IplistDB(mysqldb_netops):
             ip_list = data["ip_list"]
             # 构建占位符
             placeholders = ",".join(["'{}'".format(str(ip)) for ip in ip_list])
-            sql = "DELETE FROM iplist WHERE ip IN ({})".format(placeholders)
+
             try:
-                self.cursor.execute(sql)
+                # 级联删除相关表的数据，防止数据污染
+                # 删除顺序：先删除关联表，最后删除主表 iplist
+
+                # 删除 arps 表数据
+                sql_arps = "DELETE FROM arps WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_arps)
+
+                # 删除 dev_sn 表数据
+                sql_dev_sn = "DELETE FROM dev_sn WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_dev_sn)
+
+                # 删除 devices 表数据
+                sql_devices = "DELETE FROM devices WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_devices)
+
+                # 删除 gates 表数据
+                sql_gates = "DELETE FROM gates WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_gates)
+
+                # 删除 gates_ipv6 表数据
+                sql_gates_ipv6 = "DELETE FROM gates_ipv6 WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_gates_ipv6)
+
+                # 删除 lldps 表数据
+                sql_lldps = "DELETE FROM lldps WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_lldps)
+
+                # 删除 macs 表数据
+                sql_macs = "DELETE FROM macs WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_macs)
+
+                # 删除 ports 表数据
+                sql_ports = "DELETE FROM ports WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_ports)
+
+                # 最后删除 iplist 表数据
+                sql_iplist = "DELETE FROM iplist WHERE ip IN ({})".format(placeholders)
+                self.cursor.execute(sql_iplist)
+
                 self.conn.commit()
+                logger.info("成功批量删除 {} 个设备IP及其关联数据".format(len(ip_list)))
                 return "success"
             except Exception as err:
                 self.conn.rollback()
