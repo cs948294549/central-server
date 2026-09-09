@@ -503,8 +503,8 @@ class AlterationManageDB(mysqldb_netops):
                 result = {}
                 for num in range(len(proper)):
                     value = result1[num] if result1[num] != None else ""
-                    # node_info 需要 unwaf 处理
-                    if proper[num] == "node_info" and value:
+                    # node_info 和 descrip 需要 unwaf 处理
+                    if proper[num] in ["node_info", "descrip"] and value:
                         value = unwaf(value)
                     result[proper[num]] = value
                 return result
@@ -577,8 +577,8 @@ class AlterationManageDB(mysqldb_netops):
                     result = {}
                     for num in range(len(proper)):
                         value = i[num] if i[num] != None else ""
-                        # node_info 需要 unwaf 处理
-                        if proper[num] == "node_info" and value:
+                        # node_info 和 descrip 需要 unwaf 处理
+                        if proper[num] in ["node_info", "descrip"] and value:
                             value = unwaf(value)
                         result[proper[num]] = value
                     results.append(result)
