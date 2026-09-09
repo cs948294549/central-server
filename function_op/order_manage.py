@@ -481,6 +481,7 @@ def approve_order(op_id, username, approve_status, comment=''):
             update_db = AlterationManageDB()
             result = update_db.update_op_order(op_id, {
                 "status": "92",
+                "step_id": current_step_id,  # 保持当前步骤ID
                 "node_info": json.dumps(node_info, ensure_ascii=False)
             })
 
@@ -529,9 +530,20 @@ def approve_order(op_id, username, approve_status, comment=''):
             else:
                 return {"code": 500, "msg": "审批失败"}
         else:
-            # 所有审批通过
+            # 所有审批通过，找到"开始变更"节点的ID
+            start_change_step_id = 0
+            for i, node in enumerate(node_info):
+                if node.get("title") == "开始变更":
+                    start_change_step_id = node.get("id", i + 1)
+                    break
+
+            # 如果没有找到"开始变更"节点，使用下一个节点ID
+            if start_change_step_id == 0:
+                start_change_step_id = next_step_id
+
             result = update_db2.update_op_order(op_id, {
                 "status": "20",
+                "step_id": start_change_step_id,
                 "cur_group": "",
                 "cur_user": "",
                 "node_info": json.dumps(node_info, ensure_ascii=False)
@@ -626,8 +638,54 @@ def cancel_change(op_id, username):
         dict: {"code": 0/500, "msg": "消息"}
     """
     try:
+        # 获取工单信息
         db = AlterationManageDB()
-        result = db.update_op_order(op_id, {"status": "93"})
+        order = db.get_op_order_by_id(op_id)
+
+        if not order:
+            return {"code": 500, "msg": "工单不存在"}
+
+        # 解析 node_info
+        node_info = []
+        current_step_id = order.get("step_id", 0)
+        try:
+            node_info_str = order.get("node_info", "")
+            if node_info_str:
+                node_info = json.loads(node_info_str)
+        except Exception as e:
+            logger.error(f"解析 node_info 失败: {e}")
+
+        # 如果有 node_info，添加"变更取消"节点，覆盖后续节点
+        if node_info and len(node_info) > 0:
+            # 找到当前步骤的索引
+            current_index = current_step_id - 1 if current_step_id > 0 else 0
+
+            # 截取到当前步骤（包含当前步骤）
+            node_info = node_info[:current_index + 1]
+
+            # 添加"变更取消"节点
+            cancel_node_id = len(node_info) + 1
+            node_info.append({
+                "id": cancel_node_id,
+                "title": "变更取消",
+                "event": "",
+                "description": f"{username} 取消变更",
+                "data": ""
+            })
+
+            update_data = {
+                "status": "93",
+                "step_id": cancel_node_id,
+                "node_info": json.dumps(node_info, ensure_ascii=False)
+            }
+        else:
+            # 如果没有 node_info，只更新状态
+            update_data = {
+                "status": "93"
+            }
+
+        update_db = AlterationManageDB()
+        result = update_db.update_op_order(op_id, update_data)
 
         if result == "success":
             # 记录日志

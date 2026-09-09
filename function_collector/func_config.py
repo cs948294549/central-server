@@ -5,6 +5,8 @@ from tables.ConfigDB import ConfigDB
 from tables.CollectDB import CollectDB
 from function_ssh.sshClient import run_ssh_command, SSHClientFactory
 from function_snmp.snmp_collector import identify_device_vendor
+import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +182,7 @@ def get_config_detail_by_id(log_id):
         if config_detail:
             # 格式化时间
             if config_detail.get("created_at"):
-                import time
+
                 timestamp = int(config_detail["created_at"])
                 config_detail["backup_time"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
 
@@ -356,7 +358,6 @@ def get_latest_config_by_ip(ip):
         latest_config = db.get_latest_config(ip)
 
         if latest_config and latest_config.get("created_at"):
-            import time
             timestamp = int(latest_config["created_at"])
             latest_config["backup_time"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
 
@@ -421,7 +422,6 @@ def get_device_config_diff(ip, op_id, full_diff=False):
         stats = calculate_diff_stats(before_content, after_content)
 
         # 格式化时间
-        import time
         before_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(before_config.get("created_at", "0"))))
         after_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(after_config.get("created_at", "0"))))
 
