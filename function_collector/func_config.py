@@ -375,10 +375,9 @@ def get_device_config_diff(ip, op_id, full_diff=False):
     :return: dict {"html": HTML对比结果, "stats": 统计信息, "before": 变更前配置信息, "after": 变更后配置信息}
     """
     try:
-        db = ConfigDB()
-
-        # 查询该工单下该设备的所有配置记录，按时间升序排列
-        configs = db.get_config_list({"ip": ip, "change_id": str(op_id)})
+        # 查询该工单下该设备的所有配置记录
+        db1 = ConfigDB()
+        configs = db1.get_config_list({"ip": ip, "change_id": str(op_id)})
 
         if not configs or len(configs) < 2:
             logger.warning(f"设备 {ip} 工单 {op_id} 配置记录不足（需要至少2条记录）")
@@ -395,9 +394,12 @@ def get_device_config_diff(ip, op_id, full_diff=False):
         before_config_info = configs_sorted[0]
         after_config_info = configs_sorted[-1]
 
-        # 获取完整配置内容
-        before_config = db.get_config_detail(before_config_info["log_id"])
-        after_config = db.get_config_detail(after_config_info["log_id"])
+        # 获取完整配置内容（使用新的数据库实例）
+        db2 = ConfigDB()
+        before_config = db2.get_config_detail(before_config_info["log_id"])
+
+        db3 = ConfigDB()
+        after_config = db3.get_config_detail(after_config_info["log_id"])
 
         if not before_config or not after_config:
             logger.error(f"设备 {ip} 工单 {op_id} 配置详情获取失败")
