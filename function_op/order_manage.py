@@ -823,6 +823,7 @@ def start_change(op_id, username):
         # 解析 node_info 找到"开始变更"节点的 ID
         node_info = []
         change_step_id = 0
+        current_step_id = order.get("step_id", 0)
         try:
             node_info_str = order.get("node_info", "")
             if node_info_str:
@@ -834,6 +835,11 @@ def start_change(op_id, username):
                         # 更新节点描述
                         node["description"] = f"{username} 开始变更"
                         break
+
+                # 如果没有找到"开始变更"节点，使用下一个节点
+                if change_step_id == 0 and current_step_id > 0:
+                    change_step_id = current_step_id + 1
+                    logger.warning(f"工单 {op_id} 未找到'开始变更'节点，使用 step_id + 1 = {change_step_id}")
         except Exception as e:
             logger.error(f"解析 node_info 失败: {e}")
 
@@ -916,6 +922,7 @@ def finish_change(op_id, username, status="90"):
         # 解析 node_info 找到"变更结束"节点的 ID
         node_info = []
         finish_step_id = 0
+        current_step_id = order.get("step_id", 0)
         try:
             node_info_str = order.get("node_info", "")
             if node_info_str:
@@ -927,6 +934,11 @@ def finish_change(op_id, username, status="90"):
                         # 更新节点描述
                         node["description"] = f"{username} 结束变更"
                         break
+
+                # 如果没有找到"变更结束"节点，使用最后一个节点
+                if finish_step_id == 0 and len(node_info) > 0:
+                    finish_step_id = len(node_info)
+                    logger.warning(f"工单 {op_id} 未找到'变更结束'节点，使用最后一个节点 ID = {finish_step_id}")
         except Exception as e:
             logger.error(f"解析 node_info 失败: {e}")
 
