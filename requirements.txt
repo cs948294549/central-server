@@ -11,4 +11,4 @@ kafka-python
 redis
 pyyaml
 tencentcloud-sdk-python
-volcengine
+volcengine-python-sdk==5.0.41
