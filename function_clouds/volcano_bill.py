@@ -24,7 +24,7 @@ def get_resource_bill(month: str, tag_key: str = "", tag_value: str = ""):
     :param month: 账单月份 yyyy-MM
     :param tag_key: 标签键，留空表示不按标签筛选
     :param tag_value: 标签值，留空表示不按标签筛选
-    :return: 账单列表
+    :return: 账单列表（包含应付金额和现金支付两种维度）
     """
     # 配置火山云客户端
     configuration = volcenginesdkcore.Configuration()
@@ -36,72 +36,82 @@ def get_resource_bill(month: str, tag_key: str = "", tag_value: str = ""):
     # 创建API实例
     api_instance = volcenginesdkbilling.BILLINGApi()
 
-    offset = 0
-    all_items = []
+    # 查询两种费用类型
+    result = {
+        'payable': [],  # 应付金额
+        'cash': []      # 现金支付
+    }
 
-    while True:
-        # 构建请求 - 使用费用分析API
-        request = volcenginesdkbilling.ListCostAnalysisOpenApiRequest(
-            begin_time_str=f"{month}-01",  # 格式: YYYY-MM-01
-            end_time_str=f"{month}-01",     # 查询单月数据
-            time_granularity=0,  # 0:账期
-            cost_type=2,  # 2:应付金额
-            classify_dimension=3,  # 3:按产品分类
-            limit=LIMIT,
-            offset=offset
-        )
+    for cost_type, key in [(2, 'payable'), (3, 'cash')]:
+        offset = 0
+        all_items = []
 
-        # 添加标签筛选
-        if tag_key and tag_value:
-            request.classify_dimension = 10  # 10:标签维度
-            request.classify_dimension_value = tag_key
+        while True:
+            # 构建请求 - 使用费用分析API
+            # CostType: 2-应付金额, 3-现金支付
+            request = volcenginesdkbilling.ListCostAnalysisOpenApiRequest(
+                begin_time_str=f"{month}-01",
+                end_time_str=f"{month}-01",
+                time_granularity=0,
+                cost_type=cost_type,
+                classify_dimension=3,  # 3:按产品分类
+                limit=LIMIT,
+                offset=offset
+            )
 
-        try:
-            # 调用API
-            response = api_instance.list_cost_analysis_open_api(request)
+            # 添加标签筛选
+            if tag_key and tag_value:
+                request.classify_dimension = 10
+                request.classify_dimension_value = tag_key
 
-            # 检查响应
-            if not response or not hasattr(response, 'cost_data'):
-                break
+            try:
+                # 调用API
+                response = api_instance.list_cost_analysis_open_api(request)
 
-            cost_data = response.cost_data if response.cost_data else []
+                # 检查响应
+                if not response or not hasattr(response, 'cost_data'):
+                    break
 
-            if not cost_data:
-                break
+                cost_data = response.cost_data if response.cost_data else []
 
-            # 将响应对象转换为字典
-            for item in cost_data:
-                costs_list = []
-                total_amount = 0
+                if not cost_data:
+                    break
 
-                # 处理 costs 数组
-                if hasattr(item, 'costs') and item.costs:
-                    for c in item.costs:
-                        amount = float(c.amount) if hasattr(c, 'amount') else 0
-                        total_amount += amount
-                        costs_list.append({
-                            'TimeStr': c.time_str if hasattr(c, 'time_str') else '',
-                            'Amount': amount
-                        })
+                # 将响应对象转换为字典
+                for item in cost_data:
+                    costs_list = []
+                    total_amount = 0
 
-                all_items.append({
-                    'ClassifyItem': item.classify_item if hasattr(item, 'classify_item') else '未知',
-                    'TotalAmount': total_amount,  # 手动计算总额
-                    'Costs': costs_list
-                })
+                    # 处理 costs 数组
+                    if hasattr(item, 'costs') and item.costs:
+                        for c in item.costs:
+                            amount = float(c.amount) if hasattr(c, 'amount') else 0
+                            total_amount += amount
+                            costs_list.append({
+                                'TimeStr': c.time_str if hasattr(c, 'time_str') else '',
+                                'Amount': amount
+                            })
 
-            # 检查是否还有更多数据
-            total = response.total if hasattr(response, 'total') else 0
-            offset += LIMIT
-            if offset >= total:
-                break
+                    all_items.append({
+                        'ClassifyItem': item.classify_item if hasattr(item, 'classify_item') else '未知',
+                        'TotalAmount': total_amount,
+                        'Costs': costs_list
+                    })
 
-        except ApiException as e:
-            raise Exception(f"火山云API异常：{e}")
-        except Exception as e:
-            raise Exception(f"火山云账单查询失败：{str(e)}")
+                # 检查是否还有更多数据
+                total = response.total if hasattr(response, 'total') else 0
+                offset += LIMIT
+                if offset >= total:
+                    break
 
-    return all_items
+            except ApiException as e:
+                raise Exception(f"火山云API异常：{e}")
+            except Exception as e:
+                raise Exception(f"火山云账单查询失败：{str(e)}")
+
+        result[key] = all_items
+
+    return result
 
 
 def analyze_volcano_bill(month: str, tag_key: str = "", tag_value: str = "", include_details: bool = False):
@@ -114,15 +124,18 @@ def analyze_volcano_bill(month: str, tag_key: str = "", tag_value: str = "", inc
     :return: 账单分析结果字典
     """
     try:
-        bill_list = get_resource_bill(month, tag_key, tag_value)
-    except NotImplementedError as e:
+        bill_data = get_resource_bill(month, tag_key, tag_value)
+    except Exception as e:
         return {
             "success": False,
             "message": str(e),
             "month": month
         }
 
-    if not bill_list:
+    payable_list = bill_data.get('payable', [])
+    cash_list = bill_data.get('cash', [])
+
+    if not payable_list and not cash_list:
         return {
             "success": False,
             "message": "未查询到账单数据",
@@ -130,26 +143,41 @@ def analyze_volcano_bill(month: str, tag_key: str = "", tag_value: str = "", inc
             "filter": {"tag_key": tag_key, "tag_value": tag_value} if tag_key else None
         }
 
-    # 统计信息（火山云费用分析API返回格式）
-    # CostData 包含 ClassifyItem（产品名）和 Costs（费用明细）
-    # 注意：第一条记录通常是"总费用"，其他是各产品明细
-    real_total_cost = 0
+    # 提取总费用（应付金额和现金支付）
+    payable_total = 0
     cash_total = 0
-    voucher_total = 0
 
-    # 按产品分类汇总
+    # 从应付金额列表中提取"总费用"
+    for item in payable_list:
+        if item.get('ClassifyItem') == '总费用':
+            payable_total = float(item.get('TotalAmount', 0))
+            break
+
+    # 从现金支付列表中提取"总费用"
+    for item in cash_list:
+        if item.get('ClassifyItem') == '总费用':
+            cash_total = float(item.get('TotalAmount', 0))
+            break
+
+    # 如果现金支付为0，说明使用了其他支付方式，设置为应付金额
+    if cash_total == 0:
+        cash_total = payable_total
+
+    # 计算退款抵扣 = 应付金额 - 现金支付
+    # 正数表示有退款，负数表示需要额外支付
+    refund_amount = payable_total - cash_total
+
+    # 按产品分类汇总（使用应付金额数据）
     product_summary = {}
-    for item in bill_list:
+    for item in payable_list:
         product_name = item.get('ClassifyItem', '未知产品')
-        # Costs 是一个数组，包含每个时间段的费用
+
+        # 跳过"总费用"
+        if product_name == '总费用':
+            continue
+
         costs = item.get('Costs', [])
         total_amount = float(item.get('TotalAmount', 0))
-
-        # 如果是"总费用"记录，提取真实总额
-        if product_name == '总费用':
-            real_total_cost = total_amount
-            cash_total = total_amount
-            continue  # 跳过"总费用"，不加入产品汇总
 
         if product_name not in product_summary:
             product_summary[product_name] = {
@@ -159,26 +187,29 @@ def analyze_volcano_bill(month: str, tag_key: str = "", tag_value: str = "", inc
                 'voucher': 0
             }
         product_summary[product_name]['cost'] += total_amount
-        product_summary[product_name]['cash'] += total_amount  # 应付金额全部记为现金
-
-    cash_total = real_total_cost  # 费用分析API返回应付金额
+        product_summary[product_name]['cash'] += total_amount
 
     # 如果没有找到"总费用"记录，则手动计算
-    if real_total_cost == 0:
-        real_total_cost = sum(v['cost'] for v in product_summary.values())
-        cash_total = real_total_cost
+    if payable_total == 0:
+        payable_total = sum(v['cost'] for v in product_summary.values())
+    if cash_total == 0:
+        cash_total = payable_total
 
     # 构建返回结果
     result = {
         "success": True,
         "month": month,
         "filter": {"tag_key": tag_key, "tag_value": tag_value} if tag_key else None,
-        "total_records": len(bill_list),
+        "total_records": len(payable_list),
         "summary": {
-            "total_cost": round(real_total_cost, 2),
+            "payable_amount": round(payable_total, 2),  # 应付金额
+            "cash_payment": round(cash_total, 2),        # 现金支付
+            "refund_deduction": round(refund_amount, 2), # 退款抵扣
+            "total_cost": round(payable_total, 2),
             "payment": {
                 "cash": round(cash_total, 2),
-                "voucher": round(voucher_total, 2)
+                "refund": round(refund_amount, 2),
+                "voucher": 0
             }
         },
         "products": {
@@ -195,8 +226,13 @@ def analyze_volcano_bill(month: str, tag_key: str = "", tag_value: str = "", inc
     # 仅在需要时添加明细
     if include_details:
         details = []
-        for item in bill_list:
+        for item in payable_list:
             product = item.get('ClassifyItem', '-')
+
+            # 跳过"总费用"
+            if product == '总费用':
+                continue
+
             costs = item.get('Costs', [])
             total_amount = float(item.get('TotalAmount', 0))
 
@@ -247,16 +283,21 @@ def format_volcano_report(result: dict) -> str:
     # 总费用
     summary = result['summary']
     lines.append("\n" + "=" * 100)
-    lines.append(f"💰 总费用: {summary['total_cost']:,.2f} 元")
+    lines.append(f"💰 费用汇总:")
+    lines.append(f"   应付金额:         {summary['payable_amount']:,.2f} 元")
+    lines.append(f"   现金支付:         {summary['cash_payment']:,.2f} 元")
+    if summary['refund_deduction'] != 0:
+        lines.append(f"   信控额度退款抵扣: {summary['refund_deduction']:,.2f} 元")
 
     # 支付方式
     payment = summary['payment']
-    lines.append(f"\n💳 支付方式:")
+    lines.append(f"\n💳 支付明细:")
     lines.append(f"   现金支付:   {payment['cash']:,.2f} 元")
+    if payment['refund'] != 0:
+        lines.append(f"   退款抵扣:   {payment['refund']:,.2f} 元")
     lines.append(f"   优惠券支付: {payment['voucher']:,.2f} 元")
     lines.append(f"   {'─' * 50}")
-    total_payment = payment['cash'] + payment['voucher']
-    lines.append(f"   合计验证:   {total_payment:,.2f} 元")
+    lines.append(f"   应付总额:   {summary['payable_amount']:,.2f} 元")
 
     # 明细（如果有）
     if "details" in result:
@@ -281,7 +322,7 @@ if __name__ == "__main__":
     import sys
 
     # 默认参数
-    query_month = "2026-08"
+    query_month = "2026-06"
     tag_key = DEFAULT_TAG_KEY
     tag_value = DEFAULT_TAG_VALUE
     show_details = False
