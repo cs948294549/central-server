@@ -1,6 +1,6 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
-from function_tools.text_diff_tool import check_diff
+from function_tools.text_diff_tool import check_diff, check_diff_simple
 from function_tools.ipprefix_tools import mergeNet
 # 创建蓝图
 tools_bp = Blueprint('tools', __name__, url_prefix='/tools')
@@ -13,7 +13,8 @@ def checkTextDiffHtml():
         text_src = data.get('src')
         text_target = data.get('target')
         flag = data.get('flag', False)
-        html_result = check_diff(text_src, text_target, flag)
+        # 使用新方法 check_diff_simple，与 config 对比保持一致
+        html_result = check_diff_simple(text_src, text_target, full_diff=flag)
         return APIResponse.success(data=html_result, message="解析成功")
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))

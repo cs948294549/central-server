@@ -425,7 +425,56 @@ td {word-break:break-all; text-align: left}
 
 
 
+def check_diff_simple(text_src, text_target, full_diff=False):
+    """
+    使用标准 difflib.HtmlDiff 生成文本对比的 HTML 结果（新方法，推荐使用）
+    :param text_src: 源文本
+    :param text_target: 目标文本
+    :param full_diff: True=完整对比, False=上下文对比（只显示变更附近的行）
+    :return: HTML字符串
+    """
+    try:
+        # 按行分割
+        src_lines = text_src.split("\n")
+        tar_lines = text_target.split("\n")
+
+        # 使用 difflib.HtmlDiff 生成标准的 HTML diff（与 config 对比保持一致）
+        hd = difflib.HtmlDiff()
+
+        if full_diff:
+            # 完整对比
+            diff = hd.make_file(src_lines, tar_lines,
+                              fromdesc='文本1（原始）', todesc='文本2（对比）',
+                              context=False)
+        else:
+            # 上下文对比，只显示变更附近的5行
+            diff = hd.make_file(src_lines, tar_lines,
+                              fromdesc='文本1（原始）', todesc='文本2（对比）',
+                              context=True, numlines=5)
+
+        # 优化样式：增加宽度、改进表格样式、移除 nowrap
+        diff = diff.replace(
+            "table.diff {font-family:Courier; border:medium;}",
+            "table.diff {font-family:Courier; border:medium; width: 100%; font-size: 13px;}"
+        ).replace(
+            "td.diff_header {text-align:right}",
+            "td.diff_header {text-align:right; width: 50px; background-color: #f5f5f5;}\n"
+            "td {word-break:break-all; text-align: left; padding: 2px 5px;}"
+        ).replace(
+            " nowrap=\"nowrap\"", ""
+        )
+
+        return diff
+
+    except Exception as e:
+        return f"<p>对比失败: {str(e)}</p>"
+
+
 def check_diff(text_src, text_target, flag):
+    """
+    生成文本对比的 HTML 结果（旧方法，保留兼容）
+    使用自定义的复杂对比逻辑
+    """
     src_lines = re.split(r"\n(?=\S)", text_src)
     src_lines_split = text_src.split("\n")
     dst_lines = re.split(r"\n(?=\S)", text_target)
