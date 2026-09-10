@@ -25,8 +25,8 @@ sys.path.insert(0, str(project_root))
 
 from tables.CollectDB import CollectDB
 from tables.ConfigDB import ConfigDB
-from function_ssh.sshClient import SSHClientFactory
-from function_snmp.snmp_collector import identify_device_vendor
+from lib_ssh.sshClient import SSHClientFactory
+from lib_snmp.snmp_collector import identify_device_vendor
 from function_collector.func_config import get_device_config
 
 logger = logging.getLogger(__name__)

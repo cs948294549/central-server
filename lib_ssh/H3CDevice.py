@@ -1,4 +1,4 @@
-from function_ssh.SSHDeviceBase import SSHDeviceBase
+from lib_ssh.SSHDeviceBase import SSHDeviceBase
 import re
 import logging
 

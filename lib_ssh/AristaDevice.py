@@ -1,17 +1,17 @@
-from function_ssh.SSHDeviceBase import SSHDeviceBase
+from lib_ssh.SSHDeviceBase import SSHDeviceBase
 import re
 import logging
 
 logger = logging.getLogger(__name__)
 
-class CiscoNXDevice(SSHDeviceBase):
+class AristaDevice(SSHDeviceBase):
     def __init__(self, host, username, password):
         init_prompt = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
 
         self.error_prompts = [
-            "at '^' marker",
+            "Invalid input",
             "Incomplete command",
-            "authorization failed"
+            "Authorization denied"
         ]
         self.next_prompts = []
 
@@ -19,11 +19,10 @@ class CiscoNXDevice(SSHDeviceBase):
 
     def _set_terminal(self):
         ret = self._send_command(f"terminal length 0")
-        ret1 = self._send_command(f"terminal width 511")
         if ret:
             prompt, detail = ret
             if prompt is False:
-                raise ValueError("{} 执行terminal length 0 失败, 回显{}".format(self.host, detail))
+                raise ValueError("{} 执行terminal length 0失败, 回显{}".format(self.host, detail))
 
     def _new_terminal(self):
         reg_init = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
@@ -59,16 +58,6 @@ class CiscoNXDevice(SSHDeviceBase):
                     else:
                         if cmd_cache.strip().endswith("]?"):
                             self.ssh_shell.sendall("\n".encode("utf-8", "ignore"))
-                        if cmd_cache.strip().endswith("yes/no]:"):
-                            if command in ["exit","end"]:
-                                self.ssh_shell.sendall("no\n".encode("utf-8", "ignore"))
-                            else:
-                                self.ssh_shell.sendall("yes\n".encode("utf-8", "ignore"))
-                        if cmd_cache.strip().endswith("Do you wish to proceed anyway? (y/n)  [n]"):
-                            if command in ["exit", "end"]:
-                                self.ssh_shell.sendall("no\n".encode("utf-8", "ignore"))
-                            else:
-                                self.ssh_shell.sendall("yes\n".encode("utf-8", "ignore"))
                 else:
                     break
             except Exception as e:

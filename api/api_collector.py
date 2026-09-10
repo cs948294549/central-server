@@ -4,7 +4,7 @@ import logging
 from function_collector.func_search import func_fulltext, get_deviceslist, get_ex_portinfo, get_lldp_list
 from function_collector.func_search import getfulltextDeviceGates_v4, getfulltextDeviceGates_v6, get_arp_list
 from function_collector.func_search import get_mac_table_by_tor, get_device_sns
-from function_snmp.snmpAgent import snmpget, snmpwalk
+from lib_snmp.snmpAgent import snmpget, snmpwalk
 from config.config import Config
 
 COMMON_COMMUNITY = Config.snmp_community

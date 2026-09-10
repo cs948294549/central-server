@@ -1,6 +1,6 @@
 import json
-from function_ssh.sshClient import run_ssh_command
-from function_snmp.snmp_collector import common_identify_vendor
+from lib_ssh.sshClient import run_ssh_command
+from lib_snmp.snmp_collector import common_identify_vendor
 from config.config import Config
 
 COMMON_COMMUNITY = Config.snmp_community

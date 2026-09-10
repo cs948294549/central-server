@@ -10,7 +10,7 @@ from services.syslog_main import SyslogService
 from services.data_main import DataService
 
 # 导入 SSH 终端相关模块
-from function_ssh.interactive_ssh import InteractiveSSHManager
+from lib_ssh.interactive_ssh import InteractiveSSHManager
 from api.websocket_ssh_bp import init_websocket_ssh, send_to_websocket
 
 

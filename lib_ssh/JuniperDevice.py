@@ -1,28 +1,20 @@
-from function_ssh.SSHDeviceBase import SSHDeviceBase
+from lib_ssh.SSHDeviceBase import SSHDeviceBase
 import re
 import logging
 
 logger = logging.getLogger(__name__)
 
-class CiscoXRDevice(SSHDeviceBase):
+class JuniperDevice(SSHDeviceBase):
     def __init__(self, host, username, password):
-        init_prompt = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
+        init_prompt = re.compile(r"(.+?)>$")
 
-        self.error_prompts = [
-            "at '^' marker",
-            "Incomplete command",
-            "authorization failed"
-        ]
+        self.error_prompts = []
         self.next_prompts = []
 
         super().__init__(host, username, password, port=22, connect_timeout=15, timeout=10, init_prompt=init_prompt)
 
     def _set_terminal(self):
-        ret = self._send_command(f"terminal length 0")
-        if ret:
-            prompt, detail = ret
-            if prompt is False:
-                raise ValueError("{} 执行terminal length 0 失败, 回显{}".format(self.host, detail))
+        pass
 
     def _new_terminal(self):
         reg_init = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
@@ -38,8 +30,13 @@ class CiscoXRDevice(SSHDeviceBase):
 
     def _send_command(self, command):
         logger.info("设备{} 配置-执行命令{}".format(self.host, command))
+        show_reg = re.compile(r"sho?w?\s+")
+        if len(show_reg.findall(command)) > 0:
+            if "no-more" not in command:
+                command += "|no-more"
+
         self.ssh_shell.sendall((command + "\n").encode('utf-8'))
-        reg_prompt = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
+        reg_prompt = re.compile(r"(?:.+?#$)|(?:.+?>$)")
         cmd_cache = ''
         while True:
             try:
@@ -51,18 +48,20 @@ class CiscoXRDevice(SSHDeviceBase):
                     if len(prompt) > 0:
                         self.current_prompt = prompt[0]
                         cmd_cache = cmd_cache.replace(self.current_prompt, "")
-                        for error_prompt in self.error_prompts:
-                            if error_prompt in cmd_cache:
-                                return False, cmd_cache.strip()
-                        return prompt[0], cmd_cache.strip()
+
+                        if "^" in cmd_cache and ("unknown command" in cmd_cache or "error" in cmd_cache):
+                            # 命令错误 Invalid input/Invalid command
+                            return False, cmd_cache.strip()
+                        if "authorization failed" in cmd_cache:
+                            # AAA受限 authorization failed
+                            return False, cmd_cache.strip()
+                        else:
+                            return prompt[0], cmd_cache
                     else:
                         if cmd_cache.strip().endswith("]?"):
                             self.ssh_shell.sendall("\n".encode("utf-8", "ignore"))
                         if cmd_cache.strip().endswith("yes/no]:"):
-                            if command in ["exit","end"]:
-                                self.ssh_shell.sendall("no\n".encode("utf-8", "ignore"))
-                            else:
-                                self.ssh_shell.sendall("yes\n".encode("utf-8", "ignore"))
+                            self.ssh_shell.sendall("yes\n".encode("utf-8", "ignore"))
                 else:
                     break
             except Exception as e:

@@ -3,8 +3,8 @@ import re
 import logging
 from tables.ConfigDB import ConfigDB
 from tables.CollectDB import CollectDB
-from function_ssh.sshClient import run_ssh_command, SSHClientFactory
-from function_snmp.snmp_collector import identify_device_vendor
+from lib_ssh.sshClient import run_ssh_command, SSHClientFactory
+from lib_snmp.snmp_collector import identify_device_vendor
 import time
 
 

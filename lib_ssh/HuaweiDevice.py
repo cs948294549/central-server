@@ -1,34 +1,40 @@
-from function_ssh.SSHDeviceBase import SSHDeviceBase
+from lib_ssh.SSHDeviceBase import SSHDeviceBase
 import re
 import logging
 
 logger = logging.getLogger(__name__)
 
-class DebianDevice(SSHDeviceBase):
+class HuaweiDevice(SSHDeviceBase):
     def __init__(self, host, username, password):
-        init_prompt = re.compile(r"(.+[$#])$")
+        init_prompt = re.compile(r"<(.+?)>$")
 
         self.error_prompts = [
             "found at '^' position",
-            "Permission denied"
-        ]
-        self.next_prompts = [
-            "[Y/N]"
+            "Error:"
         ]
 
-        super().__init__(host, username, password, port=22, connect_timeout=15, timeout=10, init_prompt=init_prompt)
+        super().__init__(host, username, password, port=22, connect_timeout=45, timeout=10, init_prompt=init_prompt)
 
     def _set_terminal(self):
-        pass
+        ret = self._send_command(f"screen-length 0 temporary")
+        if ret:
+            prompt, detail = ret
+            if prompt is False:
+                raise ValueError("{} 执行screen-length 0 temporary 失败, 回显{}".format(self.host, detail))
 
     def _new_terminal(self):
-        pass
+        status = self.init_prompt.findall(self.current_prompt)
+        while len(status) == 0:
+            logger.debug("设备{} 当前游标位置{}".format(self.host, self.current_prompt))
+            self._send_command("return")
+            status = self.init_prompt.findall(self.current_prompt)
 
 
     def _send_command(self, command):
         logger.info("设备{} 配置-执行命令{}".format(self.host, command))
         self.ssh_shell.sendall((command + "\n").encode('utf-8'))
-        reg_prompt = re.compile(r"(.+[$#])$")
+        reg_prompt = re.compile(r"(?:^(?:HRP_[MS])?<.*?>$)|(?:^(?:HRP_[MS])?\[.*?]$)")
+        reg_y_n = re.compile(r"\[Y.*/.+].?$", re.I)
         cmd_cache = ''
         while True:
             try:
@@ -45,12 +51,11 @@ class DebianDevice(SSHDeviceBase):
                                 return False, cmd_cache.strip()
                         return prompt[0], cmd_cache.strip()
                     else:
-                        for next_prompt in self.next_prompts:
-                            if next_prompt in cmd_cache:
-                                if command in ["quit", "return"]:
-                                    self.ssh_shell.sendall("n\n".encode("utf-8", "ignore"))
-                                else:
-                                    self.ssh_shell.sendall("y\n".encode("utf-8", "ignore"))
+                        if reg_y_n.findall(cmd_cache.strip()):
+                            if command in ["quit", "return"]:
+                                self.ssh_shell.sendall("n\n".encode("utf-8", "ignore"))
+                            else:
+                                self.ssh_shell.sendall("y\n".encode("utf-8", "ignore"))
                 else:
                     break
             except Exception as e:
@@ -58,6 +63,7 @@ class DebianDevice(SSHDeviceBase):
                 break
 
 if __name__ == '__main__':
-    aa = DebianDevice("47.98.235.241", username="netops", password="Chensong6^")
-    res = aa.exec_commands(["ls -lh", "pwd"])
-    print(res)
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    dev = HuaweiDevice(host="10.92.42.60", username="root", password="a#asasa")
+    print(dev.current_prompt)

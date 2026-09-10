@@ -1,4 +1,4 @@
-from function_snmp.snmp_collector import common_identify_vendor
+from lib_snmp.snmp_collector import common_identify_vendor
 import logging
 import threading
 import time
@@ -6,16 +6,16 @@ from typing import Dict, Optional, List, Any
 
 # 导入所有厂商设备类
 try:
-    from function_ssh.SSHDeviceBase import SSHDeviceBase
-    from function_ssh.H3CDevice import H3CDevice
-    from function_ssh.HuaweiDevice import HuaweiDevice
-    from function_ssh.CiscoNXDevice import CiscoNXDevice
-    from function_ssh.CiscoXRDevice import CiscoXRDevice
-    from function_ssh.JuniperDevice import JuniperDevice
-    from function_ssh.AristaDevice import AristaDevice
-    from function_ssh.RuijieDevice import RuijieDevice
-    from function_ssh.HillstoneDevice import HillStoneDevice
-    from function_ssh.DebianDevice import DebianDevice
+    from lib_ssh.SSHDeviceBase import SSHDeviceBase
+    from lib_ssh.H3CDevice import H3CDevice
+    from lib_ssh.HuaweiDevice import HuaweiDevice
+    from lib_ssh.CiscoNXDevice import CiscoNXDevice
+    from lib_ssh.CiscoXRDevice import CiscoXRDevice
+    from lib_ssh.JuniperDevice import JuniperDevice
+    from lib_ssh.AristaDevice import AristaDevice
+    from lib_ssh.RuijieDevice import RuijieDevice
+    from lib_ssh.HillstoneDevice import HillStoneDevice
+    from lib_ssh.DebianDevice import DebianDevice
 except ImportError as e:
     logging.error(f"导入厂商设备类失败: {e}")
 

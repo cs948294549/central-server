@@ -1,40 +1,45 @@
-from function_ssh.SSHDeviceBase import SSHDeviceBase
+from lib_ssh.SSHDeviceBase import SSHDeviceBase
 import re
 import logging
 
 logger = logging.getLogger(__name__)
 
-class HuaweiDevice(SSHDeviceBase):
+class CiscoXRDevice(SSHDeviceBase):
     def __init__(self, host, username, password):
-        init_prompt = re.compile(r"<(.+?)>$")
+        init_prompt = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
 
         self.error_prompts = [
-            "found at '^' position",
-            "Error:"
+            "at '^' marker",
+            "Incomplete command",
+            "authorization failed"
         ]
+        self.next_prompts = []
 
-        super().__init__(host, username, password, port=22, connect_timeout=45, timeout=10, init_prompt=init_prompt)
+        super().__init__(host, username, password, port=22, connect_timeout=15, timeout=10, init_prompt=init_prompt)
 
     def _set_terminal(self):
-        ret = self._send_command(f"screen-length 0 temporary")
+        ret = self._send_command(f"terminal length 0")
         if ret:
             prompt, detail = ret
             if prompt is False:
-                raise ValueError("{} 执行screen-length 0 temporary 失败, 回显{}".format(self.host, detail))
+                raise ValueError("{} 执行terminal length 0 失败, 回显{}".format(self.host, detail))
 
     def _new_terminal(self):
-        status = self.init_prompt.findall(self.current_prompt)
-        while len(status) == 0:
+        reg_init = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
+        reg_enable = re.compile(r"[a-zA-Z0-9_()/:.+-]+?\(config.*?\)#$")
+        status_init = reg_init.findall(self.current_prompt)
+        status_enable = reg_enable.findall(self.current_prompt)
+        while len(status_init) == 1 and len(status_enable) == 1:
             logger.debug("设备{} 当前游标位置{}".format(self.host, self.current_prompt))
-            self._send_command("return")
-            status = self.init_prompt.findall(self.current_prompt)
+            self._send_command("end")
+            status_init = reg_init.findall(self.current_prompt)
+            status_enable = reg_enable.findall(self.current_prompt)
 
 
     def _send_command(self, command):
         logger.info("设备{} 配置-执行命令{}".format(self.host, command))
         self.ssh_shell.sendall((command + "\n").encode('utf-8'))
-        reg_prompt = re.compile(r"(?:^(?:HRP_[MS])?<.*?>$)|(?:^(?:HRP_[MS])?\[.*?]$)")
-        reg_y_n = re.compile(r"\[Y.*/.+].?$", re.I)
+        reg_prompt = re.compile(r"[a-zA-Z0-9_()/:.+-]+?#$")
         cmd_cache = ''
         while True:
             try:
@@ -51,19 +56,15 @@ class HuaweiDevice(SSHDeviceBase):
                                 return False, cmd_cache.strip()
                         return prompt[0], cmd_cache.strip()
                     else:
-                        if reg_y_n.findall(cmd_cache.strip()):
-                            if command in ["quit", "return"]:
-                                self.ssh_shell.sendall("n\n".encode("utf-8", "ignore"))
+                        if cmd_cache.strip().endswith("]?"):
+                            self.ssh_shell.sendall("\n".encode("utf-8", "ignore"))
+                        if cmd_cache.strip().endswith("yes/no]:"):
+                            if command in ["exit","end"]:
+                                self.ssh_shell.sendall("no\n".encode("utf-8", "ignore"))
                             else:
-                                self.ssh_shell.sendall("y\n".encode("utf-8", "ignore"))
+                                self.ssh_shell.sendall("yes\n".encode("utf-8", "ignore"))
                 else:
                     break
             except Exception as e:
                 logger.warning("设备{} 执行失败, 执行命令 {}， 失败原因{}".format(self.host, command, str(e)))
                 break
-
-if __name__ == '__main__':
-    import logging
-    logging.basicConfig(level=logging.DEBUG)
-    dev = HuaweiDevice(host="10.92.42.60", username="root", password="a#asasa")
-    print(dev.current_prompt)

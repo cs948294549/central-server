@@ -4,7 +4,7 @@ SNMP请求封装模块
 提供统一的SNMP请求接口，简化SNMP操作的调用方式
 """
 import logging
-from function_snmp.snmpAgent import snmpget, snmpwalk
+from lib_snmp.snmpAgent import snmpget, snmpwalk
 
 logger = logging.getLogger(__name__)
 

@@ -3,8 +3,8 @@
 """
 from tables.AlterationManageDB import AlterationManageDB
 from tables.CollectDB import CollectDB
-from function_snmp.snmp_collector import identify_device_vendor
-from function_ssh.sshClient import run_ssh_command
+from lib_snmp.snmp_collector import identify_device_vendor
+from lib_ssh.sshClient import run_ssh_command
 import logging
 
 logger = logging.getLogger(__name__)
