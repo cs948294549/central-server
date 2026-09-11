@@ -12,11 +12,14 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# 先安装不常变化的大包（使用缓存，这层会被 Docker 缓存）
-RUN pip install --default-timeout=300 \
+# 复制离线包
+COPY docker/packages/ /tmp/packages/
+
+# 从本地安装大包（不再从网络下载）
+RUN pip install --no-index --find-links=/tmp/packages \
     tencentcloud-sdk-python \
     volcengine-python-sdk==5.0.41 \
-    -i https://pypi.tuna.tsinghua.edu.cn/simple/
+    && rm -rf /tmp/packages
 
 # 复制 requirements.txt
 COPY requirements.txt .
