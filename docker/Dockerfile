@@ -16,7 +16,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN pip install --default-timeout=300 \
     tencentcloud-sdk-python \
     volcengine-python-sdk \
-    -i https://mirrors.aliyun.com/pypi/simple/
+    -i https://pypi.tuna.tsinghua.edu.cn/simple/
 
 # 复制 requirements.txt
 COPY requirements.txt .
