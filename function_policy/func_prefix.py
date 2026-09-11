@@ -2,32 +2,376 @@
 地址前缀列表管理中间方法
 提供指纹计算、配置对比、统计分析等功能
 """
-from lib_config.models import PrefixListConfig
-from lib_config.fingerprint import calculate_fingerprint
+from utils.fingerprint import calculate_fingerprint
 from tables.PrefixListDB import PrefixListDB
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_prefix_list_fingerprint(entries):
+def calculate_prefix_list_fingerprint(name, entries):
     """
     计算地址前缀列表配置指纹
+    :param name: 前缀列表名称
     :param entries: 条目列表 [{"seq": 1000, "action": "permit", "prefix": "172.17.0.0/16", "ge": None, "le": None}, ...]
     :return: SHA256 指纹字符串
     """
     try:
-        # 使用 lib_config 中的 PrefixListConfig 和 calculate_fingerprint
-        config = PrefixListConfig(
-            name="temp",  # 名称不影响指纹
-            entries=entries,
-            description=None
-        )
-        fingerprint = calculate_fingerprint(config)
+        # 使用 utils 中的 calculate_fingerprint，包含 name 和 entries
+        fingerprint = calculate_fingerprint({"name": name, "entries": entries})
         return fingerprint
     except Exception as err:
         logger.error(f"计算指纹失败: {err}")
         return None
+
+
+def create_standard(data, username):
+    """
+    创建标准规则（包含指纹计算）
+    :param data: {name, entries, description, is_active}
+    :param username: 创建人
+    :return: {success: bool, data: {id, fingerprint}, message: str}
+    """
+    try:
+        # 校验必填参数
+        if "name" not in data or "entries" not in data:
+            return {"success": False, "message": "缺少必要参数: name, entries"}
+
+        # 计算指纹
+        entries_list = data["entries"].get("entries", []) if isinstance(data["entries"], dict) else data["entries"]
+        fingerprint = calculate_prefix_list_fingerprint(data["name"], entries_list)
+
+        if not fingerprint:
+            return {"success": False, "message": "计算配置指纹失败"}
+
+        # 准备数据
+        create_data = {
+            "name": data["name"],
+            "fingerprint": fingerprint,
+            "entries": {"entries": entries_list},  # 存储为统一格式
+            "description": data.get("description", ""),
+            "is_active": data.get("is_active", 1),
+            "created_by": username
+        }
+
+        db = PrefixListDB()
+        result = db.createStandard(create_data)
+
+        if result != "failed":
+            return {"success": True, "data": {"id": result, "fingerprint": fingerprint}, "message": "创建成功"}
+        else:
+            return {"success": False, "message": "创建失败，可能存在重复的规则"}
+
+    except Exception as err:
+        logger.error(f"创建标准规则失败: {err}")
+        return {"success": False, "message": f"创建失败: {str(err)}"}
+
+
+def update_standard(data, username):
+    """
+    更新标准规则（如果更新entries则重新计算指纹）
+    :param data: {id, name, entries, description, is_active}
+    :param username: 更新人
+    :return: {success: bool, message: str}
+    """
+    try:
+        if "id" not in data:
+            return {"success": False, "message": "缺少参数: id"}
+
+        # 如果更新了 entries，需要重新计算指纹
+        if "entries" in data:
+            entries_list = data["entries"].get("entries", []) if isinstance(data["entries"], dict) else data["entries"]
+
+            # 获取当前规则信息以得到 name
+            db = PrefixListDB()
+            current = db.getStandardDetail({"id": data["id"]})
+            if current == "failed":
+                return {"success": False, "message": "规则不存在"}
+
+            # 使用新的 name（如果提供）或当前的 name
+            name = data.get("name", current["name"])
+            fingerprint = calculate_prefix_list_fingerprint(name, entries_list)
+
+            if not fingerprint:
+                return {"success": False, "message": "计算配置指纹失败"}
+
+            data["fingerprint"] = fingerprint
+            data["entries"] = {"entries": entries_list}
+
+        db = PrefixListDB()
+        result = db.updateStandard(data)
+
+        if result != "failed" and result > 0:
+            return {"success": True, "message": "更新成功"}
+        else:
+            return {"success": False, "message": "更新失败，规则可能不存在"}
+
+    except Exception as err:
+        logger.error(f"更新标准规则失败: {err}")
+        return {"success": False, "message": f"更新失败: {str(err)}"}
+
+
+def delete_standard(standard_id):
+    """
+    删除标准规则
+    :param standard_id: 标准规则ID
+    :return: {success: bool, message: str}
+    """
+    try:
+        db = PrefixListDB()
+        result = db.deleteStandard({"id": standard_id})
+
+        if result != "failed" and result > 0:
+            return {"success": True, "message": "删除成功"}
+        else:
+            return {"success": False, "message": "删除失败，规则可能不存在"}
+
+    except Exception as err:
+        logger.error(f"删除标准规则失败: {err}")
+        return {"success": False, "message": f"删除失败: {str(err)}"}
+
+
+def get_standard_statistics(standard_id):
+    """
+    获取标准规则的设备应用统计
+    :param standard_id: 标准规则ID
+    :return: {success: bool, data: {total, matched, drifted, rate}, message: str}
+    """
+    try:
+        # 获取标准规则详情
+        db = PrefixListDB()
+        standard = db.getStandardDetail({"id": standard_id})
+
+        if standard == "failed":
+            return {"success": False, "message": "标准规则不存在"}
+
+        # 获取统计数据
+        statistics = get_device_statistics_for_standard(
+            standard["id"],
+            standard["name"],
+            standard["fingerprint"]
+        )
+
+        return {"success": True, "data": statistics, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取标准规则统计失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
+def get_standard_device_list(standard_id, filter_type='all'):
+    """
+    获取标准规则关联的设备列表
+    :param standard_id: 标准规则ID
+    :param filter_type: 过滤类型 'all' | 'matched' | 'drifted'
+    :return: {success: bool, data: [], message: str}
+    """
+    try:
+        # 获取标准规则详情
+        db = PrefixListDB()
+        standard = db.getStandardDetail({"id": standard_id})
+
+        if standard == "failed":
+            return {"success": False, "message": "标准规则不存在"}
+
+        # 获取设备列表
+        device_list = get_device_list_for_standard(
+            standard["name"],
+            standard["fingerprint"],
+            filter_type
+        )
+
+        return {"success": True, "data": device_list, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取标准规则设备列表失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
+def compare_record_with_standard(standard_id, device_ip, pl_name):
+    """
+    对比设备配置与标准配置
+    :param standard_id: 标准规则ID
+    :param device_ip: 设备IP
+    :param pl_name: 前缀列表名称
+    :return: {success: bool, data: {standard, device, comparison}, message: str}
+    """
+    try:
+        # 获取标准规则
+        db = PrefixListDB()
+        standard = db.getStandardDetail({"id": standard_id})
+
+        if standard == "failed":
+            return {"success": False, "message": "标准规则不存在"}
+
+        # 获取设备配置
+        records = db.getRecordsList({
+            "device_ip": device_ip,
+            "pl_name": pl_name
+        })
+
+        if records == "failed" or len(records) == 0:
+            return {"success": False, "message": "设备配置不存在"}
+
+        device_record = records[0]  # 取最新的记录
+
+        # 对比配置
+        standard_entries = standard["entries"].get("entries", []) if isinstance(standard["entries"], dict) else standard["entries"]
+        device_entries = device_record["entries"]
+
+        comparison = compare_configurations(standard_entries, device_entries)
+
+        result = {
+            "standard": {
+                "id": standard["id"],
+                "name": standard["name"],
+                "fingerprint": standard["fingerprint"],
+                "entries": standard_entries
+            },
+            "device": {
+                "ip": device_record["device_ip"],
+                "name": device_record["device_name"],
+                "vendor": device_record["vendor"],
+                "fingerprint": device_record["fingerprint"],
+                "entries": device_entries,
+                "collected_at": device_record["collected_at"]
+            },
+            "comparison": comparison
+        }
+
+        return {"success": True, "data": result, "message": "对比成功"}
+
+    except Exception as err:
+        logger.error(f"配置对比失败: {err}")
+        return {"success": False, "message": f"对比失败: {str(err)}"}
+
+
+def create_issue_record(standard_id, device_ip, device_name, device_vendor, remark, username):
+    """
+    创建问题处理记录
+    :param standard_id: 标准规则ID
+    :param device_ip: 设备IP
+    :param device_name: 设备名称（可选，用于missing类型）
+    :param device_vendor: 设备厂商（可选，用于missing类型）
+    :param remark: 备注
+    :param username: 创建人
+    :return: {success: bool, data: {id}, message: str}
+    """
+    try:
+        # 获取标准规则信息
+        db = PrefixListDB()
+        standard = db.getStandardDetail({"id": standard_id})
+
+        if standard == "failed":
+            return {"success": False, "message": "标准规则不存在"}
+
+        # 获取设备配置记录
+        records = db.getRecordsList({
+            "device_ip": device_ip,
+            "pl_name": standard["name"]
+        })
+
+        # 判断问题类型
+        if records == "failed" or len(records) == 0:
+            # 缺失配置
+            issue_type = "missing"
+            final_device_name = device_name or ""
+            final_device_vendor = device_vendor or ""
+            device_entries = []
+        else:
+            # 配置漂移
+            device_record = records[0]
+            issue_type = "drifted"
+            final_device_name = device_record["device_name"]
+            final_device_vendor = device_record["vendor"]
+            device_entries = device_record["entries"]
+
+        # 创建问题记录
+        standard_entries = standard["entries"].get("entries", []) if isinstance(standard["entries"], dict) else standard["entries"]
+
+        create_data = {
+            "standard_id": standard_id,
+            "standard_name": standard["name"],
+            "device_ip": device_ip,
+            "device_name": final_device_name,
+            "device_vendor": final_device_vendor,
+            "issue_type": issue_type,
+            "standard_entries": standard_entries,
+            "device_entries": device_entries,
+            "created_by": username,
+            "remark": remark
+        }
+
+        result = db.createIssueRecord(create_data)
+
+        if result != "failed":
+            return {"success": True, "data": {"id": result}, "message": "创建成功"}
+        else:
+            return {"success": False, "message": "创建失败"}
+
+    except Exception as err:
+        logger.error(f"创建问题处理记录失败: {err}")
+        return {"success": False, "message": f"创建失败: {str(err)}"}
+
+
+def batch_create_issues(standard_id, devices, username):
+    """
+    批量创建问题处理记录
+    :param standard_id: 标准规则ID
+    :param devices: 设备列表
+    :param username: 创建人
+    :return: {success: bool, data: {success: [], failed: []}, message: str}
+    """
+    try:
+        # 获取标准规则信息
+        db = PrefixListDB()
+        standard = db.getStandardDetail({"id": standard_id})
+
+        if standard == "failed":
+            return {"success": False, "message": "标准规则不存在"}
+
+        standard_entries = standard["entries"].get("entries", []) if isinstance(standard["entries"], dict) else standard["entries"]
+
+        # 批量创建
+        result = batch_create_issue_records(
+            standard_id,
+            standard["name"],
+            standard_entries,
+            devices,
+            username
+        )
+
+        return {
+            "success": True,
+            "data": result,
+            "message": f"创建完成，成功{len(result['success'])}条，失败{len(result['failed'])}条"
+        }
+
+    except Exception as err:
+        logger.error(f"批量创建问题处理记录失败: {err}")
+        return {"success": False, "message": f"批量创建失败: {str(err)}"}
+
+
+def update_issue_status(issue_id, update_data):
+    """
+    更新问题处理记录状态
+    :param issue_id: 问题记录ID
+    :param update_data: 更新数据 {status, change_ticket_id, processed_at, remark}
+    :return: {success: bool, message: str}
+    """
+    try:
+        update_data["id"] = issue_id
+        db = PrefixListDB()
+        result = db.updateIssueRecordStatus(update_data)
+
+        if result != "failed" and result > 0:
+            return {"success": True, "message": "更新成功"}
+        else:
+            return {"success": False, "message": "更新失败，记录可能不存在"}
+
+    except Exception as err:
+        logger.error(f"更新问题处理记录状态失败: {err}")
+        return {"success": False, "message": f"更新失败: {str(err)}"}
 
 
 def get_device_statistics_for_standard(standard_id, standard_name, standard_fingerprint):
