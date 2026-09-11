@@ -47,7 +47,7 @@ def get_standard_detail():
     try:
         data = request.json
         if not data or "id" not in data:
-            return APIResponse.bad_request(message="缺少参数: id")
+            return APIResponse.param_error(message="缺少参数: id")
 
         db = PrefixListDB()
         result = db.getStandardDetail(data)
@@ -111,7 +111,7 @@ def delete_standard_api():
         logger.info(f"{username}删除标准规则，数据: {data}")
 
         if not data or "id" not in data:
-            return APIResponse.bad_request(message="缺少参数: id")
+            return APIResponse.param_error(message="缺少参数: id")
 
         result = delete_standard(data["id"])
 
@@ -131,7 +131,7 @@ def get_standard_statistics_api():
     try:
         data = request.json
         if not data or "id" not in data:
-            return APIResponse.bad_request(message="缺少参数: id")
+            return APIResponse.param_error(message="缺少参数: id")
 
         result = get_standard_statistics(data["id"])
 
@@ -151,7 +151,7 @@ def get_standard_device_list_api():
     try:
         data = request.json
         if not data or "id" not in data:
-            return APIResponse.bad_request(message="缺少参数: id")
+            return APIResponse.param_error(message="缺少参数: id")
 
         filter_type = data.get("filter", "all")
         result = get_standard_device_list(data["id"], filter_type)
@@ -222,7 +222,7 @@ def compare_record_api():
     try:
         data = request.json
         if not data or "standard_id" not in data or "device_ip" not in data or "pl_name" not in data:
-            return APIResponse.bad_request(message="缺少参数: standard_id, device_ip, pl_name")
+            return APIResponse.param_error(message="缺少参数: standard_id, device_ip, pl_name")
 
         result = compare_record_with_standard(
             data["standard_id"],
@@ -266,7 +266,7 @@ def get_issue_detail():
     try:
         data = request.json
         if not data or "id" not in data:
-            return APIResponse.bad_request(message="缺少参数: id")
+            return APIResponse.param_error(message="缺少参数: id")
 
         db = PrefixListDB()
         result = db.getIssueRecordDetail(data)
@@ -290,7 +290,7 @@ def create_issue_record_api():
         logger.info(f"{username}创建问题处理记录，数据: {data}")
 
         if not data or "standard_id" not in data or "device_ip" not in data:
-            return APIResponse.bad_request(message="缺少参数: standard_id, device_ip")
+            return APIResponse.param_error(message="缺少参数: standard_id, device_ip")
 
         result = create_issue_record(
             data["standard_id"],
@@ -320,7 +320,7 @@ def batch_create_issue_records_api():
         logger.info(f"{username}批量创建问题处理记录，数据: {data}")
 
         if not data or "standard_id" not in data or "devices" not in data:
-            return APIResponse.bad_request(message="缺少参数: standard_id, devices")
+            return APIResponse.param_error(message="缺少参数: standard_id, devices")
 
         result = batch_create_issues(
             data["standard_id"],
@@ -347,7 +347,7 @@ def update_issue_status_api():
         logger.info(f"{username}更新问题处理记录状态，数据: {data}")
 
         if not data or "id" not in data:
-            return APIResponse.bad_request(message="缺少参数: id")
+            return APIResponse.param_error(message="缺少参数: id")
 
         issue_id = data.pop("id")
         result = update_issue_status(issue_id, data)
