@@ -15,7 +15,7 @@ ENV PYTHONUNBUFFERED=1 \
 # 先安装不常变化的大包（使用缓存，这层会被 Docker 缓存）
 RUN pip install --default-timeout=300 \
     tencentcloud-sdk-python \
-    volcengine-python-sdk \
+    volcengine-python-sdk==5.0.41 \
     -i https://pypi.tuna.tsinghua.edu.cn/simple/
 
 # 复制 requirements.txt
