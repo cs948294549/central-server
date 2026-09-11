@@ -422,11 +422,20 @@ def get_device_list_for_standard(standard_name, standard_fingerprint, filter_typ
     获取标准规则关联的设备列表
     :param standard_name: 标准规则名称
     :param standard_fingerprint: 标准指纹
-    :param filter_type: 过滤类型 'all' | 'matched' | 'drifted'
+    :param filter_type: 过滤类型 'all' | 'matched' | 'matched_other' | 'drifted'
     :return: 设备列表
     """
     try:
         db = PrefixListDB()
+
+        # 获取该名称的所有标准规则的指纹列表
+        all_standards = db.getStandardsList({"name": standard_name})
+        if all_standards == "failed":
+            other_fingerprints = []
+        else:
+            other_fingerprints = [s["fingerprint"] for s in all_standards if s["fingerprint"] != standard_fingerprint]
+
+        # 获取该名称的所有设备配置记录
         records = db.getRecordsList({"pl_name": standard_name})
 
         if records == "failed":
@@ -434,7 +443,13 @@ def get_device_list_for_standard(standard_name, standard_fingerprint, filter_typ
 
         device_list = []
         for record in records:
-            match_status = "matched" if record["fingerprint"] == standard_fingerprint else "drifted"
+            # 判断匹配状态
+            if record["fingerprint"] == standard_fingerprint:
+                match_status = "matched"
+            elif record["fingerprint"] in other_fingerprints:
+                match_status = "matched_other"
+            else:
+                match_status = "drifted"
 
             # 根据过滤类型筛选
             if filter_type == 'all' or filter_type == match_status:
