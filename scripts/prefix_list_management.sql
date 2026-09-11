@@ -9,18 +9,14 @@ CREATE TABLE IF NOT EXISTS prefix_list_standards (
     name VARCHAR(64) NOT NULL COMMENT '前缀列表名称，如 pl_global',
     fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
     entries JSON NOT NULL COMMENT '标准配置内容，包含完整的entries列表',
-    vendor_type VARCHAR(32) DEFAULT 'cisco_nx' COMMENT '厂商类型：cisco_nx, cisco_ios, cisco_xr',
     description TEXT COMMENT '规则说明',
     is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用：1-启用，0-禁用',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     created_by VARCHAR(64) COMMENT '创建人',
 
-    UNIQUE KEY uk_name_fingerprint (name, fingerprint),
-    INDEX idx_name (name),
-    INDEX idx_fingerprint (fingerprint),
-    INDEX idx_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='地址前缀列表-标准规则表';
+    UNIQUE KEY uk_name_fingerprint (name, fingerprint)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='地址前缀列表-标准规则表';
 
 -- 2. 设备实际配置表（规则记录）
 -- 用于存储从设备采集的实际地址前缀列表配置
@@ -28,19 +24,16 @@ CREATE TABLE IF NOT EXISTS prefix_list_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     device_ip VARCHAR(15) NOT NULL COMMENT '设备IP地址',
     device_name VARCHAR(128) NOT NULL COMMENT '设备名称/hostname',
-    vendor_type VARCHAR(32) NOT NULL COMMENT '厂商类型：cisco_nx, cisco_ios, cisco_xr, h3c, huawei',
+    vendor VARCHAR(32) NOT NULL COMMENT '设备厂商：cisco_nx, cisco_ios, cisco_xr, h3c, huawei',
     pl_name VARCHAR(64) NOT NULL COMMENT '前缀列表名称',
     fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
     entries JSON NOT NULL COMMENT '实际配置内容',
     collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '采集时间',
 
-    INDEX idx_device_ip (device_ip),
-    INDEX idx_device_name (device_name),
-    INDEX idx_pl_name (pl_name),
-    INDEX idx_fingerprint (fingerprint),
-    INDEX idx_collected_at (collected_at),
-    INDEX idx_device_pl (device_ip, pl_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='地址前缀列表-设备实际配置表';
+    UNIQUE KEY uk_device_pl_collected (device_ip, pl_name, collected_at),
+    INDEX idx_pl_name_fingerprint (pl_name, fingerprint),
+    INDEX idx_device_ip (device_ip)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='地址前缀列表-设备实际配置表';
 
 -- 3. 地址前缀问题处理记录表
 -- 用于记录配置漂移和缺失问题的处理流程
@@ -49,14 +42,12 @@ CREATE TABLE IF NOT EXISTS prefix_list_issue_records (
 
     -- 标准规则信息
     standard_id BIGINT NOT NULL COMMENT '标准规则ID',
-    standard_name VARCHAR(64) NOT NULL COMMENT '标准规则名称（冗余字段）',
-    standard_fingerprint CHAR(64) NOT NULL COMMENT '标准指纹',
+    standard_name VARCHAR(64) NOT NULL COMMENT '标准规则名称',
 
     -- 设备信息
     device_ip VARCHAR(15) NOT NULL COMMENT '设备IP',
     device_name VARCHAR(128) NOT NULL COMMENT '设备名称',
     device_vendor VARCHAR(32) NOT NULL COMMENT '设备厂商：cisco_nx, cisco_ios, cisco_xr, h3c, huawei',
-    device_fingerprint CHAR(64) NOT NULL COMMENT '设备当前指纹',
 
     -- 问题类型
     issue_type ENUM('drifted', 'missing') NOT NULL DEFAULT 'drifted'
@@ -73,27 +64,16 @@ CREATE TABLE IF NOT EXISTS prefix_list_issue_records (
     -- 工单信息
     change_ticket_id VARCHAR(64) DEFAULT NULL COMMENT '变更工单ID',
 
-    -- 操作人与时间
+    -- 操作信息
     created_by VARCHAR(64) DEFAULT NULL COMMENT '创建人',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     processed_at TIMESTAMP NULL DEFAULT NULL COMMENT '处理完成时间',
-
-    -- 备注
     remark TEXT DEFAULT NULL COMMENT '备注信息',
 
     -- 索引
     INDEX idx_standard_id (standard_id),
     INDEX idx_device_ip (device_ip),
-    INDEX idx_status (status),
-    INDEX idx_created_at (created_at),
-    INDEX idx_change_ticket_id (change_ticket_id),
-    INDEX idx_device_vendor (device_vendor),
-
-    -- 外键约束
-    CONSTRAINT fk_issue_standard
-        FOREIGN KEY (standard_id)
-        REFERENCES prefix_list_standards(id)
-        ON DELETE CASCADE
+    INDEX idx_status (status)
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='地址前缀问题处理记录表';
