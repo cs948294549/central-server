@@ -344,6 +344,105 @@ class PrefixListDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def addRecordsList(self, records):
+        """
+        批量添加设备配置记录
+        :param records: [{device_ip, device_name, vendor, pl_name, fingerprint, entries}, ...]
+        :return: {"success": 成功数量, "failed": 失败数量, "failed_items": [失败项]}
+        """
+        try:
+            if not records or len(records) == 0:
+                return {"success": 0, "failed": 0, "failed_items": []}
+
+            check_params = ["device_ip", "device_name", "vendor", "pl_name", "fingerprint", "entries"]
+
+            sql = """INSERT INTO prefix_list_records
+                     (device_ip, device_name, vendor, pl_name, fingerprint, entries)
+                     VALUES (%s, %s, %s, %s, %s, %s)"""
+
+            success_count = 0
+            failed_count = 0
+            failed_items = []
+
+            for record in records:
+                try:
+                    # 参数检查
+                    for param in check_params:
+                        if param not in record.keys():
+                            failed_items.append({
+                                "pl_name": record.get("pl_name", "unknown"),
+                                "reason": f"参数不足: {param}"
+                            })
+                            failed_count += 1
+                            continue
+
+                    record = waf(record)
+                    entries_json = json.dumps(record["entries"], ensure_ascii=False)
+
+                    sqlParam = (
+                        record["device_ip"],
+                        record["device_name"],
+                        record["vendor"],
+                        record["pl_name"],
+                        record["fingerprint"],
+                        entries_json
+                    )
+
+                    self.cursor.execute(sql, sqlParam)
+                    success_count += 1
+
+                except Exception as err:
+                    logger.error(f"批量插入单条记录失败: {err}")
+                    failed_items.append({
+                        "pl_name": record.get("pl_name", "unknown"),
+                        "reason": str(err)
+                    })
+                    failed_count += 1
+
+            self.conn.commit()
+
+            return {
+                "success": success_count,
+                "failed": failed_count,
+                "failed_items": failed_items
+            }
+
+        except Exception as err:
+            logger.error("======PrefixListDB addRecordsList error========\n{}".format(str(err)))
+            self.conn.rollback()
+            return {
+                "success": 0,
+                "failed": len(records) if records else 0,
+                "failed_items": [{"reason": str(err)}]
+            }
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def deleteRecordsByIP(self, device_ip):
+        """
+        删除指定设备IP的所有配置记录
+        :param device_ip: 设备IP
+        :return: True或"failed"
+        """
+        try:
+            device_ip = waf({"ip": device_ip})["ip"]
+
+            sql = "DELETE FROM prefix_list_records WHERE device_ip=%s"
+
+            self.cursor.execute(sql, (device_ip,))
+            self.conn.commit()
+
+            return True
+
+        except Exception as err:
+            logger.error("======PrefixListDB deleteRecordsByIP error========\n{}".format(str(err)))
+            self.conn.rollback()
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     # ==================== 问题处理记录表操作 ====================
 
     def getIssueRecordsList(self, data):

@@ -9,7 +9,8 @@ from function_policy.func_prefix import (
     get_device_list_for_standard,
     compare_configurations,
     group_records_by_fingerprint,
-    batch_create_issue_records
+    batch_create_issue_records,
+    collect_and_update_prefix_lists
 )
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     'get_device_list_for_standard',
     'compare_configurations',
     'group_records_by_fingerprint',
-    'batch_create_issue_records'
+    'batch_create_issue_records',
+    'collect_and_update_prefix_lists'
 ]

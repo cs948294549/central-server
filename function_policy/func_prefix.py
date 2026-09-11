@@ -4,6 +4,9 @@
 """
 from utils.fingerprint import calculate_fingerprint
 from tables.PrefixListDB import PrefixListDB
+from tables.CollectDB import CollectDB
+from function_collector.func_config import get_latest_config_by_ip
+from lib_config import get_parser
 import logging
 
 logger = logging.getLogger(__name__)
@@ -597,3 +600,108 @@ def batch_create_issue_records(standard_id, standard_name, standard_entries, dev
             "success": [],
             "failed": []
         }
+
+
+def collect_and_update_prefix_lists(ip):
+    """
+    采集指定设备的前缀列表配置并更新到数据库
+    :param ip: 设备IP地址
+    :return: {success: bool, message: str, data: {device_info, prefix_lists}}
+    """
+    try:
+        # 1. 查询设备信息，获取vendor
+        db_collect = CollectDB()
+        all_devices = db_collect.getDeviceList({"host": ip})
+
+        if not all_devices or len(all_devices) == 0:
+            return {"success": False, "message": f"未找到设备: {ip}"}
+
+        device_info = all_devices[0]
+        vendor = device_info.get("vendor")
+        device_name = device_info.get("sysname", "")
+
+        if not vendor:
+            return {"success": False, "message": f"设备 {ip} 缺少vendor信息"}
+
+        # 2. 获取最新配置
+        config_data = get_latest_config_by_ip(ip)
+        if not config_data:
+            return {"success": False, "message": f"未找到设备 {ip} 的配置"}
+
+        cfg = config_data.get("detail", "")
+        if not cfg:
+            return {"success": False, "message": f"设备 {ip} 的配置内容为空"}
+
+        # 3. 使用parser解析配置
+        parser = get_parser(vendor, cfg)
+        result = parser.parse(sections=['prefix_lists'])
+
+        prefix_lists = result.prefix_lists
+        if not prefix_lists:
+            return {"success": False, "message": f"设备 {ip} 未解析到前缀列表配置"}
+
+        # 4. 删除该IP的旧记录
+        db_prefix = PrefixListDB()
+        delete_result = db_prefix.deleteRecordsByIP(ip)
+
+        if delete_result == "failed":
+            return {"success": False, "message": f"删除设备 {ip} 旧记录失败"}
+
+        # 5. 准备批量插入数据
+        records_to_insert = []
+        failed_items = []
+
+        for pl_config in prefix_lists:
+            pl_name = pl_config.name
+            entries = [entry.to_dict() for entry in pl_config.entries]
+
+            # 计算指纹
+            fingerprint = calculate_prefix_list_fingerprint(pl_name, entries)
+            if not fingerprint:
+                failed_items.append({"pl_name": pl_name, "reason": "计算指纹失败"})
+                continue
+
+            records_to_insert.append({
+                "device_ip": ip,
+                "device_name": device_name,
+                "vendor": vendor,
+                "pl_name": pl_name,
+                "fingerprint": fingerprint,
+                "entries": entries
+            })
+
+        # 6. 批量插入数据库
+        insert_result = {"success": 0, "failed": 0, "failed_items": []}
+        if records_to_insert:
+            db_prefix_batch = PrefixListDB()
+            insert_result = db_prefix_batch.addRecordsList(records_to_insert)
+            failed_items.extend(insert_result.get("failed_items", []))
+
+        # 7. 返回结果
+        total_inserted = insert_result.get("success", 0)
+        total_failed = len(failed_items)
+        return {
+            "success": True,
+            "message": f"成功更新 {total_inserted} 个前缀列表配置",
+            "data": {
+                "device_info": {
+                    "ip": ip,
+                    "name": device_name,
+                    "vendor": vendor
+                },
+                "prefix_lists": {
+                    "total": len(prefix_lists),
+                    "inserted": total_inserted,
+                    "failed": total_failed,
+                    "failed_items": failed_items
+                }
+            }
+        }
+
+    except Exception as err:
+        logger.error(f"采集并更新前缀列表失败 [{ip}]: {err}")
+        return {
+            "success": False,
+            "message": f"采集并更新前缀列表失败: {str(err)}"
+        }
+

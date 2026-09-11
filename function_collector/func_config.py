@@ -103,7 +103,7 @@ def save_config_by_opid(ip, op_id):
     result = {"status": "failed", "message": ""}
     try:
         db_collect = CollectDB()
-        all_devices = db_collect.get_device_list()
+        all_devices = db_collect.getDeviceList({"host": ip})
 
         device = next((d for d in all_devices if d.get("ip") == ip), None)
         if not device:
