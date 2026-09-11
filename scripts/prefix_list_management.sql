@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS prefix_list_standards (
     entries JSON NOT NULL COMMENT '标准配置内容，包含完整的entries列表',
     description TEXT COMMENT '规则说明',
     is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用：1-启用，0-禁用',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    created_at VARCHAR(10) NOT NULL COMMENT '创建时间（10位时间戳）',
+    updated_at VARCHAR(10) NOT NULL COMMENT '更新时间（10位时间戳）',
     created_by VARCHAR(64) COMMENT '创建人',
 
     UNIQUE KEY uk_name_fingerprint (name, fingerprint)
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS prefix_list_records (
     pl_name VARCHAR(64) NOT NULL COMMENT '前缀列表名称',
     fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
     entries JSON NOT NULL COMMENT '实际配置内容',
-    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '采集时间',
+    collected_at VARCHAR(10) NOT NULL COMMENT '采集时间（10位时间戳）',
 
     UNIQUE KEY uk_device_pl_collected (device_ip, pl_name, collected_at),
     INDEX idx_pl_name_fingerprint (pl_name, fingerprint),
@@ -66,8 +66,8 @@ CREATE TABLE IF NOT EXISTS prefix_list_issue_records (
 
     -- 操作信息
     created_by VARCHAR(64) DEFAULT NULL COMMENT '创建人',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    processed_at TIMESTAMP NULL DEFAULT NULL COMMENT '处理完成时间',
+    created_at VARCHAR(10) NOT NULL COMMENT '创建时间（10位时间戳）',
+    processed_at VARCHAR(10) DEFAULT NULL COMMENT '处理完成时间（10位时间戳）',
     remark TEXT DEFAULT NULL COMMENT '备注信息',
 
     -- 索引

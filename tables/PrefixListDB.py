@@ -128,10 +128,11 @@ class PrefixListDB(mysqldb_netops):
             data = waf(data)
 
             sql = """INSERT INTO prefix_list_standards
-                     (name, fingerprint, entries, description, is_active, created_by)
-                     VALUES (%s, %s, %s, %s, %s, %s)"""
+                     (name, fingerprint, entries, description, is_active, created_by, created_at, updated_at)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
 
             entries_json = json.dumps(data["entries"], ensure_ascii=False)
+            timestamp = str(int(time.time()))
 
             sqlParam = (
                 data["name"],
@@ -139,7 +140,9 @@ class PrefixListDB(mysqldb_netops):
                 entries_json,
                 data.get("description", ""),
                 data.get("is_active", 1),
-                data.get("created_by", "")
+                data.get("created_by", ""),
+                timestamp,
+                timestamp
             )
 
             self.cursor.execute(sql, sqlParam)
@@ -195,6 +198,10 @@ class PrefixListDB(mysqldb_netops):
             if len(update_fields) == 0:
                 logger.error("没有需要更新的字段")
                 return "failed"
+
+            # 自动更新 updated_at
+            update_fields.append("updated_at=%s")
+            params.append(str(int(time.time())))
 
             params.append(data["id"])
 
@@ -317,10 +324,11 @@ class PrefixListDB(mysqldb_netops):
             data = waf(data)
 
             sql = """INSERT INTO prefix_list_records
-                     (device_ip, device_name, vendor, pl_name, fingerprint, entries)
-                     VALUES (%s, %s, %s, %s, %s, %s)"""
+                     (device_ip, device_name, vendor, pl_name, fingerprint, entries, collected_at)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s)"""
 
             entries_json = json.dumps(data["entries"], ensure_ascii=False)
+            collected_at = str(int(time.time()))
 
             sqlParam = (
                 data["device_ip"],
@@ -328,7 +336,8 @@ class PrefixListDB(mysqldb_netops):
                 data["vendor"],
                 data["pl_name"],
                 data["fingerprint"],
-                entries_json
+                entries_json,
+                collected_at
             )
 
             self.cursor.execute(sql, sqlParam)
@@ -357,12 +366,13 @@ class PrefixListDB(mysqldb_netops):
             check_params = ["device_ip", "device_name", "vendor", "pl_name", "fingerprint", "entries"]
 
             sql = """INSERT INTO prefix_list_records
-                     (device_ip, device_name, vendor, pl_name, fingerprint, entries)
-                     VALUES (%s, %s, %s, %s, %s, %s)"""
+                     (device_ip, device_name, vendor, pl_name, fingerprint, entries, collected_at)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s)"""
 
             success_count = 0
             failed_count = 0
             failed_items = []
+            collected_at = str(int(time.time()))
 
             for record in records:
                 try:
@@ -385,7 +395,8 @@ class PrefixListDB(mysqldb_netops):
                         record["vendor"],
                         record["pl_name"],
                         record["fingerprint"],
-                        entries_json
+                        entries_json,
+                        collected_at
                     )
 
                     self.cursor.execute(sql, sqlParam)
@@ -577,11 +588,12 @@ class PrefixListDB(mysqldb_netops):
 
             sql = """INSERT INTO prefix_list_issue_records
                      (standard_id, standard_name, device_ip, device_name, device_vendor,
-                      issue_type, standard_entries, device_entries, created_by, remark)
-                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                      issue_type, standard_entries, device_entries, created_by, remark, created_at)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
             standard_entries_json = json.dumps(data["standard_entries"], ensure_ascii=False)
             device_entries_json = json.dumps(data["device_entries"], ensure_ascii=False)
+            created_at = str(int(time.time()))
 
             sqlParam = (
                 data["standard_id"],
@@ -593,7 +605,8 @@ class PrefixListDB(mysqldb_netops):
                 standard_entries_json,
                 device_entries_json,
                 data.get("created_by", ""),
-                data.get("remark", "")
+                data.get("remark", ""),
+                created_at
             )
 
             self.cursor.execute(sql, sqlParam)
