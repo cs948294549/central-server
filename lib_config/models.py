@@ -37,7 +37,15 @@ class PrefixListEntry:
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
-        return {k: v for k, v in asdict(self).items() if v is not None}
+        result = {}
+        for k, v in asdict(self).items():
+            if v is not None:
+                # 转换枚举值为字符串
+                if isinstance(v, Enum):
+                    result[k] = v.value
+                else:
+                    result[k] = v
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'PrefixListEntry':
@@ -58,16 +66,16 @@ class PrefixListConfig:
     name: str                         # 前缀列表名称
     entries: List[PrefixListEntry]    # 条目列表
     description: Optional[str] = None
-    vendor_type: Optional[str] = None # 来源厂商
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
-        return {
+        result = {
             'name': self.name,
-            'entries': [entry.to_dict() for entry in self.entries],
-            'description': self.description,
-            'vendor_type': self.vendor_type
+            'entries': [entry.to_dict() for entry in self.entries]
         }
+        if self.description is not None:
+            result['description'] = self.description
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'PrefixListConfig':
@@ -75,8 +83,7 @@ class PrefixListConfig:
         return cls(
             name=data['name'],
             entries=[PrefixListEntry.from_dict(e) for e in data['entries']],
-            description=data.get('description'),
-            vendor_type=data.get('vendor_type')
+            description=data.get('description')
         )
 
     @property

@@ -145,7 +145,7 @@ class CollectDB(mysqldb_netops):
         try:
             if admin_status is not None:
                 sql = """
-                    SELECT i.ip, i.sysname, i.community, d.sys_type, d.sysdesc
+                    SELECT i.ip, i.sysname, i.community, d.sys_type, d.sysdesc, d.vendor
                     FROM iplist i
                     LEFT JOIN devices d ON i.ip = d.ip
                     WHERE i.admin_status = %s
@@ -154,14 +154,14 @@ class CollectDB(mysqldb_netops):
             else:
                 # 默认获取所有非屏蔽设备（admin_status <> '1'）
                 sql = """
-                    SELECT i.ip, i.sysname, i.community, d.sys_type, d.sysdesc
+                    SELECT i.ip, i.sysname, i.community, d.sys_type, d.sysdesc, d.vendor
                     FROM iplist i
                     LEFT JOIN devices d ON i.ip = d.ip
                     WHERE i.admin_status <> '1'
                 """
                 self.cursor.execute(sql)
 
-            proper = ["ip", "sysname", "community", "sys_type", "sysdesc"]
+            proper = ["ip", "sysname", "community", "sys_type", "sysdesc", "vendor"]
             result1 = self.cursor.fetchall()
             results = []
 
@@ -197,13 +197,13 @@ class CollectDB(mysqldb_netops):
             for key in searchKey["syscontact"]:
                 conditions.append("syscontact regexp'" + str(key) + "'")
 
-        sql = 'select ip,sysname,sysdesc,syscontact,uptime,hardware,features,version,timestamp from devices '
+        sql = 'select ip,sysname,sysdesc,syscontact,uptime,hardware,features,version,sys_type,vendor,timestamp from devices '
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
         sql = sql + " limit 5 "
 
         proper = ["ip", "sysname", "sysdesc", "syscontact", "uptime", "hardware", "features", "version",
-                  "timestamp"]
+                  "sys_type", "vendor", "timestamp"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -608,12 +608,12 @@ class CollectDB(mysqldb_netops):
                     condition = "sysdesc regexp '"+key+"'"
                     conditions.append(condition)
 
-        sql = 'select ip,sysname,sysdesc,syscontact,uptime,hardware,features,version,timestamp from devices '
+        sql = 'select ip,sysname,sysdesc,syscontact,uptime,hardware,features,version,sys_type,vendor,timestamp from devices '
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
 
         proper = ["ip", "sysname", "sysdesc", "syscontact", "uptime", "hardware",
-                  "features", "version", "timestamp"
+                  "features", "version", "sys_type", "vendor", "timestamp"
                   ]
         try:
             self.cursor.execute(sql)

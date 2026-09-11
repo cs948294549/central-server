@@ -1,7 +1,7 @@
 """
 Cisco 配置解析器
 
-支持解析 Cisco NX-OS / IOS 设备的策略配置
+支持解析 Cisco NX-OS / IOS / IOS-XR 设备的策略配置
 """
 
 import re
@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 @register_parser('cisco_nx')
 @register_parser('cisco_ios')
+@register_parser('cisco_xr')
 class CiscoParser(BaseParser):
-    """Cisco 设备配置解析器"""
+    """Cisco 设备配置解析器（支持 NX-OS、IOS、IOS-XR）"""
 
     def __init__(self, vendor: str, raw_cfg: str):
         super().__init__(vendor, raw_cfg)

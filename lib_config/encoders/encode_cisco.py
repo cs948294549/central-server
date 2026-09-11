@@ -1,7 +1,7 @@
 """
 Cisco 配置编码器
 
-将标准化模型转换为 Cisco NX-OS/IOS 配置文本
+将标准化模型转换为 Cisco NX-OS/IOS/IOS-XR 配置文本
 """
 
 import logging
@@ -14,11 +14,12 @@ logger = logging.getLogger(__name__)
 
 @register_encoder('cisco_nx')
 @register_encoder('cisco_ios')
+@register_encoder('cisco_xr')
 class CiscoEncoder(BaseEncoder):
     """
     Cisco 配置编码器
 
-    支持 NX-OS 和 IOS 格式
+    支持 NX-OS、IOS 和 IOS-XR 格式
     """
 
     def _init_available_sections(self) -> None:

@@ -11,7 +11,12 @@ __version__ = "0.1.0"
 
 # 自动导入所有解析器和编码器，触发注册
 from lib_config.parsers import parser_cisco  # noqa
+from lib_config.parsers import parser_h3c  # noqa
+from lib_config.parsers import parser_huawei  # noqa
+
 from lib_config.encoders import encode_cisco  # noqa
+from lib_config.encoders import encode_h3c  # noqa
+from lib_config.encoders import encode_huawei  # noqa
 
 # 导出解析器接口
 from lib_config.parsers import get_parser, get_supported_vendors as get_supported_parser_vendors  # noqa
