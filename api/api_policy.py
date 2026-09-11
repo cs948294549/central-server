@@ -67,9 +67,10 @@ def create_standard_api():
     """创建标准规则"""
     try:
         data = request.json
-        logger.info(f"{str(g.user)}创建标准规则，数据: {data}")
+        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
+        logger.info(f"{username}创建标准规则，数据: {data}")
 
-        result = create_standard(data, str(g.user))
+        result = create_standard(data, username)
 
         if result["success"]:
             return APIResponse.success(data=result.get("data"), message=result["message"])
@@ -86,9 +87,10 @@ def update_standard_api():
     """更新标准规则"""
     try:
         data = request.json
-        logger.info(f"{str(g.user)}更新标准规则，数据: {data}")
+        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
+        logger.info(f"{username}更新标准规则，数据: {data}")
 
-        result = update_standard(data, str(g.user))
+        result = update_standard(data, username)
 
         if result["success"]:
             return APIResponse.success(message=result["message"])
@@ -105,7 +107,8 @@ def delete_standard_api():
     """删除标准规则"""
     try:
         data = request.json
-        logger.info(f"{str(g.user)}删除标准规则，数据: {data}")
+        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
+        logger.info(f"{username}删除标准规则，数据: {data}")
 
         if not data or "id" not in data:
             return APIResponse.bad_request(message="缺少参数: id")
@@ -283,7 +286,8 @@ def create_issue_record_api():
     """创建问题处理记录"""
     try:
         data = request.json
-        logger.info(f"{str(g.user)}创建问题处理记录，数据: {data}")
+        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
+        logger.info(f"{username}创建问题处理记录，数据: {data}")
 
         if not data or "standard_id" not in data or "device_ip" not in data:
             return APIResponse.bad_request(message="缺少参数: standard_id, device_ip")
@@ -294,7 +298,7 @@ def create_issue_record_api():
             data.get("device_name", ""),
             data.get("device_vendor", ""),
             data.get("remark", ""),
-            str(g.user)
+            username
         )
 
         if result["success"]:
@@ -312,7 +316,8 @@ def batch_create_issue_records_api():
     """批量创建问题处理记录"""
     try:
         data = request.json
-        logger.info(f"{str(g.user)}批量创建问题处理记录，数据: {data}")
+        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
+        logger.info(f"{username}批量创建问题处理记录，数据: {data}")
 
         if not data or "standard_id" not in data or "devices" not in data:
             return APIResponse.bad_request(message="缺少参数: standard_id, devices")
@@ -320,7 +325,7 @@ def batch_create_issue_records_api():
         result = batch_create_issues(
             data["standard_id"],
             data["devices"],
-            str(g.user)
+            username
         )
 
         if result["success"]:
@@ -338,7 +343,8 @@ def update_issue_status_api():
     """更新问题处理记录状态"""
     try:
         data = request.json
-        logger.info(f"{str(g.user)}更新问题处理记录状态，数据: {data}")
+        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
+        logger.info(f"{username}更新问题处理记录状态，数据: {data}")
 
         if not data or "id" not in data:
             return APIResponse.bad_request(message="缺少参数: id")
