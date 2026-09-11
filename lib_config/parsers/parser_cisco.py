@@ -109,8 +109,7 @@ class CiscoParser(BaseParser):
             prefix_list = PrefixListConfig(
                 name=name,
                 entries=entries,
-                description=None,
-                vendor_type=self.vendor
+                description=None
             )
             prefix_lists.append(prefix_list)
 
