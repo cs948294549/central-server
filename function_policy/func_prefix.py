@@ -469,10 +469,13 @@ def get_device_list_for_standard(standard_name, standard_fingerprint, filter_typ
                 entries = record.get("entries", {})
                 if isinstance(entries, dict):
                     entry_count = len(entries.get("entries", []))
+                    entry_list = entries.get("entries", [])
                 elif isinstance(entries, list):
                     entry_count = len(entries)
+                    entry_list = entries
                 else:
                     entry_count = 0
+                    entry_list = []
 
                 device_list.append({
                     "device_ip": record["device_ip"],
@@ -480,6 +483,7 @@ def get_device_list_for_standard(standard_name, standard_fingerprint, filter_typ
                     "vendor": record["vendor"],
                     "fingerprint": record["fingerprint"],
                     "entry_count": entry_count,
+                    "entries": entry_list,
                     "match_status": match_status,
                     "collected_at": record["collected_at"]
                 })
