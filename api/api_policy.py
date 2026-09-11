@@ -377,3 +377,46 @@ def get_issues_statistics():
     except Exception as e:
         logger.error(f"获取问题处理记录统计异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
+@prefix_list_bp.route('/compare/text_diff', methods=['POST'])
+def compare_text_diff():
+    """
+    前缀列表配置文本对比接口
+    将标准配置和设备配置转换为文本格式后进行对比
+    """
+    try:
+        from function_tools.text_diff_tool import check_diff_simple
+
+        data = request.json
+        if not data or "standard_entries" not in data or "device_entries" not in data:
+            return APIResponse.param_error(message="缺少参数: standard_entries, device_entries")
+
+        standard_entries = data["standard_entries"]
+        device_entries = data["device_entries"]
+        full_diff = data.get("full_diff", False)  # 默认上下文对比
+
+        # 将entries转换为文本格式
+        def entries_to_text(entries):
+            lines = []
+            for entry in entries:
+                line_parts = [f"seq {entry.get('seq', '')}", entry.get('action', '')]
+                line_parts.append(entry.get('prefix', ''))
+                if entry.get('ge'):
+                    line_parts.append(f"ge {entry['ge']}")
+                if entry.get('le'):
+                    line_parts.append(f"le {entry['le']}")
+                lines.append(" ".join(line_parts))
+            return "\n".join(lines)
+
+        standard_text = entries_to_text(standard_entries)
+        device_text = entries_to_text(device_entries)
+
+        # 调用text_diff_tool进行对比
+        html_result = check_diff_simple(standard_text, device_text, full_diff=full_diff)
+
+        return APIResponse.success(data={"html": html_result}, message="对比成功")
+
+    except Exception as e:
+        logger.error(f"文本对比异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
