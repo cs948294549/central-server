@@ -438,11 +438,21 @@ def get_device_list_for_standard(standard_name, standard_fingerprint, filter_typ
 
             # 根据过滤类型筛选
             if filter_type == 'all' or filter_type == match_status:
+                # 计算条目数量
+                entries = record.get("entries", {})
+                if isinstance(entries, dict):
+                    entry_count = len(entries.get("entries", []))
+                elif isinstance(entries, list):
+                    entry_count = len(entries)
+                else:
+                    entry_count = 0
+
                 device_list.append({
                     "device_ip": record["device_ip"],
                     "device_name": record["device_name"],
                     "vendor": record["vendor"],
                     "fingerprint": record["fingerprint"],
+                    "entry_count": entry_count,
                     "match_status": match_status,
                     "collected_at": record["collected_at"]
                 })
