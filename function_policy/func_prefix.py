@@ -426,17 +426,17 @@ def get_device_list_for_standard(standard_name, standard_fingerprint, filter_typ
     :return: 设备列表
     """
     try:
-        db = PrefixListDB()
-
         # 获取该名称的所有标准规则的指纹列表
-        all_standards = db.getStandardsList({"name": standard_name})
+        db1 = PrefixListDB()
+        all_standards = db1.getStandardsList({"name": standard_name})
         if all_standards == "failed":
             other_fingerprints = []
         else:
             other_fingerprints = [s["fingerprint"] for s in all_standards if s["fingerprint"] != standard_fingerprint]
 
-        # 获取该名称的所有设备配置记录
-        records = db.getRecordsList({"pl_name": standard_name})
+        # 获取该名称的所有设备配置记录（使用新的数据库连接）
+        db2 = PrefixListDB()
+        records = db2.getRecordsList({"pl_name": standard_name})
 
         if records == "failed":
             return []
