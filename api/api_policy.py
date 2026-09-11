@@ -7,11 +7,9 @@ from function_policy.func_prefix import (
     delete_standard,
     get_standard_statistics,
     get_standard_device_list,
-    compare_record_with_standard,
-    create_issue_record,
     batch_create_issues,
-    update_issue_status,
-    group_records_by_fingerprint
+    group_records_by_fingerprint,
+    compare_entries_text_diff
 )
 import logging
 
@@ -38,27 +36,6 @@ def get_standards_list():
 
     except Exception as e:
         logger.error(f"查询标准规则列表异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@prefix_list_bp.route('/standards/detail', methods=['POST'])
-def get_standard_detail():
-    """获取标准规则详情"""
-    try:
-        data = request.json
-        if not data or "id" not in data:
-            return APIResponse.param_error(message="缺少参数: id")
-
-        db = PrefixListDB()
-        result = db.getStandardDetail(data)
-
-        if result != "failed":
-            return APIResponse.success(data=result, message="查询成功")
-        else:
-            return APIResponse.error(message="查询失败，规则不存在")
-
-    except Exception as e:
-        logger.error(f"查询标准规则详情异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
@@ -216,30 +193,6 @@ def get_records_grouped():
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
-@prefix_list_bp.route('/records/compare', methods=['POST'])
-def compare_record_api():
-    """对比设备配置与标准配置"""
-    try:
-        data = request.json
-        if not data or "standard_id" not in data or "device_ip" not in data or "pl_name" not in data:
-            return APIResponse.param_error(message="缺少参数: standard_id, device_ip, pl_name")
-
-        result = compare_record_with_standard(
-            data["standard_id"],
-            data["device_ip"],
-            data["pl_name"]
-        )
-
-        if result["success"]:
-            return APIResponse.success(data=result["data"], message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"配置对比异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
 # ==================== 问题处理记录接口 ====================
 
 @prefix_list_bp.route('/issues/list', methods=['POST'])
@@ -257,57 +210,6 @@ def get_issues_list():
 
     except Exception as e:
         logger.error(f"查询问题处理记录列表异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@prefix_list_bp.route('/issues/detail', methods=['POST'])
-def get_issue_detail():
-    """获取问题处理记录详情"""
-    try:
-        data = request.json
-        if not data or "id" not in data:
-            return APIResponse.param_error(message="缺少参数: id")
-
-        db = PrefixListDB()
-        result = db.getIssueRecordDetail(data)
-
-        if result != "failed":
-            return APIResponse.success(data=result, message="查询成功")
-        else:
-            return APIResponse.error(message="查询失败，记录不存在")
-
-    except Exception as e:
-        logger.error(f"查询问题处理记录详情异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@prefix_list_bp.route('/issues/create', methods=['POST'])
-def create_issue_record_api():
-    """创建问题处理记录"""
-    try:
-        data = request.json
-        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
-        logger.info(f"{username}创建问题处理记录，数据: {data}")
-
-        if not data or "standard_id" not in data or "device_ip" not in data:
-            return APIResponse.param_error(message="缺少参数: standard_id, device_ip")
-
-        result = create_issue_record(
-            data["standard_id"],
-            data["device_ip"],
-            data.get("device_name", ""),
-            data.get("device_vendor", ""),
-            data.get("remark", ""),
-            username
-        )
-
-        if result["success"]:
-            return APIResponse.success(data=result.get("data"), message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"创建问题处理记录异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
@@ -338,30 +240,6 @@ def batch_create_issue_records_api():
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
-@prefix_list_bp.route('/issues/update_status', methods=['POST'])
-def update_issue_status_api():
-    """更新问题处理记录状态"""
-    try:
-        data = request.json
-        username = g.user.get('username', 'unknown') if isinstance(g.user, dict) else str(g.user)
-        logger.info(f"{username}更新问题处理记录状态，数据: {data}")
-
-        if not data or "id" not in data:
-            return APIResponse.param_error(message="缺少参数: id")
-
-        issue_id = data.pop("id")
-        result = update_issue_status(issue_id, data)
-
-        if result["success"]:
-            return APIResponse.success(message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"更新问题处理记录状态异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
 @prefix_list_bp.route('/issues/statistics', methods=['POST'])
 def get_issues_statistics():
     """获取问题处理记录统计"""
@@ -379,43 +257,48 @@ def get_issues_statistics():
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
+@prefix_list_bp.route('/issues/delete', methods=['POST'])
+def delete_issue_record():
+    """删除问题处理记录"""
+    try:
+        data = request.json
+        if not data or "id" not in data:
+            return APIResponse.param_error(message="缺少参数: id")
+
+        issue_id = data["id"]
+        db = PrefixListDB()
+        result = db.deleteIssueRecord({"id": issue_id})
+
+        if result != "failed" and result > 0:
+            return APIResponse.success(message="删除成功")
+        else:
+            return APIResponse.error(message="删除失败，记录可能不存在")
+
+    except Exception as e:
+        logger.error(f"删除问题处理记录异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
 @prefix_list_bp.route('/compare/text_diff', methods=['POST'])
 def compare_text_diff():
     """
     前缀列表配置文本对比接口
-    将标准配置和设备配置转换为文本格式后进行对比
     """
     try:
-        from function_tools.text_diff_tool import check_diff_simple
-
         data = request.json
-        if not data or "standard_entries" not in data or "device_entries" not in data:
-            return APIResponse.param_error(message="缺少参数: standard_entries, device_entries")
+        if not data or "src_entries" not in data or "target_entries" not in data:
+            return APIResponse.param_error(message="缺少参数: src_entries, target_entries")
 
-        standard_entries = data["standard_entries"]
-        device_entries = data["device_entries"]
-        full_diff = data.get("full_diff", False)  # 默认上下文对比
+        src_entries = data["src_entries"]
+        target_entries = data["target_entries"]
+        full_diff = data.get("full_diff", False)
 
-        # 将entries转换为文本格式
-        def entries_to_text(entries):
-            lines = []
-            for entry in entries:
-                line_parts = [f"seq {entry.get('seq', '')}", entry.get('action', '')]
-                line_parts.append(entry.get('prefix', ''))
-                if entry.get('ge'):
-                    line_parts.append(f"ge {entry['ge']}")
-                if entry.get('le'):
-                    line_parts.append(f"le {entry['le']}")
-                lines.append(" ".join(line_parts))
-            return "\n".join(lines)
+        result = compare_entries_text_diff(src_entries, target_entries, full_diff)
 
-        standard_text = entries_to_text(standard_entries)
-        device_text = entries_to_text(device_entries)
-
-        # 调用text_diff_tool进行对比
-        html_result = check_diff_simple(standard_text, device_text, full_diff=full_diff)
-
-        return APIResponse.success(data={"html": html_result}, message="对比成功")
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
+        else:
+            return APIResponse.error(message=result["message"])
 
     except Exception as e:
         logger.error(f"文本对比异常: {e}")

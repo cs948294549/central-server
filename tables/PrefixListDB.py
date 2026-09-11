@@ -713,3 +713,30 @@ class PrefixListDB(mysqldb_netops):
         finally:
             self.cursor.close()
             self.conn.close()
+
+    def deleteIssueRecord(self, data):
+        """
+        删除问题处理记录
+        :param data: {id}
+        :return: affected rows或"failed"
+        """
+        try:
+            if "id" not in data.keys():
+                logger.error("参数不足: id")
+                return "failed"
+
+            data = waf(data)
+
+            sql = "DELETE FROM prefix_list_issue_records WHERE id=%s"
+            self.cursor.execute(sql, (data["id"],))
+            self.conn.commit()
+
+            return self.cursor.rowcount
+
+        except Exception as err:
+            logger.error("======PrefixListDB deleteIssueRecord error========\n{}".format(str(err)))
+            self.conn.rollback()
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()

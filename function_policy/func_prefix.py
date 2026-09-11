@@ -6,6 +6,7 @@ from utils.fingerprint import calculate_fingerprint
 from tables.PrefixListDB import PrefixListDB
 from tables.CollectDB import CollectDB
 from function_collector.func_config import get_latest_config_by_ip
+from function_tools.text_diff_tool import check_diff_simple
 from lib_config import get_parser
 import logging
 
@@ -745,4 +746,47 @@ def collect_and_update_prefix_lists(ip):
             "success": False,
             "message": f"采集并更新前缀列表失败: {str(err)}"
         }
+
+
+def compare_entries_text_diff(src_entries, target_entries, full_diff=False):
+    """
+    对比两组配置条目并生成HTML格式的文本差异
+    :param src_entries: 源配置条目列表（显示在左侧）
+    :param target_entries: 目标配置条目列表（显示在右侧）
+    :param full_diff: True=完整对比, False=上下文对比
+    :return: {"success": bool, "data": {"html": str}, "message": str}
+    """
+    try:
+        # 将entries转换为文本格式
+        def entries_to_text(entries):
+            lines = []
+            for entry in entries:
+                line_parts = [f"seq {entry.get('seq', '')}", entry.get('action', '')]
+                line_parts.append(entry.get('prefix', ''))
+                if entry.get('ge'):
+                    line_parts.append(f"ge {entry['ge']}")
+                if entry.get('le'):
+                    line_parts.append(f"le {entry['le']}")
+                lines.append(" ".join(line_parts))
+            return "\n".join(lines)
+
+        src_text = entries_to_text(src_entries)
+        target_text = entries_to_text(target_entries)
+
+        # 调用text_diff_tool进行对比
+        html_result = check_diff_simple(src_text, target_text, full_diff=full_diff)
+
+        return {
+            "success": True,
+            "data": {"html": html_result},
+            "message": "对比成功"
+        }
+
+    except Exception as err:
+        logger.error(f"文本对比失败: {err}")
+        return {
+            "success": False,
+            "message": f"文本对比失败: {str(err)}"
+        }
+
 
