@@ -383,23 +383,34 @@ def get_device_statistics_for_standard(standard_id, standard_name, standard_fing
     :param standard_id: 标准规则ID
     :param standard_name: 标准规则名称（用于查询 records 表的 pl_name）
     :param standard_fingerprint: 标准指纹
-    :return: {total, matched, drifted, rate}
+    :return: {total, matched, matched_other, drifted, rate}
     """
     try:
+        # 获取该名称的所有标准规则的指纹列表
+        db1 = PrefixListDB()
+        all_standards = db1.getStandardsList({"name": standard_name})
+        if all_standards == "failed":
+            other_fingerprints = []
+        else:
+            other_fingerprints = [s["fingerprint"] for s in all_standards if s["fingerprint"] != standard_fingerprint]
+
         # 查询该前缀列表名称的所有设备记录
-        db = PrefixListDB()
-        records = db.getRecordsList({"pl_name": standard_name})
+        db2 = PrefixListDB()
+        records = db2.getRecordsList({"pl_name": standard_name})
 
         if records == "failed":
-            return {"total": 0, "matched": 0, "drifted": 0, "rate": 0}
+            return {"total": 0, "matched": 0, "matched_other": 0, "drifted": 0, "rate": 0}
 
         total = len(records)
         matched = 0
+        matched_other = 0
         drifted = 0
 
         for record in records:
             if record["fingerprint"] == standard_fingerprint:
                 matched += 1
+            elif record["fingerprint"] in other_fingerprints:
+                matched_other += 1
             else:
                 drifted += 1
 
@@ -408,13 +419,14 @@ def get_device_statistics_for_standard(standard_id, standard_name, standard_fing
         return {
             "total": total,
             "matched": matched,
+            "matched_other": matched_other,
             "drifted": drifted,
             "rate": rate
         }
 
     except Exception as err:
         logger.error(f"获取设备统计失败: {err}")
-        return {"total": 0, "matched": 0, "drifted": 0, "rate": 0}
+        return {"total": 0, "matched": 0, "matched_other": 0, "drifted": 0, "rate": 0}
 
 
 def get_device_list_for_standard(standard_name, standard_fingerprint, filter_type='all'):
