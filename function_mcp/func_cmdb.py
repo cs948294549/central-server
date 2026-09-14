@@ -52,7 +52,6 @@ def search_device_list(sysname, sysdesc_reg=None):
             "data": []
         }, ensure_ascii=False)
 
-
 def query_cloud_bill(cloud_provider, month, tag_key="24H 网络带宽", tag_value="24H 网络带宽", include_details=False):
     """
     查询云平台账单

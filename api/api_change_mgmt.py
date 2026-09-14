@@ -85,7 +85,7 @@ def check_order_executable(op_id, username):
     # 权限检查：只有创建人或指定变更人可以执行
     creator = order_detail.get('username', '')
     assigner = order_detail.get('assigner', '')
-    if username != creator and username != assigner:
+    if assigner != "all" and username != creator and username != assigner:
         logger.warning(f"安全拦截: {username}尝试执行工单{op_id}，创建人={creator}，指定执行人={assigner}")
         return False, APIResponse.error(message=f"无权限执行，仅创建人({creator})和指定变更人({assigner})可执行")
 
@@ -166,7 +166,7 @@ def check_order_changeable(op_id, username):
     # 权限检查：只有创建人或指定执行人可以操作变更
     creator = order_detail.get('username', '')
     assigner = order_detail.get('assigner', '')
-    if username != creator and username != assigner:
+    if assigner != "all" and username != creator and username != assigner:
         logger.warning(f"安全拦截: {username}尝试操作变更工单{op_id}，创建人={creator}，指定执行人={assigner}")
         return False, APIResponse.error(message=f"无权限操作，仅创建人({creator})和指定执行人({assigner})可操作变更")
 

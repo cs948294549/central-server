@@ -563,69 +563,6 @@ def approve_order(op_id, username, approve_status, comment=''):
         logger.error(f"审批工单失败: {e}")
         return {"code": 500, "msg": f"审批失败: {str(e)}"}
 
-
-def start_change(op_id, username):
-    """
-    开始变更
-
-    Args:
-        op_id: 工单ID
-        username: 操作人
-
-    Returns:
-        dict: {"code": 0/500, "msg": "消息"}
-    """
-    try:
-        db = AlterationManageDB()
-        result = db.update_op_order(op_id, {"status": "21"})
-
-        if result == "success":
-            # 记录日志
-            log_manage.add_op_log(op_id, "07", username, "开始变更")
-
-            # TODO: 发送通知
-
-            return {"code": 0, "msg": "变更已开始"}
-        else:
-            return {"code": 500, "msg": "操作失败"}
-
-    except Exception as e:
-        logger.error(f"开始变更失败: {e}")
-        return {"code": 500, "msg": f"操作失败: {str(e)}"}
-
-
-def end_change(op_id, username, final_status):
-    """
-    结束变更
-
-    Args:
-        op_id: 工单ID
-        username: 操作人
-        final_status: 最终状态 "90"=成功, "91"=失败
-
-    Returns:
-        dict: {"code": 0/500, "msg": "消息"}
-    """
-    try:
-        db = AlterationManageDB()
-        result = db.update_op_order(op_id, {"status": final_status})
-
-        if result == "success":
-            # 记录日志
-            status_text = "变更完成" if final_status == "90" else "变更失败"
-            log_manage.add_op_log(op_id, "08", username, f"结束变更 - {status_text}")
-
-            # TODO: 发送通知
-
-            return {"code": 0, "msg": f"变更已结束 - {status_text}"}
-        else:
-            return {"code": 500, "msg": "操作失败"}
-
-    except Exception as e:
-        logger.error(f"结束变更失败: {e}")
-        return {"code": 500, "msg": f"操作失败: {str(e)}"}
-
-
 def cancel_change(op_id, username):
     """
     取消变更
@@ -804,12 +741,6 @@ def start_change(op_id, username):
         if not order:
             return {"code": 500, "msg": "工单不存在"}
 
-        # 权限检查：只有创建人或指定执行人可以开始变更
-        creator = order.get("username", "")
-        assigner = order.get("assigner", "")
-        if username != creator and username != assigner:
-            return {"code": 403, "msg": "无权限操作，仅创建人和指定执行人可以开始变更"}
-
         # 检查工单状态是否允许开始变更
         if order.get("status") not in ["20"]:
             return {"code": 500, "msg": f"工单当前状态({order.get('status')})不允许开始变更"}
@@ -902,12 +833,6 @@ def finish_change(op_id, username, status="90"):
 
         if not order:
             return {"code": 500, "msg": "工单不存在"}
-
-        # 权限检查：只有创建人或指定执行人可以结束变更
-        creator = order.get("username", "")
-        assigner = order.get("assigner", "")
-        if username != creator and username != assigner:
-            return {"code": 403, "msg": "无权限操作，仅创建人和指定执行人可以结束变更"}
 
         # 检查工单状态是否允许结束变更
         if order.get("status") not in ["21"]:
