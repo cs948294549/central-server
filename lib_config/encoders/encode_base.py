@@ -58,18 +58,19 @@ class BaseEncoder(ABC):
 
         return [s for s in sections if s in self.available_sections]
 
-    def encode(self, data: Dict[str, Any], sections: Optional[List[str]] = None) -> str:
+    def encode(self, data: Dict[str, Any], sections: Optional[List[str]] = None, operation: str = 'add') -> str:
         """
         主编码入口
 
         Args:
             data: 配置数据字典，格式: {'prefix_lists': [...], ...}
             sections: 要编码的配置项列表，None 表示全部
+            operation: 操作类型，'add' 表示添加配置，'delete' 表示删除配置
 
         Returns:
             str: 生成的配置文本
         """
-        logger.debug(f"[{self.vendor}] 开始编码配置")
+        logger.debug(f"[{self.vendor}] 开始编码配置，操作类型: {operation}")
 
         # 验证配置项
         target_sections = self._validate_sections(sections)
@@ -85,14 +86,15 @@ class BaseEncoder(ABC):
             encode_method = self._get_encode_method(section)
             if encode_method and section in data:
                 try:
-                    logger.debug(f"[{self.vendor}] 编码 {section}")
+                    logger.debug(f"[{self.vendor}] 编码 {section}, 操作: {operation}")
                     # 从字典重建模型对象
                     models = self._dict_to_models(section, data[section])
                     if models:
-                        section_config = encode_method(models)
+                        # 将operation参数传递给具体的编码方法
+                        section_config = encode_method(models, operation=operation)
                         if section_config:
                             config_lines.append(section_config)
-                            logger.info(f"[{self.vendor}] 已编码配置项: {section} ({len(models)} 条)")
+                            logger.info(f"[{self.vendor}] 已编码配置项: {section} ({len(models)} 条, {operation})")
                 except Exception as e:
                     logger.error(f"[{self.vendor}] 编码 {section} 失败: {e}", exc_info=True)
             else:

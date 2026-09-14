@@ -9,7 +9,8 @@ from function_policy.func_prefix import (
     get_standard_device_list,
     batch_create_issues,
     group_records_by_fingerprint,
-    compare_entries_text_diff
+    compare_entries_text_diff,
+    create_prefix_list_change_order
 )
 import logging
 
@@ -302,4 +303,34 @@ def compare_text_diff():
 
     except Exception as e:
         logger.error(f"文本对比异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
+@prefix_list_bp.route('/change_order/create', methods=['POST'])
+def create_change_order():
+    """
+    根据问题处理记录创建变更工单
+    """
+    try:
+        data = request.json
+        username = g.user.get("username")
+
+        if not data or "issue_ids" not in data:
+            return APIResponse.param_error(message="缺少参数: issue_ids")
+
+        issue_ids = data["issue_ids"]
+        if not isinstance(issue_ids, list) or len(issue_ids) == 0:
+            return APIResponse.param_error(message="issue_ids必须是非空数组")
+
+        logger.info(f"{username}创建前缀列表变更工单，问题记录ID: {issue_ids}")
+
+        result = create_prefix_list_change_order(issue_ids, username)
+
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
+        else:
+            return APIResponse.error(message=result["message"])
+
+    except Exception as e:
+        logger.error(f"创建变更工单异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")

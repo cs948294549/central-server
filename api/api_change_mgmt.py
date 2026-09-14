@@ -1126,3 +1126,59 @@ def get_approval_list():
     except Exception as e:
         logger.error(f"获取审批记录失败: {e}")
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@change_mgmt_bp.route('/order/create_with_devices', methods=['POST'])
+def create_order_with_devices_api():
+    """
+    创建工单并添加设备配置（通用接口）
+
+    请求参数：
+    {
+        "order_data": {
+            "title": "工单标题",
+            "descrip": "工单描述",
+            "op_type": "变更类型ID（必需）",
+            "assigner": "指定执行人（可选）",
+            "is_auto": 0/1（可选）,
+            "popo": "popo群ID（可选）",
+            "begin_time": "计划开始时间（可选）",
+            "finish_time": "计划结束时间（可选）"
+        },
+        "devices_data": [
+            {
+                "ip": "设备IP",
+                "batch": 批次（可选，默认1）,
+                "cmd_exec": "执行命令",
+                "cmd_roll": "回滚命令",
+                "tag": "标签（可选）",
+                "is_auto": 0/1（可选）
+            }
+        ]
+    }
+    """
+    try:
+        data = request.json
+        username = g.user.get("username")
+
+        if not data or "order_data" not in data or "devices_data" not in data:
+            return APIResponse.param_error(message="缺少参数: order_data, devices_data")
+
+        order_data = data["order_data"]
+        devices_data = data["devices_data"]
+
+        if not isinstance(devices_data, list) or len(devices_data) == 0:
+            return APIResponse.param_error(message="devices_data必须是非空数组")
+
+        logger.info(f"{username}创建工单，设备数量: {len(devices_data)}")
+
+        result = order_manage.create_order_with_devices(order_data, devices_data, username)
+
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
+        else:
+            return APIResponse.error(message=result["message"])
+
+    except Exception as e:
+        logger.error(f"创建工单失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")

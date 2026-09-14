@@ -982,4 +982,203 @@ def finish_change(op_id, username, status="90"):
         logger.error(f"结束变更失败: {e}", exc_info=True)
         return {"code": 500, "msg": f"结束变更失败: {str(e)}"}
 
-        return {"code": 500, "msg": f"操作失败: {str(e)}"}
+
+def create_order_with_devices(order_data, devices_data, username):
+    """
+    创建工单并添加设备配置（通用方法）
+
+    Args:
+        order_data: 工单基本信息 {
+            "title": "工单标题",
+            "descrip": "工单描述",
+            "op_type": "变更类型ID",
+            "op_group": "变更组ID（可选）",
+            "assigner": "指定执行人（可选）",
+            "is_auto": 0/1（可选）,
+            "popo": "popo群ID（可选）",
+            "begin_time": "计划开始时间（可选）",
+            "finish_time": "计划结束时间（可选）"
+        }
+        devices_data: 设备配置列表 [
+            {
+                "ip": "设备IP",
+                "batch": 批次（可选，默认1）,
+                "cmd_exec": "执行命令",
+                "cmd_roll": "回滚命令",
+                "tag": "标签（可选）",
+                "is_auto": 0/1（可选）
+            }
+        ]
+        username: 创建人
+
+    Returns:
+        dict: {
+            "success": bool,
+            "data": {"op_id": str, "device_count": int, "failed_devices": [], "not_found_ips": []},
+            "message": str
+        }
+    """
+    op_id = None
+    try:
+        from tables.CollectDB import CollectDB
+
+        # 1. 先验证所有设备是否存在于设备库
+        not_found_ips = []
+        device_info_map = {}
+
+        for device in devices_data:
+            ip = device.get("ip")
+            if not ip:
+                continue
+
+            # 从设备库查询设备信息
+            collect_db = CollectDB()
+            device_list = collect_db.getDeviceList({"host": ip})
+
+            if not device_list or device_list == "failed" or len(device_list) == 0:
+                not_found_ips.append(ip)
+                logger.warning(f"设备 {ip} 在设备库中不存在")
+            else:
+                device_info = device_list[0]
+                device_info_map[ip] = {
+                    "sysname": device_info.get("sysname", ""),
+                    "model": device_info.get("hardware", ""),
+                    "asset_no": ""
+                }
+
+        # 如果有设备不存在，直接返回错误，不创建工单
+        if not_found_ips:
+            return {
+                "success": False,
+                "message": f"以下设备在设备库中不存在: {', '.join(not_found_ips)}",
+                "data": {"not_found_ips": not_found_ips}
+            }
+
+        # 2. 验证op_type是否存在
+        if not order_data.get("op_type"):
+            return {
+                "success": False,
+                "message": "缺少必需参数: op_type"
+            }
+
+        type_db = AlterationManageDB()
+        type_list = type_db.get_op_type_list({"pid": order_data.get("op_type")})
+        if not type_list or type_list == "failed" or len(type_list) == 0:
+            return {
+                "success": False,
+                "message": f"工单类型 {order_data.get('op_type')} 不存在"
+            }
+
+        # 3. 设置默认时间（当前时间和1天后）
+        current_time = int(time.time())
+        one_day_later = current_time + 86400  # 24小时
+
+        # 4. 创建工单
+        order_info = {
+            "title": order_data.get("title", "变更工单"),
+            "descrip": order_data.get("descrip", ""),
+            "op_type": order_data.get("op_type"),
+            "assigner": order_data.get("assigner", ""),
+            "is_auto": order_data.get("is_auto", 0),
+            "popo": order_data.get("popo", ""),
+            "begin_time": order_data.get("begin_time", str(current_time)),
+            "finish_time": order_data.get("finish_time", str(one_day_later)),
+            "username": username,
+            "status": "00"  # 草稿状态
+        }
+
+        db = AlterationManageDB()
+        op_id = db.add_op_order(order_info)
+
+        if op_id == "failed":
+            return {"success": False, "message": "创建工单失败"}
+
+        logger.info(f"创建工单成功，op_id: {op_id}")
+
+        # 记录日志
+        log_manage.add_op_log(op_id, "01", username, "创建工单")
+
+        # 3. 添加设备配置
+        device_count = 0
+        failed_devices = []
+
+        for device in devices_data:
+            try:
+                ip = device.get("ip")
+                dev_info = device_info_map.get(ip)
+
+                if not dev_info:
+                    continue
+
+                device_data = {
+                    "op_id": op_id,
+                    "batch": device.get("batch", 1),
+                    "ip": ip,
+                    "sysname": dev_info.get("sysname", ""),
+                    "model": dev_info.get("model", ""),
+                    "asset_no": dev_info.get("asset_no", ""),
+                    "status": "00",
+                    "cmd_exec": device.get("cmd_exec", ""),
+                    "cmd_roll": device.get("cmd_roll", ""),
+                    "tag": device.get("tag", ""),
+                    "is_auto": device.get("is_auto", 0)
+                }
+
+                dev_db = AlterationManageDB()
+                dev_id = dev_db.add_op_device(device_data)
+
+                if dev_id != "failed":
+                    device_count += 1
+                    logger.info(f"设备 {ip} 添加到工单 {op_id}")
+                else:
+                    failed_devices.append(ip)
+                    logger.error(f"设备 {ip} 添加到工单失败")
+
+            except Exception as e:
+                logger.error(f"处理设备 {device.get('ip')} 失败: {e}")
+                failed_devices.append(device.get("ip"))
+
+        # 4. 如果所有设备添加失败，删除工单
+        if device_count == 0:
+            logger.error(f"工单 {op_id} 所有设备添加失败，删除工单")
+            delete_order(op_id)
+            return {
+                "success": False,
+                "message": "所有设备添加失败，工单已删除",
+                "data": {"failed_devices": failed_devices}
+            }
+
+        # 5. 返回结果
+        message = f"工单创建成功，已添加 {device_count} 台设备"
+        if failed_devices:
+            message += f"，{len(failed_devices)} 台设备失败"
+
+        # 6. 自动提交工单
+        submit_result = submit_order(op_id, username)
+        if submit_result.get("code") == 0:
+            message += "，工单已提交"
+        else:
+            message += f"，工单提交失败: {submit_result.get('msg', '未知错误')}"
+            logger.warning(f"工单 {op_id} 提交失败: {submit_result.get('msg')}")
+
+        return {
+            "success": True,
+            "data": {
+                "op_id": op_id,
+                "device_count": device_count,
+                "failed_devices": failed_devices,
+                "submitted": submit_result.get("code") == 0
+            },
+            "message": message
+        }
+
+    except Exception as e:
+        logger.error(f"创建工单失败: {e}")
+        # 如果已创建工单，删除它
+        if op_id and op_id != "failed":
+            logger.error(f"异常发生，删除已创建的工单 {op_id}")
+            delete_order(op_id)
+        return {
+            "success": False,
+            "message": f"创建工单失败: {str(e)}"
+        }

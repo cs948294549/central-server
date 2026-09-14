@@ -23,15 +23,18 @@ class H3CEncoder(BaseEncoder):
         # H3C 设备暂无地址前缀列表需求
         self.available_sections = set()
 
-    def encode_prefix_lists(self, prefix_lists: List[PrefixListConfig]) -> str:
+    def encode_prefix_lists(self, prefix_lists: List[PrefixListConfig], operation: str = 'add') -> str:
         """
         编码地址前缀列表为 H3C 配置
 
         H3C 格式:
         ip ip-prefix <name> index <num> <action> <prefix> <masklen> [greater-equal <num>] [less-equal <num>]
+        删除格式:
+        undo ip ip-prefix <name> index <num>
 
         Args:
             prefix_lists: 前缀列表模型列表
+            operation: 操作类型，'add' 表示添加配置，'delete' 表示删除配置
 
         Returns:
             str: H3C 配置文本
