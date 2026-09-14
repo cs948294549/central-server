@@ -26,11 +26,11 @@ def _search_user_dn(username: str):
             search_base=Config.ldap_base_dn,
             search_filter=search_filter,
             search_scope=SUBTREE,
-            attributes=["distinguishedName"]
+            attributes=["*"]
         )
         if len(conn.entries) == 0:
             return None
-        return conn.entries[0].entry_dn
+        return conn.entries[0]
     finally:
         conn.unbind()
 
@@ -53,6 +53,7 @@ def authenticate_ldap_user(username: str, password: str) -> bool:
 
     try:
         user_dn = _search_user_dn(username)
+        print(user_dn)
     except Exception as e:
         logger.error(f"LDAP 用户搜索失败: 用户 {username}, 原因: {str(e)}")
         return False

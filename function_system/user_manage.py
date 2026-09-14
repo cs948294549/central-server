@@ -152,46 +152,66 @@ def authenticate_user(username: str, secret: str, timestamp: int, auth_type: str
         return {"status": "failed", "data": None, "message": "认证失败, timestamp超时"}
     db = UsersDB()
     user_infos = db.getUser({"username": username})
-    if len(user_infos) == 0:
-        return {"status": "failed", "data":None, "message": "用户不存在"}
-    else:
-        if len(user_infos) == 1:
-            user_info = user_infos[0]
-            if auth_type == "ldap":
-                # LDAP 认证：secret 为前端 AES 加密后的明文密码，需先解密再向 LDAP 发起 bind 校验
-                try:
-                    plain_password = decrypt_aes_payload(secret, Config.aes_secret)
-                except Exception as e:
-                    logger.error(f"LDAP密码解密失败: {str(e)}")
-                    return {"status": "failed", "data": None, "message": "认证失败"}
 
-                if not authenticate_ldap_user(username, plain_password):
-                    return {"status": "failed", "data": None, "message": "认证失败"}
-            else:
-                sign_content = user_info["username"] + user_info["identify"] + "netops" + str(timestamp)
-                sign = md5(sign_content.encode("utf-8")).hexdigest()
-                if sign != secret:
-                    return {"status": "failed", "data": None, "message": "认证失败"}
+    if auth_type == "ldap":
+        # LDAP 认证：secret 为前端 AES 加密后的明文密码，需先解密再向 LDAP 发起 bind 校验
+        try:
+            plain_password = decrypt_aes_payload(secret, Config.aes_secret)
+        except Exception as e:
+            logger.error(f"LDAP密码解密失败: {str(e)}")
+            return {"status": "failed", "data": None, "message": "认证失败"}
 
-            # sign 直接沿用请求携带的 secret（本地哈希或 LDAP 密文均可），仅作为后续请求签名的凭据
-            token = create_access_token(data={"username": username, 'rid': user_info["rid"], 'sign': secret})
-            del user_info["identify"]
-            try:
-                db_user = UsersDB()
-                db_user.updateUser({"username": username, "last_login": int(time.time())})
-            except Exception as e:
-                logger.error("更新last_login失败,原因{}".format(str(e)))
-            return {
-                "status": "success",
-                "data": {
-                    "user_info": user_info,
-                    "token":token,
-                },
-                "message": "认证成功"
-            }
+        if not authenticate_ldap_user(username, plain_password):
+            return {"status": "failed", "data": None, "message": "认证失败"}
 
-        else:
+        if len(user_infos) == 0:
+            # LDAP 认证通过但本地无该用户，自动创建，默认分组为 default
+            db_add = UsersDB()
+            add_ret = db_add.addUser({
+                "username": username,
+                "identify": "",
+                "subname": username,
+                "phone": "",
+                "mail": "",
+                "rid": "default"
+            })
+            if add_ret == "failed":
+                logger.error(f"LDAP自动创建用户失败: {username}")
+                return {"status": "failed", "data": None, "message": "认证失败"}
+            user_infos = db.getUser({"username": username})
+
+        if len(user_infos) != 1:
             return {"status": "failed", "data": None, "message": "用户冲突"}
+
+        user_info = user_infos[0]
+    else:
+        if len(user_infos) == 0:
+            return {"status": "failed", "data": None, "message": "用户不存在"}
+        if len(user_infos) != 1:
+            return {"status": "failed", "data": None, "message": "用户冲突"}
+
+        user_info = user_infos[0]
+        sign_content = user_info["username"] + user_info["identify"] + "netops" + str(timestamp)
+        sign = md5(sign_content.encode("utf-8")).hexdigest()
+        if sign != secret:
+            return {"status": "failed", "data": None, "message": "认证失败"}
+
+    # sign 直接沿用请求携带的 secret（本地哈希或 LDAP 密文均可），仅作为后续请求签名的凭据
+    token = create_access_token(data={"username": username, 'rid': user_info["rid"], 'sign': secret})
+    del user_info["identify"]
+    try:
+        db_user = UsersDB()
+        db_user.updateUser({"username": username, "last_login": int(time.time())})
+    except Exception as e:
+        logger.error("更新last_login失败,原因{}".format(str(e)))
+    return {
+        "status": "success",
+        "data": {
+            "user_info": user_info,
+            "token": token,
+        },
+        "message": "认证成功"
+    }
 
 # 获取user基本信息
 def get_user_info(username: str):
