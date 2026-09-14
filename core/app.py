@@ -26,7 +26,8 @@ from api.api_policy import prefix_list_bp
 from api.websocket_ssh_bp import websocket_ssh_bp
 
 # 导入认证相关功能
-from function_system.user_manage import verify_access_token, verify_url_privilege, verify_secret_token
+from function_system.user_manage import verify_access_token, verify_secret_token
+from function_system.page_manage import verify_url_privilege
 
 # 导入配置
 from config.config import Config

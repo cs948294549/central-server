@@ -14,9 +14,22 @@ class Config:
     # 注意：JWT Secret Key 是后端专用密钥，用于签名和验证 Token
     # ⚠️ 重要：修改此密钥后，所有已签发的 Token 将立即失效，用户需重新登录
     # 生产环境请使用强随机密钥，运行: python scripts/generate_secret_key.py
-    jwt_secret_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWlu"
+    jwt_secret_key = "xxxpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWlu"
     jwt_algorithm = "HS256"
     jwt_expire_hours = 24  # JWT Token 有效期（小时）
+
+    # AES 密钥，用于解密前端登录时对LDAP密码的加密（需与前端 AES_SECRET 保持一致，自行填写）
+    aes_secret = "xx"
+
+    # LDAP/AD 认证配置
+    # 认证方式：先用只读代理账号(ldap_bind_dn/ldap_bind_password)搜索用户DN，再用该DN+用户密码单独bind校验
+    ldap_server = "ldap-ad-ro.vdian.net"  # LDAP/AD 服务器地址
+    ldap_port = 389
+    ldap_use_ssl = False
+    ldap_bind_dn = "CN=LDAP-Proxy-Read,OU=WeiDian Service Account,OU=微店,DC=corp,DC=weidian-inc,DC=com"  # 只读代理账号DN
+    ldap_bind_password = "xx"  # 只读代理账号密码，自行填写
+    ldap_base_dn = "OU=微店,DC=corp,DC=weidian-inc,DC=com"  # 用户搜索base DN
+    ldap_user_search_filter = "(sAMAccountName={username})"  # 用户搜索过滤器
 
     # 时间戳验证配置
     # Apptime 时间戳允许的最大偏差（秒），用于防止重放攻击
