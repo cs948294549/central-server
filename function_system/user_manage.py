@@ -1,6 +1,7 @@
 import logging
 import jwt
 import time
+import uuid
 from tables.UsersDB import UsersDB
 from tables.RolesDB import RolesDB
 from utils.utils import decorator_checkparams
@@ -161,24 +162,27 @@ def authenticate_user(username: str, secret: str, timestamp: int, auth_type: str
             logger.error(f"LDAP密码解密失败: {str(e)}")
             return {"status": "failed", "data": None, "message": "认证失败"}
 
-        if not authenticate_ldap_user(username, plain_password):
+        ldap_info = authenticate_ldap_user(username, plain_password)
+        if not ldap_info:
             return {"status": "failed", "data": None, "message": "认证失败"}
 
         if len(user_infos) == 0:
-            # LDAP 认证通过但本地无该用户，自动创建，默认分组为 default
+            # LDAP 认证通过但本地无该用户，自动创建，默认分组为 default，信息取自LDAP
+            # identify 仅用于本地占位，LDAP用户实际登录始终走LDAP密码校验，不会用到该字段
             db_add = UsersDB()
             add_ret = db_add.addUser({
                 "username": username,
-                "identify": "",
-                "subname": username,
-                "phone": "",
-                "mail": "",
+                "identify": uuid.uuid4().hex,
+                "subname": ldap_info.get("subname") or username,
+                "phone": ldap_info.get("phone", ""),
+                "mail": ldap_info.get("mail", ""),
                 "rid": "default"
             })
             if add_ret == "failed":
                 logger.error(f"LDAP自动创建用户失败: {username}")
                 return {"status": "failed", "data": None, "message": "认证失败"}
-            user_infos = db.getUser({"username": username})
+            db_reload = UsersDB()
+            user_infos = db_reload.getUser({"username": username})
 
         if len(user_infos) != 1:
             return {"status": "failed", "data": None, "message": "用户冲突"}

@@ -12,3 +12,4 @@ redis
 pyyaml
 tencentcloud-sdk-python
 volcengine-python-sdk==5.0.41
+ldap3
