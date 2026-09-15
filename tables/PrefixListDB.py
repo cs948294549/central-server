@@ -459,12 +459,16 @@ class PrefixListDB(mysqldb_netops):
     def getIssueRecordsList(self, data):
         """
         获取问题处理记录列表
-        :param data: 查询条件 {standard_id, device_ip, device_name, status, issue_type, start_date, end_date}
+        :param data: 查询条件 {id, standard_id, device_ip, device_name, status, issue_type, start_date, end_date}
         :return: 列表数据或"failed"
         """
         data = waf(data)
         try:
             conditions = []
+
+            # 按ID查询
+            if "id" in data.keys() and data["id"]:
+                conditions.append("id=" + str(data["id"]))
 
             # 按标准规则ID筛选
             if "standard_id" in data.keys() and data["standard_id"]:
@@ -735,6 +739,34 @@ class PrefixListDB(mysqldb_netops):
 
         except Exception as err:
             logger.error("======PrefixListDB deleteIssueRecord error========\n{}".format(str(err)))
+            self.conn.rollback()
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def updateIssueStatus(self, data):
+        """
+        更新问题处理记录状态
+        :param data: {id, status}
+        :return: affected rows或"failed"
+        """
+        try:
+            if "id" not in data.keys() or "status" not in data.keys():
+                logger.error("参数不足: id 或 status")
+                return "failed"
+
+            data = waf(data)
+
+            sql = "UPDATE prefix_list_issue_records SET status=%s, processed_at=%s WHERE id=%s"
+            current_time = int(time.time())
+            self.cursor.execute(sql, (data["status"], current_time, data["id"]))
+            self.conn.commit()
+
+            return self.cursor.rowcount
+
+        except Exception as err:
+            logger.error("======PrefixListDB updateIssueStatus error========\n{}".format(str(err)))
             self.conn.rollback()
             return "failed"
         finally:

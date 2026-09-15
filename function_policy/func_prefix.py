@@ -791,19 +791,20 @@ def compare_entries_text_diff(src_entries, target_entries, full_diff=False):
         }
 
 
-def create_prefix_list_change_order(issue_ids, username):
+def create_prefix_list_change_order(issue_ids, username, title=None):
     """
     根据问题处理记录创建前缀列表变更工单
 
     :param issue_ids: 问题处理记录ID列表
     :param username: 创建人
+    :param title: 工单标题（可选，不提供则自动生成）
     :return: {"success": bool, "data": {"op_id": str}, "message": str}
     """
     try:
         if not issue_ids or len(issue_ids) == 0:
             return {"success": False, "message": "缺少参数: issue_ids"}
 
-        logger.info(f"开始处理前缀列表变更工单，issue_ids: {issue_ids}")
+        logger.info(f"开始处理前缀列表变更工单，issue_ids: {issue_ids}, title: {title}")
 
         # 1. 查询所有问题记录
         issue_records = []
@@ -834,7 +835,7 @@ def create_prefix_list_change_order(issue_ids, username):
 
         # 2. 准备工单基本信息
         order_data = {
-            "title": f"前缀列表配置变更-{len(issue_records)}台设备",
+            "title": title if title else f"前缀列表配置变更-{len(issue_records)}台设备",
             "descrip": f"根据 {len(issue_records)} 条问题记录创建的变更工单",
             "op_type": "2"  # 固定为2
         }

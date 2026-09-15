@@ -280,6 +280,53 @@ def delete_issue_record():
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
+@prefix_list_bp.route('/issues/update_status', methods=['POST'])
+def update_issue_status():
+    """更新问题处理记录状态"""
+    try:
+        data = request.json
+        if not data or "id" not in data or "status" not in data:
+            return APIResponse.param_error(message="缺少参数: id 或 status")
+
+        issue_id = data["id"]
+        status = data["status"]
+
+        # 验证状态值
+        if status not in ['pending', 'processing', 'completed', 'ignored']:
+            return APIResponse.param_error(message="无效的状态值")
+
+        # 获取issue记录，查询设备IP
+        db = PrefixListDB()
+        issue_records = db.getIssueRecordsList({"id": issue_id})
+
+        if not issue_records or len(issue_records) == 0:
+            return APIResponse.error(message="记录不存在")
+
+        # 更新状态
+        result = db.updateIssueStatus({"id": issue_id, "status": status})
+
+        if result != "failed" and result > 0:
+            # 如果标记为已完成，触发采集更新
+            if status == 'completed':
+                device_ip = issue_records[0].get("device_ip")
+                if device_ip:
+                    from function_policy.func_prefix import collect_and_update_prefix_lists
+                    try:
+                        collect_result = collect_and_update_prefix_lists(device_ip)
+                        logger.info(f"标记完成后触发采集，设备: {device_ip}，结果: {collect_result}")
+                    except Exception as e:
+                        logger.error(f"触发采集失败: {e}")
+                        # 采集失败不影响状态更新成功的返回
+
+            return APIResponse.success(message="状态更新成功")
+        else:
+            return APIResponse.error(message="状态更新失败，记录可能不存在")
+
+    except Exception as e:
+        logger.error(f"更新问题处理记录状态异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
 @prefix_list_bp.route('/compare/text_diff', methods=['POST'])
 def compare_text_diff():
     """
@@ -319,12 +366,14 @@ def create_change_order():
             return APIResponse.param_error(message="缺少参数: issue_ids")
 
         issue_ids = data["issue_ids"]
+        title = data.get("title")  # 可选参数
+
         if not isinstance(issue_ids, list) or len(issue_ids) == 0:
             return APIResponse.param_error(message="issue_ids必须是非空数组")
 
-        logger.info(f"{username}创建前缀列表变更工单，问题记录ID: {issue_ids}")
+        logger.info(f"{username}创建前缀列表变更工单，问题记录ID: {issue_ids}, 标题: {title}")
 
-        result = create_prefix_list_change_order(issue_ids, username)
+        result = create_prefix_list_change_order(issue_ids, username, title)
 
         if result["success"]:
             return APIResponse.success(data=result["data"], message=result["message"])
