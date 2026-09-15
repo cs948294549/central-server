@@ -847,7 +847,7 @@ def create_prefix_list_change_order(issue_ids, username):
         for record in issue_records:
             try:
                 device_ip = record.get("device_ip")
-                vendor = record.get("device_vendor", "cisco")
+                vendor = record.get("device_vendor", "cisco_nx")
                 prefix_list_name = record.get("standard_name", "")
                 standard_entries = record.get("standard_entries", [])
                 device_entries = record.get("device_entries", [])
@@ -873,7 +873,6 @@ def create_prefix_list_change_order(issue_ids, username):
                     if seq not in device_entries_map:
                         # 设备中没有，需要添加
                         add_entries.append(std_entry)
-                        logger.info(f"  需要添加条目 seq={seq}: {std_entry}")
                     else:
                         # seq存在，检查内容是否一致
                         dev_entry = device_entries_map[seq]
@@ -885,20 +884,14 @@ def create_prefix_list_change_order(issue_ids, username):
                             # 内容不一致，需要先删除再添加
                             delete_entries.append(dev_entry)
                             add_entries.append(std_entry)
-                            logger.info(f"  条目内容不一致 seq={seq}")
-                            logger.info(f"    设备: {dev_entry}")
-                            logger.info(f"    标准: {std_entry}")
-                            logger.info(f"    将先删除后添加")
 
                 # 找出需要删除的（设备中有但标准中没有）
                 for seq, dev_entry in device_entries_map.items():
                     if seq not in standard_entries_map:
                         delete_entries.append(dev_entry)
-                        logger.info(f"  需要删除条目 seq={seq}: {dev_entry}")
 
                 # 如果没有需要变更的内容，跳过
                 if not add_entries and not delete_entries:
-                    logger.info(f"设备 {device_ip} 配置已与标准一致，跳过")
                     skipped_devices.append(device_ip)
                     continue
 
@@ -929,7 +922,6 @@ def create_prefix_list_change_order(issue_ids, username):
                         }]
                     }
                     cmd_add = encoder.encode(add_data, sections=['prefix_lists'], operation='add')
-                    logger.info(f"  添加命令:\n{cmd_add}")
 
                 # 合并执行命令（先删除后添加）
                 cmd_exec_parts = []
@@ -947,8 +939,6 @@ def create_prefix_list_change_order(issue_ids, username):
                     cmd_roll_parts.append(encoder.encode(delete_data, sections=['prefix_lists'], operation='add'))
                 cmd_roll = "\n".join(cmd_roll_parts)
 
-                logger.info(f"  回滚命令:\n{cmd_roll}")
-
                 # 添加到设备列表
                 devices_data.append({
                     "ip": device_ip,
@@ -957,8 +947,6 @@ def create_prefix_list_change_order(issue_ids, username):
                     "cmd_roll": cmd_roll,
                     "tag": f"prefix-list:{prefix_list_name}"
                 })
-
-                logger.info(f"设备 {device_ip} 配置生成成功")
 
             except Exception as e:
                 logger.error(f"处理问题记录 {record.get('id')} 配置生成失败: {e}", exc_info=True)
@@ -977,57 +965,20 @@ def create_prefix_list_change_order(issue_ids, username):
                 }
             }
 
-        logger.info(f"共生成 {len(devices_data)} 台设备的配置命令")
+        # 4. 调用通用工单创建方法
+        result = create_order_with_devices(order_data, devices_data, username)
 
-        # 4. 打印提交内容（暂不创建工单）
-        logger.info("="*80)
-        logger.info("工单基本信息:")
-        logger.info(f"  标题: {order_data['title']}")
-        logger.info(f"  描述: {order_data['descrip']}")
-        logger.info(f"  类型: {order_data['op_type']}")
-        logger.info("")
-        logger.info("设备配置列表:")
-        for idx, device in enumerate(devices_data, 1):
-            logger.info(f"  设备 {idx}: {device['ip']}")
-            logger.info(f"    批次: {device['batch']}")
-            logger.info(f"    标签: {device['tag']}")
-            logger.info(f"    执行命令:\n{device['cmd_exec']}")
-            logger.info(f"    回滚命令:\n{device['cmd_roll']}")
-            logger.info("")
-        logger.info("="*80)
-
-        # 返回预览结果
-        result = {
-            "success": True,
-            "message": f"配置生成成功，共 {len(devices_data)} 台设备（预览模式，未创建工单）",
-            "data": {
-                "order_data": order_data,
-                "devices_data": devices_data,
-                "device_count": len(devices_data),
-                "failed_devices": failed_devices,
-                "skipped_devices": skipped_devices
-            }
-        }
-
-        if failed_devices:
+        if failed_devices and result.get("success"):
             result["message"] += f"，配置生成失败: {', '.join(failed_devices)}"
+            if "data" in result:
+                result["data"]["config_failed_devices"] = failed_devices
 
-        if skipped_devices:
+        if skipped_devices and result.get("success"):
             result["message"] += f"，跳过已一致设备: {len(skipped_devices)} 台"
+            if "data" in result:
+                result["data"]["skipped_devices"] = skipped_devices
 
         return result
-
-        # TODO: 验证通过后，取消下面的注释以启用工单创建
-        # result = create_order_with_devices(order_data, devices_data, username)
-        # if failed_devices and result.get("success"):
-        #     result["message"] += f"，配置生成失败: {', '.join(failed_devices)}"
-        #     if "data" in result:
-        #         result["data"]["config_failed_devices"] = failed_devices
-        # if skipped_devices and result.get("success"):
-        #     result["message"] += f"，跳过已一致设备: {len(skipped_devices)} 台"
-        #     if "data" in result:
-        #         result["data"]["skipped_devices"] = skipped_devices
-        # return result
 
     except Exception as err:
         logger.error(f"创建前缀列表变更工单失败: {err}", exc_info=True)
