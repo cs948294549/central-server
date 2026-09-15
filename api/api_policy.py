@@ -296,14 +296,15 @@ def update_issue_status():
             return APIResponse.param_error(message="无效的状态值")
 
         # 获取issue记录，查询设备IP
-        db = PrefixListDB()
-        issue_records = db.getIssueRecordsList({"id": issue_id})
+        db_query = PrefixListDB()
+        issue_records = db_query.getIssueRecordsList({"id": issue_id})
 
         if not issue_records or len(issue_records) == 0:
             return APIResponse.error(message="记录不存在")
 
         # 更新状态
-        result = db.updateIssueStatus({"id": issue_id, "status": status})
+        db_update = PrefixListDB()
+        result = db_update.updateIssueStatus({"id": issue_id, "status": status})
 
         if result != "failed" and result > 0:
             # 如果标记为已完成，触发采集更新
