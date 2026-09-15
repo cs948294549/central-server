@@ -140,12 +140,24 @@ def execute_device_command(dev_id, username):
             output_data = result.get('data', {})
             output_str = '\n'.join([f"{cmd}:\n{output}" for cmd, output in output_data.items()])
 
-            update_data = {
-                'status': '10',  # 执行成功
-                'result': output_str
-            }
-            alter_db2.update_op_device(dev_id, update_data)
-            return {"code": 0, "msg": "执行成功", "output": output_str}
+            # 检查命令输出中是否包含错误关键字
+            error_keywords = ['failed', 'error', 'invalid', '% ', '^']
+            has_error = any(keyword in output_str.lower() for keyword in error_keywords)
+
+            if has_error:
+                update_data = {
+                    'status': '90',  # 执行失败
+                    'result': output_str
+                }
+                alter_db2.update_op_device(dev_id, update_data)
+                return {"code": 500, "msg": "命令执行失败", "output": output_str}
+            else:
+                update_data = {
+                    'status': '10',  # 执行成功
+                    'result': output_str
+                }
+                alter_db2.update_op_device(dev_id, update_data)
+                return {"code": 0, "msg": "执行成功", "output": output_str}
         else:
             error_msg = result.get('msg', '执行失败')
             update_data = {
@@ -217,12 +229,23 @@ def rollback_device_command(dev_id, username):
             output_data = result.get('data', {})
             output_str = '\n'.join([f"{cmd}:\n{output}" for cmd, output in output_data.items()])
 
-            update_data = {
-                'status': '00',  # 回滚后恢复初始状态
-                'result': f"[回滚成功]\n{output_str}"
-            }
-            alter_db2.update_op_device(dev_id, update_data)
-            return {"code": 0, "msg": "回滚成功", "output": output_str}
+            # 检查命令输出中是否包含错误关键字
+            error_keywords = ['failed', 'error', 'invalid', '% ', '^']
+            has_error = any(keyword in output_str.lower() for keyword in error_keywords)
+
+            if has_error:
+                update_data = {
+                    'result': f"[回滚失败]\n{output_str}"
+                }
+                alter_db2.update_op_device(dev_id, update_data)
+                return {"code": 500, "msg": "回滚命令执行失败", "output": output_str}
+            else:
+                update_data = {
+                    'status': '00',  # 回滚后恢复初始状态
+                    'result': f"[回滚成功]\n{output_str}"
+                }
+                alter_db2.update_op_device(dev_id, update_data)
+                return {"code": 0, "msg": "回滚成功", "output": output_str}
         else:
             error_msg = result.get('msg', '回滚失败')
             update_data = {
