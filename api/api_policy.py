@@ -10,7 +10,8 @@ from function_policy.func_prefix import (
     batch_create_issues,
     group_records_by_fingerprint,
     compare_entries_text_diff,
-    create_prefix_list_change_order
+    create_prefix_list_change_order,
+    create_new_issue
 )
 import logging
 
@@ -228,7 +229,8 @@ def batch_create_issue_records_api():
         result = batch_create_issues(
             data["standard_id"],
             data["devices"],
-            username
+            username,
+            data.get("remark", "")
         )
 
         if result["success"]:
@@ -252,45 +254,17 @@ def create_new_issue_record():
         if not data or "device_ip" not in data or "standard_id" not in data:
             return APIResponse.param_error(message="缺少参数: device_ip, standard_id")
 
-        # 查询设备信息
-        from tables.CollectDB import CollectDB
-        collector_db = CollectDB()
-        device_info = collector_db.get_dev_by_ip(data["device_ip"])
+        result = create_new_issue(
+            data["device_ip"],
+            data["standard_id"],
+            username,
+            data.get("remark", "")
+        )
 
-        if not device_info:
-            return APIResponse.error(message=f"设备 {data['device_ip']} 不存在")
-
-        # 查询标准规则信息
-        prefix_db_standard = PrefixListDB()
-        standard = prefix_db_standard.getStandardDetail({"id": data["standard_id"]})
-
-        if standard == "failed":
-            return APIResponse.error(message="标准规则不存在")
-
-        # 准备创建数据
-        standard_entries = standard["entries"].get("entries", []) if isinstance(standard["entries"], dict) else standard["entries"]
-
-        issue_data = {
-            "standard_id": data["standard_id"],
-            "standard_name": standard["name"],
-            "device_ip": data["device_ip"],
-            "device_name": device_info.get("sysname", data["device_ip"]),
-            "device_vendor": device_info.get("vendor", "unknown"),
-            "issue_type": "missing",
-            "standard_entries": standard_entries,
-            "device_entries": [],
-            "created_by": username,
-            "remark": data.get("remark", "")
-        }
-
-        # 创建记录
-        prefix_db_create = PrefixListDB()
-        result = prefix_db_create.createIssueRecord(issue_data)
-
-        if result != "failed":
-            return APIResponse.success(data={"id": result}, message="创建成功")
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
         else:
-            return APIResponse.error(message="创建失败")
+            return APIResponse.error(message=result["message"])
 
     except Exception as e:
         logger.error(f"创建新问题记录异常: {e}")
