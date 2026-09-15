@@ -856,8 +856,10 @@ def create_prefix_list_change_order(issue_ids, username):
                 logger.info(f"  标准条目数: {len(standard_entries)}, 设备条目数: {len(device_entries)}")
 
                 # 对比标准条目和设备条目，找出需要添加和删除的
-                # 设备条目中有但标准条目中没有的 -> 需要删除
-                # 标准条目中有但设备条目中没有的 -> 需要添加
+                # 策略：
+                # 1. 标准中有但设备中没有的 -> 添加
+                # 2. 设备中有但标准中没有的 -> 删除
+                # 3. seq相同但内容不同的 -> 先删除旧的，再添加新的
 
                 # 将entries转换为可比较的格式（使用seq作为key）
                 device_entries_map = {entry.get("seq"): entry for entry in device_entries}
@@ -866,17 +868,33 @@ def create_prefix_list_change_order(issue_ids, username):
                 add_entries = []
                 delete_entries = []
 
-                # 找出需要添加的（标准中有但设备中没有）
-                for seq, entry in standard_entries_map.items():
+                # 找出需要添加的（标准中有但设备中没有，或seq相同但内容不同）
+                for seq, std_entry in standard_entries_map.items():
                     if seq not in device_entries_map:
-                        add_entries.append(entry)
-                        logger.info(f"  需要添加条目 seq={seq}: {entry}")
+                        # 设备中没有，需要添加
+                        add_entries.append(std_entry)
+                        logger.info(f"  需要添加条目 seq={seq}: {std_entry}")
+                    else:
+                        # seq存在，检查内容是否一致
+                        dev_entry = device_entries_map[seq]
+                        # 比较action、prefix、ge、le字段
+                        if (std_entry.get("action") != dev_entry.get("action") or
+                            std_entry.get("prefix") != dev_entry.get("prefix") or
+                            std_entry.get("ge") != dev_entry.get("ge") or
+                            std_entry.get("le") != dev_entry.get("le")):
+                            # 内容不一致，需要先删除再添加
+                            delete_entries.append(dev_entry)
+                            add_entries.append(std_entry)
+                            logger.info(f"  条目内容不一致 seq={seq}")
+                            logger.info(f"    设备: {dev_entry}")
+                            logger.info(f"    标准: {std_entry}")
+                            logger.info(f"    将先删除后添加")
 
                 # 找出需要删除的（设备中有但标准中没有）
-                for seq, entry in device_entries_map.items():
+                for seq, dev_entry in device_entries_map.items():
                     if seq not in standard_entries_map:
-                        delete_entries.append(entry)
-                        logger.info(f"  需要删除条目 seq={seq}: {entry}")
+                        delete_entries.append(dev_entry)
+                        logger.info(f"  需要删除条目 seq={seq}: {dev_entry}")
 
                 # 如果没有需要变更的内容，跳过
                 if not add_entries and not delete_entries:
