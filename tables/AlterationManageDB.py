@@ -735,8 +735,15 @@ class AlterationManageDB(mysqldb_netops):
 
             if result1:
                 result = {}
+                # 需要反转义的字段
+                unescape_fields = ["cmd_exec", "cmd_roll", "result", "pre_check"]
+
                 for num in range(len(proper)):
-                    result[proper[num]] = result1[num] if result1[num] != None else ""
+                    value = result1[num] if result1[num] != None else ""
+                    # 对需要反转义的字段进行处理
+                    if proper[num] in unescape_fields and value:
+                        value = unwaf(value)
+                    result[proper[num]] = value
                 return result
             else:
                 return None
