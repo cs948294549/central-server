@@ -81,6 +81,12 @@ class BaseEncoder(ABC):
         # 存储生成的配置行
         config_lines = []
 
+        # 根据厂商添加进入配置模式的命令
+        if self.vendor.lower() in ['cisco', 'cisco_nx', 'cisco_xr']:
+            config_lines.append("configure terminal")
+        elif self.vendor.lower() in ['h3c', 'huawei']:
+            config_lines.append("system-view")
+
         # 动态调用编码方法
         for section in target_sections:
             encode_method = self._get_encode_method(section)
@@ -99,6 +105,12 @@ class BaseEncoder(ABC):
                     logger.error(f"[{self.vendor}] 编码 {section} 失败: {e}", exc_info=True)
             else:
                 logger.debug(f"[{self.vendor}] 跳过未实现或无数据的配置项: {section}")
+
+        # 根据厂商添加退出配置模式的命令
+        if self.vendor.lower() in ['cisco', 'cisco_nx', 'cisco_xr']:
+            config_lines.append("end")
+        elif self.vendor.lower() in ['h3c', 'huawei']:
+            config_lines.append("return")
 
         # 合并配置文本
         result = "\n".join(config_lines)
