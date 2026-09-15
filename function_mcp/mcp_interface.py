@@ -1,4 +1,4 @@
-from function_mcp.func_switch import run_cmd, get_vendor
+from function_mcp.func_switch import run_cmd, get_vendor, create_change_order
 from function_mcp.func_message import sendMessage
 from function_mcp.func_cmdb import search_device_list, location_device, query_cloud_bill
 
@@ -81,6 +81,40 @@ MCP_TOOLS_prompt = [
             },
             "required": ["cloud_provider", "month"]
         }
+    },
+    {
+        "name": "create_change_order",
+        "description": "创建设备变更工单。用于批量配置网络设备，生成包含执行命令和回滚命令的变更工单。工单创建后所有人可操作（默认assigner为all）。注意：配置命令必须包含进入配置模式的命令（Cisco设备使用'configure terminal'或'conf t'，H3C/华为设备使用'system-view'），然后是具体配置命令。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "order_content": {
+                    "type": "object",
+                    "description": "工单内容",
+                    "properties": {
+                        "title": {"type": "string", "description": "工单标题，简要描述变更内容"},
+                        "descrip": {"type": "string", "description": "工单详细描述，说明变更目的、影响范围、注意事项等"}
+                    },
+                    "required": ["title", "descrip"]
+                },
+                "devices": {
+                    "type": "array",
+                    "description": "设备配置列表",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "ip": {"type": "string", "description": "设备IP地址"},
+                            "cmd_exec": {"type": "string", "description": "执行命令（多行命令用换行符分隔）。必须以进入配置模式的命令开头：Cisco设备用'configure terminal'或'conf t'，H3C/华为设备用'system-view'"},
+                            "cmd_roll": {"type": "string", "description": "回滚命令（多行命令用换行符分隔）。必须以进入配置模式的命令开头，用于在变更失败时恢复配置"},
+                            "batch": {"type": "integer", "description": "执行批次，用于分批执行，默认为1"},
+                            "tag": {"type": "string", "description": "设备标签，用于标识此设备的变更内容"}
+                        },
+                        "required": ["ip", "cmd_exec", "cmd_roll"]
+                    }
+                }
+            },
+            "required": ["order_content", "devices"]
+        }
     }
 ]
 
@@ -91,5 +125,6 @@ MCP_TOOLS = {
     "send_message": sendMessage,
     "get_vendor": get_vendor,
     "search_device_list": search_device_list,
-    "query_cloud_bill": query_cloud_bill
+    "query_cloud_bill": query_cloud_bill,
+    "create_change_order": create_change_order
 }

@@ -917,7 +917,6 @@ def create_order_with_devices(order_data, devices_data, username):
             "title": "工单标题",
             "descrip": "工单描述",
             "op_type": "变更类型ID",
-            "op_group": "变更组ID（可选）",
             "assigner": "指定执行人（可选）",
             "is_auto": 0/1（可选）,
             "popo": "popo群ID（可选）",
