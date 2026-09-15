@@ -7,7 +7,8 @@ from tables.PrefixListDB import PrefixListDB
 from tables.CollectDB import CollectDB
 from function_collector.func_config import get_latest_config_by_ip
 from function_tools.text_diff_tool import check_diff_simple
-from lib_config import get_parser
+from lib_config import get_parser, get_encoder
+from function_op.order_manage import create_order_with_devices
 import logging
 
 logger = logging.getLogger(__name__)
@@ -799,22 +800,19 @@ def create_prefix_list_change_order(issue_ids, username):
     :return: {"success": bool, "data": {"op_id": str}, "message": str}
     """
     try:
-        from function_op.order_manage import create_order_with_devices
-        from lib_config import get_encoder
-        from tables.PrefixListDB import PrefixListDB
-
         if not issue_ids or len(issue_ids) == 0:
             return {"success": False, "message": "缺少参数: issue_ids"}
 
         logger.info(f"开始处理前缀列表变更工单，issue_ids: {issue_ids}")
 
         # 1. 查询所有问题记录
-        db = PrefixListDB()
         issue_records = []
         not_found_ids = []
 
         for issue_id in issue_ids:
             logger.info(f"查询问题记录 ID: {issue_id}")
+            # 每次循环创建新的数据库连接
+            db = PrefixListDB()
             record = db.getIssueRecordDetail({"id": issue_id})
             if record and record != "failed":
                 issue_records.append(record)
