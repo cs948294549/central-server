@@ -1,5 +1,10 @@
 import json
-from function_collector.func_search import func_fulltext, get_deviceslist
+import requests
+from config.config import Config
+from function_collector.func_search import func_fulltext, get_deviceslist, getfulltextDeviceGates_v4
+import re
+
+ip_reg = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
 
 def location_device(search_key):
     """
@@ -87,5 +92,125 @@ def query_cloud_bill(cloud_provider, month, tag_key="24H 网络带宽", tag_valu
         return f"❌ 查询云账单失败: {str(e)}"
 
 
+def searchServer(search_ip):
+    if ip_reg.match(search_ip):
+        try:
+            url_server = "http://api-o2.vdian.net/v1/" + "servers"
+            params_server = {
+                "access-token": Config.cmdb_access_token,
+                "pageNumber": 1,
+                "pageSize": 20,
+                "ip": search_ip
+            }
+            result_server = requests.get(url=url_server, params=params_server)
+            server_info = {"ip": search_ip}
+            _info_server = result_server.json().get("data",{}).get("list",[])[0]
+            server_info["hostname"] = _info_server.get("hostname")
+            server_info["groupName"] = _info_server.get("groupName")
+            _groupName = server_info["groupName"]
+
+            url_group = "http://api-o2.vdian.net/v1/" + "groups"
+            params_group = {
+                "access-token": Config.cmdb_access_token,
+                "pageNumber": 1,
+                "pageSize": 20,
+                "name": _groupName
+            }
+            result_group = requests.get(url=url_group, params=params_group)
+            _info_group = result_group.json().get("data",{}).get("list",[])[0]
+            server_info["productId"] = _info_group.get("productId")
+            _product_id = server_info["productId"]
+
+            url_product = "http://api-o2.vdian.net/v1/" + "products"
+            params_product = {
+                "access-token": Config.cmdb_access_token,
+                "pageNumber": 1,
+                "pageSize": 20,
+                "showAppUser": True,
+                "id": _product_id
+            }
+            result_product = requests.get(url=url_product, params=params_product)
+            _info_product = result_product.json().get("data", {}).get("list", [])[0]
+            server_info["prd_name"] = _info_product["name"]
+            server_info["prd_desc"] = _info_product["description"]
+            server_info["devUserList"] = ",".join([str(_i["cn"])for _i in _info_product["devUserList"][0:3]])
+            return server_info
+        except Exception as e:
+            print(str(e))
+            return ""
+    else:
+        return ""
+
+def searchSwitch(search_ip):
+    if ip_reg.match(search_ip):
+        info = getfulltextDeviceGates_v4({"gatereg": "^{}$".format(search_ip)})
+        return info
+    else:
+        return ""
+
+
+def transIP(ip_text, search_type="switch"):
+    """
+    给文本里每一行的 IP 补上 CMDB 描述，格式：IP(描述)
+
+    逐行处理，每行只取第一个匹配到的 IP，描述取不到时该行原样保留。
+
+    :param ip_text: 原始文本，如 traceroute 输出
+    :return: 处理后的文本
+    """
+    out_lines = []
+    for line in ip_text.splitlines():
+        match = re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", line)
+        if not match:
+            out_lines.append(line)
+            continue
+
+        desc = _ip_desc(match.group(), search_type)
+        if not desc:
+            out_lines.append(line)
+            continue
+
+        # 只在该行第一个 IP 后面插入描述，其余内容原样保留
+        end = match.end()
+        out_lines.append(line[:end] + "({})".format(desc) + line[end:])
+
+    return "\n".join(out_lines)
+
+
+def _ip_desc(search_ip, search_type="switch"):
+    """查一个 IP 的描述：先按服务器查（产品描述 + 分组名），查不到再按交换机查。"""
+    if search_type == "switch":
+        switch_info = searchSwitch(search_ip=search_ip)
+        if switch_info:
+            switch_info = switch_info[0] if isinstance(switch_info, list) else switch_info
+            return switch_info.get("sysname")
+    else:
+        server_info = searchServer(search_ip=search_ip)
+        if isinstance(server_info, dict) and server_info:
+            return server_info.get("prd_name") + "[{}]{}".format(server_info.get("devUserList"), server_info.get("prd_desc"))
+    return ""
+
+
 if __name__ == '__main__':
-    print(query_cloud_bill("tencent", "2026-09"))
+    pass
+    # print(query_cloud_bill("tencent", "2026-09"))
+    # 10.33.128.153
+    # searchServer(search_ip="172.20.200.69")
+    # searchSwitch(search_ip="172.20.200.69")
+    # searchServer(search_ip="10.33.128.153")
+    # aa = _ip_desc("10.33.128.153")
+    # print(aa)
+    # searchSwitch(search_ip="172.20.200.69")
+
+  #   demo = """[出方向] 按源 IP Top 5
+  # IP                              流量             字节数            包数     flows       占比
+  # ---------------------------------------------------------------------------------
+  # 10.35.195.143                4.1GB   4,426,040,000     2,850,000       285   14.29%
+  # 10.35.5.223                  3.4GB   3,629,700,000     1,260,000       126   11.72%
+  # 10.34.228.68                 3.2GB   3,424,890,000     1,170,000       117   11.06%
+  # 10.33.146.126                3.0GB   3,207,160,000     1,940,000       194   10.35%
+  # 10.33.18.23                  2.1GB   2,229,620,000       770,000        77    7.20%"""
+  #
+  #   print(transIP(demo, search_type="server"))
+
+

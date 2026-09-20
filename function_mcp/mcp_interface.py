@@ -1,6 +1,7 @@
 from function_mcp.func_switch import run_cmd, get_vendor, create_change_order
 from function_mcp.func_message import sendMessage
-from function_mcp.func_cmdb import search_device_list, location_device, query_cloud_bill
+from function_mcp.func_cmdb import search_device_list, location_device, query_cloud_bill, transIP
+from function_mcp.func_flow import query_flow_traffic
 
 
 # --------------------------
@@ -43,30 +44,30 @@ MCP_TOOLS_prompt = [
             "required": ["sysname"]
         }
     },
-    {
-        "name": "send_message",
-        "description": "发送消息通知（支持点对点和群组消息）",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "msg": {"type": "string", "description": "消息内容"},
-                "msg_type": {"type": "string", "description": "消息类型：p2p（点对点）或 group（群组）"},
-                "receiver": {"type": "string", "description": "接收者ID（p2p为用户ID，group为群组ID）"},
-            },
-            "required": ["msg", "msg_type", "receiver"]
-        }
-    },
-    {
-        "name": "get_vendor",
-        "description": "获取设备厂商信息",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "ip": {"type": "string", "description": "设备IP"},
-            },
-            "required": ["ip"]
-        }
-    },
+    # {
+    #     "name": "send_message",
+    #     "description": "发送消息通知（支持点对点和群组消息）",
+    #     "inputSchema": {
+    #         "type": "object",
+    #         "properties": {
+    #             "msg": {"type": "string", "description": "消息内容"},
+    #             "msg_type": {"type": "string", "description": "消息类型：p2p（点对点）或 group（群组）"},
+    #             "receiver": {"type": "string", "description": "接收者ID（p2p为用户ID，group为群组ID）"},
+    #         },
+    #         "required": ["msg", "msg_type", "receiver"]
+    #     }
+    # },
+    # {
+    #     "name": "get_vendor",
+    #     "description": "获取设备厂商信息",
+    #     "inputSchema": {
+    #         "type": "object",
+    #         "properties": {
+    #             "ip": {"type": "string", "description": "设备IP"},
+    #         },
+    #         "required": ["ip"]
+    #     }
+    # },
     {
         "name": "query_cloud_bill",
         "description": "查询云平台账单信息，支持腾讯云和火山云。可按标签筛选，返回费用汇总、产品分类、支付方式等信息。默认不返回明细账单以节省内容。",
@@ -80,6 +81,30 @@ MCP_TOOLS_prompt = [
                 "include_details": {"type": "boolean", "description": "是否包含明细账单（默认false），设为true时返回每条资源的详细信息"}
             },
             "required": ["cloud_provider", "month"]
+        }
+    },
+    {
+        "name": "transIP",
+        "description": "给文本里每一行的 IP 补上 CMDB 归属描述，格式：IP(描述)。用于把 mtr/traceroute 记录的裸 IP 转换成可读的交换机/服务器路径。每行只处理第一个匹配到的 IP，查不到描述的 IP 原样保留。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ip_text": {"type": "string", "description": "原始文本，如 mtr/traceroute 的执行结果，可多行"},
+                "search_type": {"type": "string", "description": "查询类型：switch（按交换机查，返回 sysname）或 server（按服务器查，返回产品名+使用人+描述），默认 switch"},
+            },
+            "required": ["ip_text"]
+        }
+    },
+    {
+        "name": "query_flow_traffic",
+        "description": "查询某个网络出口最近 15 分钟的明细 IP 大流量统计（基于 esflow/ElastiFlow）。按源 IP（出方向）和目的 IP（入方向）分别汇总 Top N 的流量、包数、flow 条数及占比，并自动为每个 IP 补上 CMDB 归属描述。用于排查出口大流量 IP、定位异常占用带宽的服务器。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "group": {"type": "string", "description": "出口分组名，默认“博兴出口”，可选：博兴出口 / M5机房出口 / M5到博兴"},
+                "top_n": {"type": "integer", "description": "每个方向返回前 N 个 IP，默认 5"}
+            },
+            "required": []
         }
     },
     {
@@ -122,9 +147,9 @@ MCP_TOOLS_prompt = [
 MCP_TOOLS = {
     "run_cmd": run_cmd,
     "location_device": location_device,
-    "send_message": sendMessage,
-    "get_vendor": get_vendor,
     "search_device_list": search_device_list,
     "query_cloud_bill": query_cloud_bill,
+    "transIP": transIP,
+    "query_flow_traffic": query_flow_traffic,
     "create_change_order": create_change_order
 }

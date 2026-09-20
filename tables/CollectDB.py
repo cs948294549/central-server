@@ -257,7 +257,7 @@ class CollectDB(mysqldb_netops):
         else:
             sql = sql + " limit 5 "
 
-        print("sql:", sql)
+        # print("sql:", sql)
         proper = ["ip", "gateway", "if_name", "mask", "startip", "endip", "timestamp", "oper_statu","port_id", "sysname",
                   "alias"]
         try:
