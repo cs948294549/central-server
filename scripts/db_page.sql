@@ -21,7 +21,7 @@ SET @@SESSION.SQL_LOG_BIN= 0;
 -- GTID state at the beginning of the backup
 --
 
-SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'ef0116fc-960f-11f1-9a44-02429149f30f:1-817833';
+SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'ef0116fc-960f-11f1-9a44-02429149f30f:1-3471555';
 
 --
 -- Table structure for table `pages`
@@ -43,7 +43,7 @@ CREATE TABLE `pages` (
   `icon` varchar(40) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL COMMENT '图标',
   PRIMARY KEY (`page_id`),
   KEY `idx_parent_id` (`parent_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='页面表';
+) ENGINE=InnoDB AUTO_INCREMENT=61 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='页面表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -52,7 +52,7 @@ CREATE TABLE `pages` (
 
 LOCK TABLES `pages` WRITE;
 /*!40000 ALTER TABLE `pages` DISABLE KEYS */;
-INSERT INTO `pages` VALUES (9,'用户配置','系统管理','900','','0','系统管理','0',0,''),(10,'用户管理','','1','pages/systemManage/userManage','1','用户相关配置','0',9,''),(11,'页面管理','','5','pages/systemManage/pageManage','1','页面相关的配置','0',9,''),(12,'测试菜单','测试','903','','0','','0',0,''),(13,'测试1','','1','pages/demo/test2','1','','0',12,''),(14,'测试2','','2','pages/demo/test3','1','','0',12,''),(15,'测试3','','3','pages/demo/test4','1','','1',12,''),(18,'系统基本接口权限','系统管理','901','','0','','1',0,''),(26,'文本工具','实用工具','800','','0','','0',0,''),(27,'Markdown表格转换','','1','pages/tools/markdownTable','1','','0',26,''),(28,'文本对比','','2','pages/tools/textDiff','1','','0',26,''),(29,'JSON数据处理','','3','pages/tools/textJSON','1','','0',26,''),(30,'IP掩码计算','','4','pages/tools/ipmaskTranslate','1','','0',33,''),(31,'IP前缀融合','','5','pages/tools/ipPrefixMerge','1','','0',33,''),(32,'文本正则提取','','5','pages/tools/textRegExtract','1','','0',26,''),(33,'网工工具','实用工具','801','','0','','0',0,''),(34,'交换机脚本','','1','pages/tools/switchConfig','1','','0',33,''),(36,'图表工具','实用工具','802','','0','','0',0,''),(37,'地图工具','','1','pages/tools/map_tool','1','','0',36,''),(38,'词云工具','','2','pages/tools/wordcloud_tool','1','','0',36,''),(39,'告警中心','运维事务','200','','0','告警相关内容','0',0,''),(40,'当前告警','','1','pages/alarms/current_alarm','1','当前告警','0',39,''),(41,'规则配置','','5','pages/alarms/alarm_config','1','规则配置，黑名单以及聚合规则','0',39,''),(42,'主页','','0','pages/index','1','主页','1',0,''),(43,'历史告警','','2','pages/alarms/history_alarm','1','历史告警页面','0',39,''),(44,'设备定位','运维数据','100','pages/device/fmManage','1','','0',0,''),(45,'设备详情页','运维数据','199','pages/device/device_detail','1','设备详情页，不需要导航','1',0,''),(46,'设备数据查询','运维数据','1','pages/ops_data/ops_data_views','1','采集的数据信息','0',48,''),(47,'IPAM','运维数据','120','pages/ipam/address_manage','1','ipam管理','0',0,''),(48,'设备管理','运维数据','110','','0','','0',0,''),(49,'采集管理','运维数据','111','pages/device/collector_manage','1','添加了设备才会采集','0',48,'');
+INSERT INTO `pages` VALUES (9,'用户配置','系统管理','900','','0','系统管理','0',0,''),(10,'用户管理','','1','pages/systemManage/userManage','1','用户相关配置','0',9,''),(11,'页面管理','','5','pages/systemManage/pageManage','1','页面相关的配置','0',9,''),(12,'测试菜单','测试','903','','0','','0',0,''),(13,'测试1','','1','pages/demo/test2','1','','0',12,''),(14,'测试2','','2','pages/demo/test3','1','','0',12,''),(15,'测试3','','3','pages/demo/test4','1','','0',12,''),(18,'系统基本接口权限','系统管理','901','','0','','1',0,''),(26,'文本工具','实用工具','800','','0','','0',0,''),(27,'Markdown表格转换','','1','pages/tools/markdownTable','1','','0',26,''),(28,'文本对比','','2','pages/tools/textDiff','1','','0',26,''),(29,'JSON数据处理','','3','pages/tools/textJSON','1','','0',26,''),(30,'IP掩码计算','','4','pages/tools/ipmaskTranslate','1','','0',33,''),(31,'IP前缀融合','','5','pages/tools/ipPrefixMerge','1','','0',33,''),(32,'文本正则提取','','5','pages/tools/textRegExtract','1','','0',26,''),(33,'网工工具','实用工具','801','','0','','0',0,''),(34,'交换机脚本','','1','pages/tools/switchConfig','1','','0',33,''),(36,'图表工具','实用工具','802','','0','','0',0,''),(37,'地图工具','','1','pages/tools/map_tool','1','','0',36,''),(38,'词云工具','','2','pages/tools/wordcloud_tool','1','','0',36,''),(39,'告警中心','运维事务','200','','0','告警相关内容','0',0,''),(40,'当前告警','','1','pages/alarms/current_alarm','1','当前告警','0',39,''),(41,'规则配置','','5','pages/alarms/alarm_config','1','规则配置，黑名单以及聚合规则','0',39,''),(42,'主页','','0','pages/index','1','主页','1',0,''),(43,'历史告警','','2','pages/alarms/history_alarm','1','历史告警页面','0',39,''),(44,'设备定位','运维数据','100','pages/device/fmManage','1','','0',0,''),(45,'设备详情页','运维数据','199','pages/device/device_detail','1','设备详情页，不需要导航','1',0,''),(46,'设备数据查询','运维数据','110','pages/ops_data/ops_data_views','1','采集的数据信息','0',48,''),(47,'IPAM','运维数据','120','pages/ipam/address_manage','1','ipam管理','0',0,''),(48,'设备管理','运维数据','110','','0','','0',0,''),(49,'采集管理','运维数据','999','pages/device/collector_manage','1','添加了设备才会采集','0',48,''),(50,'拓扑管理','运维数据','200','pages/topology/topology_manage','1','所有拓扑信息','0',48,''),(51,'实时流量看板','运维数据','300','pages/topology/flowboard_manage.vue','1','','0',48,''),(52,'设备列表','运维数据','100','pages/device/device_list','1','配置以及设备列表','0',48,''),(53,'变更管理','运维事务','210','','0','','0',0,''),(54,'工单配置','','900','pages/alteration/alteration_config','1','工单类型配置','0',53,''),(55,'工单列表','','100','pages/alteration/alteration_manage','1','变更在此处理','0',53,''),(56,'变更详情','','999','pages/alteration/alteration_detail','1','','1',53,''),(57,'地址前缀管理','策略配置','300','','0','前缀 acl等相关配置','0',0,''),(58,'地址前缀规则','','1','pages/prefix_manage/prefix_rule','1','','0',57,''),(59,'设备前缀记录','','2','pages/prefix_manage/prefix_log','1','','0',57,''),(60,'处理记录','','3','pages/prefix_manage/prefix_issue','1','','0',57,'');
 /*!40000 ALTER TABLE `pages` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -147,4 +147,4 @@ SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-21 18:55:51
+-- Dump completed on 2026-09-20 10:58:11

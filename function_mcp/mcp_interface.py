@@ -85,7 +85,7 @@ MCP_TOOLS_prompt = [
     },
     {
         "name": "transIP",
-        "description": "给文本里每一行的 IP 补上 CMDB 归属描述，格式：IP(描述)。用于把 mtr/traceroute 记录的裸 IP 转换成可读的交换机/服务器路径。每行只处理第一个匹配到的 IP，查不到描述的 IP 原样保留。",
+        "description": "给文本里每一行的 IP 补上 CMDB 归属描述，格式：IP(描述)。用于把 mtr/traceroute 记录的裸 IP 转换成可读的交换机/服务器路径。每行只处理第一个匹配到的 IP，查不到描述的 IP 原样保留。仅覆盖内网交换机与内网服务器，公网 IP（运营商/CDN 等）和未登记的内网 IP 查不到属正常现象，原样返回即可，不代表查询失败。",
         "inputSchema": {
             "type": "object",
             "properties": {
