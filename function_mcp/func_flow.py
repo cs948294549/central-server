@@ -306,5 +306,5 @@ def query_flow_traffic(group=None, top_n=None):
 
 if __name__ == '__main__':
     # 博兴出口 M5机房出口
-    test = query_flow_traffic(group="M5机房出口", top_n=5)
+    test = query_flow_traffic(group="博兴出口", top_n=10)
     print(test)

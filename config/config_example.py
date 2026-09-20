@@ -23,12 +23,12 @@ class Config:
 
     # LDAP/AD 认证配置
     # 认证方式：先用只读代理账号(ldap_bind_dn/ldap_bind_password)搜索用户DN，再用该DN+用户密码单独bind校验
-    ldap_server = "ldap-ad-ro.vdian.net"  # LDAP/AD 服务器地址
+    ldap_server = "ldap.example.com"  # LDAP/AD 服务器地址
     ldap_port = 389
     ldap_use_ssl = False
-    ldap_bind_dn = "CN=LDAP-Proxy-Read,OU=WeiDian Service Account,OU=微店,DC=corp,DC=weidian-inc,DC=com"  # 只读代理账号DN
+    ldap_bind_dn = "CN=LDAP-Proxy-Read,OU=Service Account,DC=example,DC=com"  # 只读代理账号DN
     ldap_bind_password = "xx"  # 只读代理账号密码，自行填写
-    ldap_base_dn = "OU=微店,DC=corp,DC=weidian-inc,DC=com"  # 用户搜索base DN
+    ldap_base_dn = "DC=example,DC=com"  # 用户搜索base DN
     ldap_user_search_filter = "(sAMAccountName={username})"  # 用户搜索过滤器
 
     # 时间戳验证配置
@@ -71,12 +71,13 @@ class Config:
         "db_user": "root",
         "db_token": "root",
         "db_port": 3306,
+        "db_name": "netops",  # 数据库名称
     }
 
     # SNMP配置
     snmp_community = "public"  # SNMP团体字符串
 
-    # SSH配置
+    # SSH配置 影响设备登陆
     ssh_username = "admin"  # SSH用户名（必须修改）
     ssh_password = "password"  # SSH密码（必须修改）
 
@@ -87,3 +88,18 @@ class Config:
     # ark 影响火山云查询
     volcano_ACCESS_KEY_ID = ""
     volcano_SECRET_ACCESS_KEY = ""
+
+    # ocean cmdb的token
+    # 仅影响服务器归属查询（func_cmdb.transIP / searchServer）；
+    # esflow 本身只能查流量 Top，IP 归属完全依赖这个 token
+    cmdb_access_token = ""
+
+    # Elasticsearch 配置（esflow/ElastiFlow 流量查询）
+    es_hosts = ["https://localhost:9200"]
+    es_user = "elastic"
+    es_password = ""
+    es_verify_certs = False  # 生产环境建议使用 True 并配置证书
+
+
+class LocalConfig:
+    sign_key = "xx"

@@ -1,18 +1,9 @@
-from elasticsearch import Elasticsearch, helpers
+from elasticsearch import Elasticsearch
 
-hosts = ['https://10.39.47.2:9200']
+from config.config import Config
 
 g_es = Elasticsearch(
-    hosts=hosts,
-    basic_auth=("elastic", "geili@*^doy"),
-    verify_certs=False  # 生产环境建议使用 True 并配置证书
+    hosts=Config.es_hosts,
+    basic_auth=(Config.es_user, Config.es_password),
+    verify_certs=Config.es_verify_certs
 )
-
-# # 执行 API 请求
-# response = g_es.cluster.health()
-# print(response)
-#
-# # 查询所有索引
-# indices_list = g_es.cat.indices(h="index", format='json')
-# for index in indices_list:
-#     print(index)
