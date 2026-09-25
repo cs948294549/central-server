@@ -267,8 +267,8 @@ def format_traffic(result):
     src = result["source"]
     dst = result["destination"]
 
-    add(table_text(f"[出方向] 按源 IP Top {len(src)}", src, total_bytes))
-    add(table_text(f"[入方向] 按目的 IP Top {len(dst)}", dst, total_bytes))
+    add(table_text(f"按源 IP Top {len(src)}", src, total_bytes))
+    add(table_text(f"按目的 IP Top {len(dst)}", dst, total_bytes))
 
     # 未进 Top-N 的部分单独交代，避免看起来像"总流量只有这些"
     for name, data in (("源 IP", src), ("目的 IP", dst)):
