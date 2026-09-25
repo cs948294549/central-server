@@ -1,1144 +1,635 @@
-# ACL 和地址前缀列表管理设计方案
+# ACL 管理：解析 JSON 结构与数据库存储
 
 ## 文档信息
-- 创建时间: 2026-09-10
+- 创建时间: 2026-09-20
 - 状态: 设计中
-- 版本: v0.1
+- 版本: v1.1
 
-## 一、背景与需求
-
-### 1.1 业务场景
-- ACL（访问控制列表）和地址前缀列表属于策略类配置
-- 多个设备的配置内容往往一致，需要模板化管理
-- 配置来源：从设备备份配置中解析获取
-- 厂商差异：H3C、Huawei、Cisco 等厂商语法不同
-- 对象组引用：边界设备的 ACL 会引用地址簿和端口组
-
-### 1.2 核心目标
-- 策略模板化：相同策略只存储一份，多设备复用
-- 厂商适配：支持多厂商配置的标准化和转换
-- 版本管理：跟踪策略变更历史
-- 差异检测：对比设备实际配置与模板的差异
-- 对象组管理：支持地址对象和服务对象的引用关系
-
-### 1.3 ACL 类型说明
-
-**标准 ACL (Basic ACL)**
-- 只能基于源 IP 地址过滤
-- 不支持目标地址、协议、端口等条件
-- 编号范围：2000-2999（行业惯例）
-- 示例：
-```
-H3C:     acl basic 2000
-         rule 5 permit source 10.1.0.0 0.0.255.255
-
-Huawei:  acl number 2000
-         rule 5 permit source 10.1.0.0 0.0.255.255
-
-Cisco:   access-list 2000 permit 10.1.0.0 0.0.255.255
-```
-
-**扩展 ACL (Advanced ACL)**
-- 支持源/目标 IP、协议、端口等多维度匹配
-- 编号范围：3000-3999（行业惯例）
-- 示例：
-```
-H3C:     acl advanced 3000
-         rule 5 permit tcp source 10.1.0.0 0.0.255.255 destination any destination-port eq 80 443
-
-Huawei:  acl number 3000
-         rule 5 permit tcp source 10.1.0.0 0.0.255.255 destination any destination-port eq 80 443
-
-Cisco:   ip access-list web-access
-         5 permit tcp 10.1.0.0/16 any eq 80 443
-```
-
-## 二、架构设计
-
-### 2.1 整体架构
-
-```
-┌─────────────────────────────────────────────────┐
-│              前端管理界面                          │
-│  (策略模板管理、对象组管理、设备绑定、差异检测)      │
-└─────────────────────────────────────────────────┘
-                        ↓
-┌─────────────────────────────────────────────────┐
-│              API 层                              │
-│  (策略 CRUD、解析、渲染、版本管理、依赖检查)        │
-└─────────────────────────────────────────────────┘
-                        ↓
-┌─────────────────────────────────────────────────┐
-│          标准化抽象层                             │
-│  (厂商无关的统一模型 - Normalized Model)           │
-└─────────────────────────────────────────────────┘
-         ↓                              ↓
-┌──────────────────┐         ┌──────────────────┐
-│  厂商适配器层      │         │   数据持久化层     │
-│  (H3C/Huawei/    │         │  (数据库存储)      │
-│   Cisco 适配器)   │         │                  │
-└──────────────────┘         └──────────────────┘
-         ↓
-┌─────────────────────────────────────────────────┐
-│           厂商原生配置                            │
-│  (H3C 语法、Huawei 语法、Cisco 语法)               │
-└─────────────────────────────────────────────────┘
-```
-
-### 2.2 数据流向
-
-**配置解析流程：**
-```
-设备备份配置 → 厂商适配器解析 → 标准化模型 → 数据库存储
-                                    ↓
-                            (同时保存原始配置)
-```
-
-**配置渲染流程：**
-```
-数据库读取 → 标准化模型 → 厂商适配器渲染 → 厂商特定配置
-                              ↓
-                        (可选：展开对象引用)
-```
-
-## 三、标准化数据模型
-
-### 3.1 ACL 标准模型
-
-```json
-{
-  "name": "acl-name",
-  "acl_type": "basic|advanced",
-  "number": 2000,
-  "description": "描述信息",
-  "rules": [
-    {
-      "seq": 5,
-      "action": "permit|deny",
-      
-      "source": {
-        "type": "direct|object|any",
-        "address": "10.1.0.0/16",
-        "wildcard": "0.0.255.255",
-        "object_name": "office-networks"
-      },
-      
-      "protocol": "tcp|udp|icmp|ip",
-      
-      "destination": {
-        "type": "direct|object|any",
-        "address": "192.168.1.0/24",
-        "wildcard": "0.0.0.255",
-        "object_name": "dmz-servers"
-      },
-      
-      "source_port": {
-        "type": "direct|object|any",
-        "operator": "eq|range|lt|gt",
-        "ports": [1024, 65535],
-        "object_name": "high-ports"
-      },
-      
-      "dest_port": {
-        "type": "direct|object|any",
-        "operator": "eq",
-        "ports": [80, 443],
-        "object_name": "web-services"
-      },
-      
-      "options": {
-        "logging": true,
-        "time_range": "work-hours",
-        "fragments": false
-      }
-    }
-  ]
-}
-```
-
-### 3.2 地址对象模型
-
-```json
-{
-  "name": "office-networks",
-  "type": "host|network|range|group",
-  "description": "办公网段集合",
-  "entries": [
-    {
-      "type": "network",
-      "address": "10.1.0.0/16",
-      "wildcard": "0.0.255.255"
-    },
-    {
-      "type": "network",
-      "address": "10.2.0.0/16",
-      "wildcard": "0.0.255.255"
-    },
-    {
-      "type": "ref",
-      "object_name": "branch-offices"
-    }
-  ]
-}
-```
-
-### 3.3 服务对象模型
-
-```json
-{
-  "name": "web-services",
-  "type": "single|group",
-  "description": "Web 服务端口",
-  "entries": [
-    {
-      "protocol": "tcp",
-      "port_operator": "eq",
-      "ports": [80, 443]
-    },
-    {
-      "protocol": "tcp",
-      "port_operator": "eq",
-      "ports": [8080, 8443]
-    },
-    {
-      "type": "ref",
-      "object_name": "alternative-web-ports"
-    }
-  ]
-}
-```
-
-### 3.4 地址前缀列表模型
-
-```json
-{
-  "name": "idc-networks",
-  "description": "IDC 网段前缀列表",
-  "entries": [
-    {
-      "seq": 10,
-      "action": "permit|deny",
-      "prefix": "172.16.0.0/12",
-      "ge": 16,
-      "le": 24
-    }
-  ]
-}
-```
-
-## 四、数据库设计
-
-### 4.1 方案选择：混合存储
-
-采用**关系表 + JSON**的混合存储方式：
-- 关系字段：存储元信息和关键字段，支持索引和复杂查询
-- JSON 字段：存储完整配置和厂商特定配置，灵活扩展
-
-### 4.2 核心表结构
-
-#### 4.2.1 对象组管理表
-
-```sql
--- 地址对象组
-CREATE TABLE address_objects (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL,
-    type ENUM('host', 'network', 'range', 'group') NOT NULL,
-    description TEXT,
-    vendor_type VARCHAR(20),
-    
-    -- 标准化配置（完整 JSON）
-    normalized_config JSON,
-    
-    -- 厂商特定配置
-    vendor_configs JSON,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
-    UNIQUE KEY uk_name (name),
-    INDEX idx_type (type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='地址对象组';
-
--- 地址对象条目
-CREATE TABLE address_object_entries (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    address_object_id BIGINT NOT NULL,
-    entry_type ENUM('ip', 'network', 'range', 'ref') NOT NULL,
-    
-    -- 地址信息
-    ip_address VARCHAR(50),
-    network_address VARCHAR(50),
-    network_mask VARCHAR(50),
-    range_start VARCHAR(50),
-    range_end VARCHAR(50),
-    
-    -- 引用其他对象（支持嵌套）
-    ref_object_id BIGINT,
-    
-    sequence INT,
-    
-    FOREIGN KEY (address_object_id) REFERENCES address_objects(id) ON DELETE CASCADE,
-    FOREIGN KEY (ref_object_id) REFERENCES address_objects(id) ON DELETE RESTRICT,
-    INDEX idx_sequence (address_object_id, sequence),
-    INDEX idx_network (network_address)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='地址对象条目';
-
--- 服务对象组
-CREATE TABLE service_objects (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL,
-    type ENUM('single', 'group') NOT NULL,
-    description TEXT,
-    vendor_type VARCHAR(20),
-    
-    normalized_config JSON,
-    vendor_configs JSON,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
-    UNIQUE KEY uk_name (name),
-    INDEX idx_type (type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务对象组';
-
--- 服务对象条目
-CREATE TABLE service_object_entries (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    service_object_id BIGINT NOT NULL,
-    entry_type ENUM('port', 'protocol', 'ref') NOT NULL,
-    
-    -- 服务信息
-    protocol VARCHAR(20),
-    port_operator VARCHAR(10),
-    port_start INT,
-    port_end INT,
-    
-    -- 引用其他服务组
-    ref_object_id BIGINT,
-    
-    sequence INT,
-    
-    FOREIGN KEY (service_object_id) REFERENCES service_objects(id) ON DELETE CASCADE,
-    FOREIGN KEY (ref_object_id) REFERENCES service_objects(id) ON DELETE RESTRICT,
-    INDEX idx_sequence (service_object_id, sequence)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='服务对象条目';
-```
-
-#### 4.2.2 ACL 管理表
-
-```sql
--- ACL 模板主表
-CREATE TABLE acl_templates (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL,
-    acl_type ENUM('basic', 'advanced') NOT NULL,
-    acl_number INT,
-    description TEXT,
-    vendor_type VARCHAR(20),
-    
-    -- 标准化配置（完整 JSON，用于渲染和导出）
-    normalized_config JSON,
-    
-    -- 厂商特定配置
-    vendor_configs JSON,
-    
-    -- 版本管理
-    version INT DEFAULT 1,
-    is_active BOOLEAN DEFAULT TRUE,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    created_by VARCHAR(50),
-    
-    UNIQUE KEY uk_name (name),
-    INDEX idx_type (acl_type),
-    INDEX idx_vendor (vendor_type),
-    INDEX idx_number (acl_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ACL 模板';
-
--- ACL 规则表（支持对象引用）
-CREATE TABLE acl_rules (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    acl_template_id BIGINT NOT NULL,
-    sequence INT NOT NULL,
-    action ENUM('permit', 'deny') NOT NULL,
-    
-    -- 源地址：直接地址 OR 引用对象
-    source_type ENUM('direct', 'object', 'any') NOT NULL,
-    source_address VARCHAR(50),
-    source_address_object_id BIGINT,
-    
-    -- 目标地址
-    dest_type ENUM('direct', 'object', 'any'),
-    dest_address VARCHAR(50),
-    dest_address_object_id BIGINT,
-    
-    -- 协议
-    protocol VARCHAR(20),
-    
-    -- 源端口
-    source_port_type ENUM('direct', 'object', 'any'),
-    source_port JSON,
-    source_service_object_id BIGINT,
-    
-    -- 目标端口
-    dest_port_type ENUM('direct', 'object', 'any'),
-    dest_port JSON,
-    dest_service_object_id BIGINT,
-    
-    -- 其他选项
-    options JSON,
-    
-    FOREIGN KEY (acl_template_id) REFERENCES acl_templates(id) ON DELETE CASCADE,
-    FOREIGN KEY (source_address_object_id) REFERENCES address_objects(id) ON DELETE RESTRICT,
-    FOREIGN KEY (dest_address_object_id) REFERENCES address_objects(id) ON DELETE RESTRICT,
-    FOREIGN KEY (source_service_object_id) REFERENCES service_objects(id) ON DELETE RESTRICT,
-    FOREIGN KEY (dest_service_object_id) REFERENCES service_objects(id) ON DELETE RESTRICT,
-    
-    UNIQUE KEY uk_template_seq (acl_template_id, sequence),
-    INDEX idx_source_addr (source_address),
-    INDEX idx_dest_addr (dest_address),
-    INDEX idx_source_obj (source_address_object_id),
-    INDEX idx_dest_obj (dest_address_object_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ACL 规则';
-```
-
-#### 4.2.3 设备绑定与版本管理表
-
-```sql
--- 设备策略绑定表
-CREATE TABLE device_acl_bindings (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    device_id BIGINT NOT NULL,
-    acl_template_id BIGINT NOT NULL,
-    
-    -- 部署状态
-    deployed_version INT,
-    status ENUM('pending', 'synced', 'drift', 'failed') DEFAULT 'pending',
-    last_sync_at TIMESTAMP,
-    
-    -- 差异信息
-    config_diff JSON,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (acl_template_id) REFERENCES acl_templates(id),
-    UNIQUE KEY uk_device_acl (device_id, acl_template_id),
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备 ACL 绑定';
-
--- ACL 版本历史表
-CREATE TABLE acl_version_history (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    acl_template_id BIGINT NOT NULL,
-    version INT NOT NULL,
-    
-    -- 配置快照
-    config_snapshot JSON,
-    
-    -- 变更信息
-    change_type ENUM('create', 'update', 'delete') NOT NULL,
-    change_summary TEXT,
-    diff JSON,
-    
-    created_by VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (acl_template_id) REFERENCES acl_templates(id) ON DELETE CASCADE,
-    INDEX idx_template_version (acl_template_id, version)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ACL 版本历史';
-
--- 对象依赖关系表
-CREATE TABLE object_dependencies (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    object_type ENUM('address', 'service') NOT NULL,
-    object_id BIGINT NOT NULL,
-    
-    used_by_type ENUM('acl', 'address_object', 'service_object') NOT NULL,
-    used_by_id BIGINT NOT NULL,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_object (object_type, object_id),
-    INDEX idx_used_by (used_by_type, used_by_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对象依赖关系';
-```
-
-#### 4.2.4 地址前缀列表表
-
-```sql
--- 地址前缀列表模板
-CREATE TABLE prefix_list_templates (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    vendor_type VARCHAR(20),
-    
-    normalized_config JSON,
-    vendor_configs JSON,
-    
-    version INT DEFAULT 1,
-    is_active BOOLEAN DEFAULT TRUE,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    created_by VARCHAR(50),
-    
-    UNIQUE KEY uk_name (name),
-    INDEX idx_vendor (vendor_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='地址前缀列表模板';
-
--- 地址前缀列表条目
-CREATE TABLE prefix_list_entries (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    prefix_list_id BIGINT NOT NULL,
-    sequence INT NOT NULL,
-    action ENUM('permit', 'deny') NOT NULL,
-    prefix VARCHAR(50) NOT NULL,
-    ge INT,
-    le INT,
-    
-    FOREIGN KEY (prefix_list_id) REFERENCES prefix_list_templates(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_list_seq (prefix_list_id, sequence),
-    INDEX idx_prefix (prefix)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='地址前缀列表条目';
-```
-
-### 4.3 数据一致性策略
-
-**双写保证：**
-- 写入时：同时更新关系表和 JSON 字段
-- 读取时：
-  - 渲染/导出：直接使用 `normalized_config` JSON
-  - 查询/统计：使用关系表字段和索引
-
-**示例代码：**
-```python
-def create_acl(acl_data):
-    with db.transaction():
-        # 1. 写入主表（包含完整 JSON）
-        acl_id = db.insert('acl_templates', {
-            'name': acl_data['name'],
-            'acl_type': acl_data['acl_type'],
-            'normalized_config': json.dumps(acl_data),
-            'vendor_configs': json.dumps(render_vendor_configs(acl_data))
-        })
-        
-        # 2. 写入规则表（便于查询）
-        for rule in acl_data['rules']:
-            db.insert('acl_rules', {
-                'acl_template_id': acl_id,
-                'sequence': rule['seq'],
-                'action': rule['action'],
-                'source_type': rule['source']['type'],
-                'source_address': rule['source'].get('address'),
-                'source_address_object_id': get_object_id(rule['source'].get('object_name')),
-                # ... 其他字段
-            })
-        
-        # 3. 记录版本历史
-        db.insert('acl_version_history', {
-            'acl_template_id': acl_id,
-            'version': 1,
-            'config_snapshot': json.dumps(acl_data),
-            'change_type': 'create'
-        })
-    
-    return acl_id
-```
-
-## 五、厂商适配器设计
-
-### 5.1 适配器架构
-
-```python
-class VendorAdapter(ABC):
-    """厂商适配器基类"""
-    
-    @abstractmethod
-    def parse_acl(self, raw_config: str) -> dict:
-        """解析厂商配置 -> 标准模型"""
-        pass
-    
-    @abstractmethod
-    def render_acl(self, normalized: dict, expand_objects: bool = False) -> str:
-        """标准模型 -> 厂商配置"""
-        pass
-    
-    @abstractmethod
-    def parse_address_object(self, raw_config: str) -> dict:
-        """解析地址对象"""
-        pass
-    
-    @abstractmethod
-    def parse_service_object(self, raw_config: str) -> dict:
-        """解析服务对象"""
-        pass
-    
-    @abstractmethod
-    def parse_prefix_list(self, raw_config: str) -> dict:
-        """解析地址前缀列表"""
-        pass
-```
-
-### 5.2 H3C 适配器示例
-
-```python
-class H3CAdapter(VendorAdapter):
-    def parse_acl(self, raw_config: str) -> dict:
-        """
-        解析 H3C ACL 配置
-        输入示例:
-            acl advanced 3000
-             rule 5 permit tcp source 10.1.0.0 0.0.255.255 destination any destination-port eq 80 443
-        """
-        # 实现解析逻辑
-        pass
-    
-    def render_acl(self, normalized: dict, expand_objects: bool = False) -> str:
-        """渲染为 H3C 配置"""
-        acl_type = normalized['acl_type']
-        acl_number = normalized['number']
-        
-        if acl_type == 'basic':
-            lines = [f"acl basic {acl_number}"]
-            for rule in normalized['rules']:
-                src = self._format_address(rule['source'])
-                lines.append(f" rule {rule['seq']} {rule['action']} source {src}")
-        
-        elif acl_type == 'advanced':
-            lines = [f"acl advanced {acl_number}"]
-            for rule in normalized['rules']:
-                cmd_parts = [f" rule {rule['seq']} {rule['action']}"]
-                
-                if rule.get('protocol'):
-                    cmd_parts.append(rule['protocol'])
-                
-                # 源地址
-                src = self._format_address_with_object(rule['source'], expand_objects)
-                cmd_parts.append(f"source {src}")
-                
-                # 目标地址
-                if rule.get('destination'):
-                    dst = self._format_address_with_object(rule['destination'], expand_objects)
-                    cmd_parts.append(f"destination {dst}")
-                
-                # 目标端口
-                if rule.get('dest_port'):
-                    port_str = self._format_port(rule['dest_port'])
-                    cmd_parts.append(f"destination-port {port_str}")
-                
-                lines.append(' '.join(cmd_parts))
-        
-        return '\n'.join(lines)
-    
-    def _format_address_with_object(self, addr_config, expand_objects):
-        """格式化地址（支持对象引用）"""
-        if addr_config['type'] == 'any':
-            return 'any'
-        elif addr_config['type'] == 'direct':
-            ip, cidr = addr_config['address'].split('/')
-            wildcard = self._cidr_to_wildcard(int(cidr))
-            return f"{ip} {wildcard}"
-        elif addr_config['type'] == 'object':
-            if expand_objects:
-                # 展开对象为具体地址
-                return self._expand_address_object(addr_config['object_name'])
-            else:
-                return f"object-group {addr_config['object_name']}"
-    
-    def parse_address_object(self, raw_config: str) -> dict:
-        """
-        解析地址对象组
-        输入示例:
-            object-group ip address office-networks
-             network-object 10.1.0.0 0.0.255.255
-             network-object 10.2.0.0 0.0.255.255
-        """
-        pass
-```
-
-### 5.3 厂商特性兼容性
-
-```python
-# 特性映射表
-FEATURE_SUPPORT = {
-    'time_range': {
-        'h3c': True,
-        'huawei': True,
-        'cisco_nx': False
-    },
-    'object_group': {
-        'h3c': True,
-        'huawei': 'limited',  # 需要特殊转换
-        'cisco_nx': True
-    },
-    'logging': {
-        'h3c': True,
-        'huawei': True,
-        'cisco_nx': True
-    }
-}
-
-def validate_features(normalized_config, target_vendor):
-    """检查目标厂商是否支持配置中使用的特性"""
-    unsupported = []
-    
-    for rule in normalized_config['rules']:
-        if rule.get('options', {}).get('time_range'):
-            if not FEATURE_SUPPORT['time_range'].get(target_vendor):
-                unsupported.append(f"规则 {rule['seq']}: 时间段功能")
-    
-    return unsupported
-```
-
-## 六、核心功能设计
-
-### 6.1 配置解析与入库
-
-```python
-class ConfigParser:
-    def __init__(self):
-        self.adapters = {
-            'h3c': H3CAdapter(),
-            'huawei': HuaweiAdapter(),
-            'cisco_nx': CiscoNXAdapter()
-        }
-    
-    def parse_device_backup(self, device_id, config_text, vendor):
-        """解析设备备份配置"""
-        adapter = self.adapters.get(vendor)
-        if not adapter:
-            raise ValueError(f"不支持的厂商: {vendor}")
-        
-        # 1. 解析所有对象组
-        address_objects = adapter.parse_address_objects(config_text)
-        service_objects = adapter.parse_service_objects(config_text)
-        
-        # 2. 解析 ACL
-        acls = adapter.parse_acls(config_text)
-        
-        # 3. 解析地址前缀列表
-        prefix_lists = adapter.parse_prefix_lists(config_text)
-        
-        # 4. 存储到数据库
-        with db.transaction():
-            # 先存对象（ACL 可能引用）
-            for obj in address_objects:
-                self._upsert_address_object(obj)
-            for obj in service_objects:
-                self._upsert_service_object(obj)
-            
-            # 再存 ACL
-            for acl in acls:
-                self._upsert_acl(device_id, acl)
-            
-            # 最后存前缀列表
-            for prefix_list in prefix_lists:
-                self._upsert_prefix_list(device_id, prefix_list)
-        
-        return {
-            'address_objects': len(address_objects),
-            'service_objects': len(service_objects),
-            'acls': len(acls),
-            'prefix_lists': len(prefix_lists)
-        }
-```
-
-### 6.2 配置渲染与导出
-
-```python
-class ConfigRenderer:
-    def render_acl_for_device(self, acl_id, device_id, options=None):
-        """为指定设备渲染 ACL 配置"""
-        options = options or {}
-        expand_objects = options.get('expand_objects', False)
-        
-        # 1. 获取设备厂商
-        device = db.get_device(device_id)
-        vendor = device['vendor_type']
-        
-        # 2. 获取 ACL 配置
-        acl = db.query_one(
-            "SELECT normalized_config FROM acl_templates WHERE id = ?",
-            [acl_id]
-        )
-        normalized = json.loads(acl['normalized_config'])
-        
-        # 3. 选择适配器
-        adapter = self.adapters[vendor]
-        
-        # 4. 如果不展开对象，需要同时输出对象定义
-        if not expand_objects and self._has_object_refs(normalized):
-            objects = self._collect_dependencies(acl_id)
-            
-            output = []
-            # 先输出对象定义
-            for obj in objects['address']:
-                output.append(adapter.render_address_object(obj))
-            for obj in objects['service']:
-                output.append(adapter.render_service_object(obj))
-            output.append("")  # 空行分隔
-            
-            # 再输出 ACL
-            output.append(adapter.render_acl(normalized, expand_objects=False))
-            
-            return '\n'.join(output)
-        else:
-            return adapter.render_acl(normalized, expand_objects=True)
-```
-
-### 6.3 差异检测
-
-```python
-class ConfigDiffDetector:
-    def detect_drift(self, device_id, acl_template_id):
-        """检测设备实际配置与模板的差异"""
-        
-        # 1. 获取设备当前配置（从最新备份）
-        current_config = self._get_device_current_config(device_id)
-        
-        # 2. 获取模板配置
-        template = db.query_one(
-            "SELECT normalized_config FROM acl_templates WHERE id = ?",
-            [acl_template_id]
-        )
-        template_config = json.loads(template['normalized_config'])
-        
-        # 3. 对比差异
-        diff = self._compute_diff(current_config, template_config)
-        
-        # 4. 更新状态
-        if diff['has_changes']:
-            status = 'drift'
-        else:
-            status = 'synced'
-        
-        db.execute(
-            """
-            UPDATE device_acl_bindings
-            SET status = ?, config_diff = ?, last_sync_at = NOW()
-            WHERE device_id = ? AND acl_template_id = ?
-            """,
-            [status, json.dumps(diff), device_id, acl_template_id]
-        )
-        
-        return diff
-    
-    def _compute_diff(self, current, template):
-        """计算配置差异"""
-        changes = []
-        
-        # 对比规则数量
-        if len(current['rules']) != len(template['rules']):
-            changes.append({
-                'type': 'rule_count',
-                'current': len(current['rules']),
-                'template': len(template['rules'])
-            })
-        
-        # 逐条对比规则
-        for i, (cur_rule, tpl_rule) in enumerate(zip(current['rules'], template['rules'])):
-            if cur_rule != tpl_rule:
-                changes.append({
-                    'type': 'rule_diff',
-                    'sequence': tpl_rule['seq'],
-                    'current': cur_rule,
-                    'template': tpl_rule
-                })
-        
-        return {
-            'has_changes': len(changes) > 0,
-            'changes': changes
-        }
-```
-
-### 6.4 依赖关系管理
-
-```python
-class DependencyManager:
-    def check_before_delete(self, object_type, object_id):
-        """删除对象前检查依赖"""
-        dependencies = db.query(
-            """
-            SELECT used_by_type, used_by_id
-            FROM object_dependencies
-            WHERE object_type = ? AND object_id = ?
-            """,
-            [object_type, object_id]
-        )
-        
-        if dependencies:
-            # 有依赖，不能删除
-            used_by = []
-            for dep in dependencies:
-                if dep['used_by_type'] == 'acl':
-                    acl = db.get('acl_templates', dep['used_by_id'])
-                    used_by.append(f"ACL: {acl['name']}")
-                elif dep['used_by_type'] == 'address_object':
-                    obj = db.get('address_objects', dep['used_by_id'])
-                    used_by.append(f"地址对象: {obj['name']}")
-            
-            raise DependencyError(f"对象被以下项引用，无法删除: {', '.join(used_by)}")
-    
-    def get_dependency_tree(self, acl_id):
-        """获取 ACL 的完整依赖树（包括嵌套）"""
-        # 使用递归查询获取所有依赖
-        query = """
-        WITH RECURSIVE deps AS (
-            -- 直接依赖
-            SELECT DISTINCT source_address_object_id AS obj_id, 'address' AS obj_type
-            FROM acl_rules WHERE acl_template_id = ? AND source_address_object_id IS NOT NULL
-            
-            UNION
-            
-            SELECT DISTINCT dest_address_object_id, 'address'
-            FROM acl_rules WHERE acl_template_id = ? AND dest_address_object_id IS NOT NULL
-            
-            UNION
-            
-            -- 嵌套依赖
-            SELECT e.ref_object_id, 'address'
-            FROM deps d
-            JOIN address_object_entries e ON d.obj_id = e.address_object_id
-            WHERE e.ref_object_id IS NOT NULL
-        )
-        SELECT DISTINCT * FROM deps
-        """
-        
-        return db.query(query, [acl_id, acl_id])
-```
-
-## 七、前端界面设计
-
-### 7.1 策略模板管理页面
-
-```
-┌──────────────────────────────────────────────────────┐
-│  ACL 模板管理                   [+ 新建]  [导入]  [导出]│
-├──────────────────────────────────────────────────────┤
-│ 搜索: [____________]  类型: [全部▼]  厂商: [全部▼]   │
-├──────────────────────────────────────────────────────┤
-│ 名称              类型    编号  规则数  设备数  操作    │
-│ office-basic     标准    2000   10     25    [编辑]   │
-│ web-access       扩展    3000   15     12    [编辑]   │
-│ dmz-protect      扩展    3100    8      5    [编辑]   │
-└──────────────────────────────────────────────────────┘
-```
-
-### 7.2 ACL 编辑器
-
-```
-┌──────────────────────────────────────────────────────┐
-│  编辑 ACL: web-access                     [保存] [取消]│
-├──────────────────────────────────────────────────────┤
-│ 基本信息                                              │
-│  名称: [web-access        ]  编号: [3000]            │
-│  类型: ● 扩展 ACL  ○ 标准 ACL                        │
-│  厂商: [H3C ▼]                                       │
-│  描述: [允许办公网访问 Web 服务                    ]  │
-├──────────────────────────────────────────────────────┤
-│ 规则列表                               [+ 添加规则]   │
-│                                                      │
-│  规则 5: 允许                            [编辑][删除]│
-│    协议: TCP                                         │
-│    源地址: 引用对象 "office-networks"                │
-│    目标地址: 任意                                     │
-│    目标端口: 等于 80, 443                            │
-│                                                      │
-│  规则 10: 拒绝                           [编辑][删除]│
-│    协议: IP                                          │
-│    源地址: 任意                                       │
-│    目标地址: 任意                                     │
-├──────────────────────────────────────────────────────┤
-│ 使用此模板的设备 (12)                    [查看详情]   │
-│  • bbs1_corp_bj_m01 (已同步)                         │
-│  • bbs2_corp_sh_m01 (配置漂移)                       │
-│  • ...                                               │
-├──────────────────────────────────────────────────────┤
-│ 配置预览                                              │
-│  [保留引用 ▼]                                        │
-│  ┌────────────────────────────────────────────────┐ │
-│  │ acl advanced 3000                              │ │
-│  │  rule 5 permit tcp source object-group ...    │ │
-│  │  rule 10 deny ip source any destination any   │ │
-│  └────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────┘
-```
-
-### 7.3 对象组管理页面
-
-```
-┌──────────────────────────────────────────────────────┐
-│  地址对象管理                       [+ 新建]  [导入]   │
-├──────────────────────────────────────────────────────┤
-│ 名称                  类型    条目数  引用次数  操作    │
-│ office-networks      组       3       12    [编辑]   │
-│ dmz-servers          组       5        8    [编辑]   │
-│ vip-192.168.1.1     主机      1        3    [编辑]   │
-├──────────────────────────────────────────────────────┤
-│  点击查看详情：                                        │
-│  ┌────────────────────────────────────────────────┐ │
-│  │ office-networks (地址组)                       │ │
-│  │                                                │ │
-│  │ 包含:                                          │ │
-│  │  • 10.1.0.0/16                                │ │
-│  │  • 10.2.0.0/16                                │ │
-│  │  • 引用: branch-offices                       │ │
-│  │                                                │ │
-│  │ 被引用于:                                      │ │
-│  │  • ACL: web-access (规则 5)                   │ │
-│  │  • ACL: app-access (规则 10)                  │ │
-│  │  • 地址对象: all-offices                      │ │
-│  └────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────┘
-```
-
-## 八、实施计划
-
-### 8.1 分阶段实施
-
-**Phase 1: 基础框架（2-3 周）**
-- [ ] 数据库表结构设计与创建
-- [ ] 基础数据模型和 API
-- [ ] 单厂商适配器（H3C 优先）
-- [ ] 简单 ACL 解析与存储（不含对象引用）
-- [ ] 基础前端界面（列表、查看）
-
-**Phase 2: 核心功能（3-4 周）**
-- [ ] 标准 ACL 和扩展 ACL 完整支持
-- [ ] 版本管理和历史记录
-- [ ] 设备绑定和状态管理
-- [ ] 配置渲染和导出
-- [ ] 差异检测功能
-- [ ] 完善前端编辑器
-
-**Phase 3: 高级特性（2-3 周）**
-- [ ] 地址对象和服务对象管理
-- [ ] 对象引用支持
-- [ ] 依赖关系检查
-- [ ] 嵌套对象支持
-- [ ] 对象组前端界面
-
-**Phase 4: 多厂商支持（按需）**
-- [ ] Huawei 适配器
-- [ ] Cisco 适配器
-- [ ] 厂商特性兼容性检查
-- [ ] 跨厂商配置转换
-
-**Phase 5: 增强功能（按需）**
-- [ ] 地址前缀列表支持
-- [ ] 批量操作和灰度发布
-- [ ] 配置模板智能推荐
-- [ ] 配置合规性检查
-- [ ] 审计日志
-
-### 8.2 技术栈建议
-
-**后端：**
-- Python 3.9+
-- FastAPI / Flask
-- SQLAlchemy (ORM)
-- MySQL 8.0+
-- Pydantic (数据验证)
-
-**前端：**
-- Vue 3 / React
-- Ant Design / Element Plus
-- Monaco Editor (配置编辑器)
-- ECharts (依赖关系可视化)
-
-### 8.3 关键决策点
-
-1. **对象组优先级**
-   - 场景：对象组主要在边界设备使用
-   - 建议：Phase 1-2 不支持对象组，Phase 3 再实现
-   - 理由：先验证核心流程，避免过早优化
-
-2. **厂商支持顺序**
-   - 优先级：根据设备数量和重要性排序
-   - 建议：先实现主要厂商（H3C），验证架构合理性后再扩展
-
-3. **配置渲染策略**
-   - 展开对象 vs 保留引用：提供选项，由用户选择
-   - 默认行为：边界设备保留引用，其他设备展开
-
-## 九、风险与挑战
-
-### 9.1 技术风险
-
-1. **厂商语法差异**
-   - 风险：不同厂商的配置语法复杂多变，难以完全覆盖
-   - 缓解：采用渐进式支持，优先覆盖常用特性
-
-2. **对象嵌套复杂度**
-   - 风险：对象组可能多层嵌套，导致解析和渲染复杂
-   - 缓解：限制嵌套层数，提供循环引用检测
-
-3. **配置解析准确性**
-   - 风险：备份配置格式可能不规范，解析失败
-   - 缓解：增加异常处理和人工审核机制
-
-### 9.2 业务风险
-
-1. **变更风险**
-   - 风险：策略模板变更可能影响多个设备
-   - 缓解：提供影响范围预览、灰度发布、回滚机制
-
-2. **权限控制**
-   - 风险：ACL 属于安全配置，需要严格权限管理
-   - 缓解：实施细粒度权限控制和审批流程
-
-### 9.3 性能风险
-
-1. **大规模 ACL 处理**
-   - 风险：单个 ACL 可能包含数百条规则
-   - 缓解：分页加载、懒加载、配置缓存
-
-2. **依赖关系查询**
-   - 风险：递归查询对象依赖可能影响性能
-   - 缓解：使用 CTE（公共表达式）、结果缓存
-
-## 十、后续优化方向
-
-1. **AI 辅助**
-   - 根据业务需求自动生成 ACL 规则
-   - 识别重复或冲突的规则
-   - 配置优化建议
-
-2. **可视化增强**
-   - ACL 规则流程图
-   - 对象依赖关系图谱
-   - 策略覆盖范围热力图
-
-3. **合规性检查**
-   - 基于安全基线的自动检查
-   - 最小权限原则验证
-   - 异常访问规则告警
-
-4. **配置仿真**
-   - 在线测试 ACL 匹配结果
-   - 流量模拟验证
-
-## 附录
-
-### A. 参考资料
-
-- H3C 交换机配置手册
-- Huawei 交换机配置手册
-- Cisco NX-OS 配置手册
-
-### B. 术语表
-
-- **ACL**: Access Control List，访问控制列表
-- **标准 ACL**: 只能基于源 IP 地址过滤的 ACL
-- **扩展 ACL**: 支持多维度过滤条件的 ACL
-- **地址对象组**: 地址集合的抽象，可被 ACL 引用
-- **服务对象组**: 服务/端口集合的抽象，可被 ACL 引用
-- **配置漂移**: 设备实际配置与模板不一致的状态
+管理三个独立对象：**ACL**、**地址组（addrgroup）**、**端口组（portgroup）**。
+ACL 规则通过组名引用地址组与端口组。
 
 ---
 
-*文档维护：请在重大设计变更时更新此文档*
+## 一、解析 JSON 结构
+
+### 1.1 编码约定
+
+| 约定 | 说明 |
+|---|---|
+| 字段名 | 与数据库列名一致（`acl_name` / `group_name` / `acl_type` / `entries`） |
+| 必现键 | 所有键**始终存在**，不适用时写 `null`（不省略键，避免读取侧判空分支） |
+| `options` | 始终为对象，**只写值为 true 的键**，无选项时为 `{}` |
+| `entries` | 裸 JSON 数组，与前缀列表一致，不使用 `{"entries": [...]}` 包裹 |
+| `entries` 顺序 | 按 `seq` 升序 |
+
+JSON 中只保留设备配置内容本身。解析过程中出现的异常（无法识别的 token、
+非连续掩码、缺少组成部分等）**记录到日志，不入库**，避免解析器调整引起指纹变化。
+
+### 1.2 ACL
+
+```json
+{
+  "acl_name": "acl_office_to_idc",
+  "acl_number": null,
+  "acl_type": "ipv4",
+  "acl_kind": "advanced",
+  "entries": [
+    {
+      "seq": 100,
+      "action": "permit",
+      "protocol": "tcp",
+      "src": {"type": "any"},
+      "src_port": null,
+      "dst": {"type": "any"},
+      "dst_port": null,
+      "options": {"established": true}
+    },
+    {
+      "seq": 120,
+      "action": "permit",
+      "protocol": "tcp",
+      "src": {"type": "any"},
+      "src_port": null,
+      "dst": {"type": "addrgroup", "name": "og_ip_idcnet"},
+      "dst_port": {"type": "portgroup", "name": "og_port_per"},
+      "options": {}
+    },
+    {
+      "seq": 910,
+      "action": "deny",
+      "protocol": "tcp",
+      "src": {"type": "any"},
+      "src_port": null,
+      "dst": {"type": "addrgroup", "name": "og_ip_idcnet"},
+      "dst_port": null,
+      "options": {}
+    },
+    {
+      "seq": 10000,
+      "action": "deny",
+      "protocol": "ip",
+      "src": {"type": "any"},
+      "src_port": null,
+      "dst": {"type": "any"},
+      "dst_port": null,
+      "options": {}
+    }
+  ]
+}
+```
+
+#### 顶层字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `acl_name` | string | 是 | ACL 标识。命名 ACL 存名字，编号定义存编号字符串（如 `"2999"`） |
+| `acl_number` | int \| null | 是 | 仅编号定义时有值；命名 ACL 为 `null`（不用 0） |
+| `acl_type` | string | 是 | `ipv4` / `ipv6` |
+| `acl_kind` | string \| null | 是 | `basic` / `advanced` / `l2` / `custom` / `named` |
+| `entries` | array | 是 | 规则条目，按 `seq` 升序 |
+
+`acl_name` 与 `acl_number` 的取值：
+
+| 设备配置 | `acl_name` | `acl_number` | `acl_type` | `acl_kind` |
+|---|---|---|---|---|
+| `ip access-list 2999` | `"2999"` | `2999` | ipv4 | advanced |
+| `ip access-list sec_list` | `"sec_list"` | `null` | ipv4 | named |
+| `ip access-list standard X` | `"X"` | `null` | ipv4 | basic |
+| `ipv6 access-list 3999` | `"3999"` | `3999` | ipv6 | advanced |
+| `acl number 2999` | `"2999"` | `2999` | ipv4 | basic |
+| `acl number 3999` | `"3999"` | `3999` | ipv4 | advanced |
+| `acl ipv6 number 3999` | `"3999"` | `3999` | ipv6 | advanced |
+
+- `acl_number = int(标识)` 当且仅当标识可转整数，否则 `null`
+- `acl_kind`：H3C/Huawei 按编号段 2xxx=basic、3xxx=advanced、4xxx=l2、5xxx=custom；Cisco 按关键字
+
+#### 规则条目字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `seq` | int | 是 | 规则序号。配置未写时按 10 递增自动分配 |
+| `action` | string | 是 | `permit` / `deny` |
+| `protocol` | string | 是 | `ip` / `tcp` / `udp` / `icmp` / `igmp` / `ospf` / `esp` / `ahp` / `pim` / 数字协议号。配置省略时补 `ip` |
+| `src` | object | 是 | 源地址，见 1.5 AddressSpec |
+| `src_port` | object \| null | 是 | 源端口，见 1.5 PortSpec。`null` = 不限制 |
+| `dst` | object | 是 | 目的地址，见 1.5 AddressSpec |
+| `dst_port` | object \| null | 是 | 目的端口，见 1.5 PortSpec。`null` = 不限制 |
+| `options` | object | 是 | 规则选项，见下方 |
+
+`options` 键（只写 true）：
+
+| 键 | 说明 |
+|---|---|
+| `established` | `established` 关键字，仅 `tcp` 适用 |
+
+`remark` **不纳入模型**：它是注释文本，改动时不应触发配置漂移告警。
+
+### 1.3 地址组
+
+```json
+{
+  "group_name": "og_ip_idcnet",
+  "acl_type": "ipv4",
+  "entries": [
+    {"type": "network", "address": "10.32.0.0/14"},
+    {"type": "network", "address": "10.36.0.0/16"},
+    {"type": "host", "address": "10.35.112.170/32"},
+    {"type": "range", "start": "10.26.0.1", "end": "10.26.0.100"},
+    {"type": "ref", "name": "og_ip_inner"}
+  ]
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `group_name` | string | 是 | 组名，如 `og_ip_idcnet` |
+| `acl_type` | string | 是 | `ipv4` / `ipv6` |
+| `entries` | array | 是 | 条目列表 |
+
+条目按 `type` 区分：
+
+| `type` | 字段 | 说明 |
+|---|---|---|
+| `network` | `address` | CIDR，如 `10.32.0.0/14` |
+| `host` | `address` | 归一为 `/32`（v6 为 `/128`） |
+| `range` | `start`, `end` | 地址区间 |
+| `ref` | `name` | 引用另一个地址组（不展开） |
+
+### 1.4 端口组
+
+```json
+{
+  "group_name": "og_port_per",
+  "acl_type": "ipv4",
+  "entries": [
+    {"protocol": "tcp", "op": "eq", "ports": [80]},
+    {"protocol": "tcp", "op": "eq", "ports": [443, 8080, 9090]},
+    {"protocol": "tcp", "op": "range", "ports": [49, 49]},
+    {"type": "ref", "name": "og_port_common"}
+  ]
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `group_name` | string | 是 | 组名，如 `og_port_per` |
+| `acl_type` | string | 是 | `ipv4` / `ipv6` |
+| `entries` | array | 是 | 条目列表 |
+
+条目两种形态：
+
+| 形态 | 字段 | 说明 |
+|---|---|---|
+| 端口条目 | `protocol`, `op`, `ports` | `ports` **始终为数组**：`eq` 单元素，`range` 两元素 `[起, 止]` |
+| 引用条目 | `type: "ref"`, `name` | 引用另一个端口组（不展开） |
+
+`protocol`：`tcp` / `udp` / 数字协议号。
+`op`：`eq` / `gt` / `lt` / `neq` / `range`。
+
+### 1.5 公共子结构
+
+**AddressSpec**（`src` / `dst`）
+
+| `type` | 字段 | 示例 |
+|---|---|---|
+| `any` | — | `{"type": "any"}` |
+| `network` | `address` | `{"type": "network", "address": "10.143.170.0/24"}` |
+| `host` | `address` | `{"type": "host", "address": "10.33.103.136/32"}` |
+| `addrgroup` | `name` | `{"type": "addrgroup", "name": "og_ip_idcnet"}` |
+
+`range` **不出现**在 ACL 规则中，仅存在于地址组条目。
+
+**PortSpec**（`src_port` / `dst_port`）
+
+| `type` | 字段 | 示例 |
+|---|---|---|
+| `direct` | `op`, `ports` | `{"type": "direct", "op": "eq", "ports": [8081]}` |
+| `portgroup` | `name` | `{"type": "portgroup", "name": "og_port_per"}` |
+
+不限制端口时整个字段为 `null`，不使用 `{"type": "any"}`。
+
+**端口值**：数字端口存**整数**，服务名别名存**字符串**。见 1.6.3。
+
+```json
+{"type": "direct", "op": "eq", "ports": [53]}
+{"type": "direct", "op": "eq", "ports": ["domain"]}
+{"type": "direct", "op": "range", "ports": [5900, 5930]}
+```
+
+### 1.6 解析规则
+
+#### 1.6.1 块内非规则行必须跳过
+
+ACL 块内**并非每行都是规则**。真实配置里出现：
+
+```
+ip access-list acl_office_to_idc
+  statistics per-entry                  ← 统计开关，不是规则
+  100 permit tcp any any established
+```
+
+按首 token 匹配跳过清单：
+
+| 首 token | 说明 |
+|---|---|
+| `statistics` / `no` | 统计开关，`statistics per-entry` / `no statistics` |
+| `remark` | 块级描述（非规则描述） |
+| `description` | 同上，H3C 用 `description` |
+| `counters` | 计数开关 |
+| `evaluate` | NX-OS 模板引用 |
+
+不跳过会被当成规则解析并产生垃圾条目。**解析单位是"行"，但生效单位是"匹配到规则语法正则的行"** —— 块头的两条三要素正则先做匹配，匹配不上的行记录日志后丢弃。
+
+#### 1.6.2 协议端口能力表
+
+决定某个地址位置后面**是否可以跟端口表达式**。这是解析器的必要条件：
+没有这张表，`permit ip any any` 后面的任何 token 都会被当作端口运算符试探。
+
+| protocol | 允许端口 |
+|---|---|
+| `tcp` | 是 |
+| `udp` | 是 |
+| `ip` | 否 |
+| `icmp` | 否（后跟关键字是 ICMP type，不是端口） |
+| `igmp` | 否 |
+| `ospf` | 否 |
+| `esp` / `ahp` | 否 |
+| `pim` | 否 |
+| 数字协议号 | 否（保守处理） |
+
+判定流程：解析完一个地址后，**仅当 `protocol` 在允许列表内**，才调用端口探测；
+否则直接进入下一个地址的解析。
+
+#### 1.6.3 端口值：数字存整数，别名存字符串
+
+端口既可以写数字也可以写服务名别名：
+
+```
+550 permit udp any addrgroup og_ip_dns_24h eq domain     ← 别名
+560 permit tcp any 10.18.24.12/32 eq 443                 ← 数字
+```
+
+**不做别名到数字的映射，按值本身决定类型**：
+
+```json
+{"type": "direct", "op": "eq", "ports": [443]}       // 数字 → int
+{"type": "direct", "op": "eq", "ports": ["domain"]}  // 别名 → string
+```
+
+解析时对每个 port token 尝试转整数，成功存 `int`，失败存原字符串。
+`op` 与参数个数的关系是固定的，不需要额外区分：
+
+| `op` | `ports` 元素个数 |
+|---|---|
+| `eq` / `gt` / `lt` / `neq` | 恒为 1 |
+| `range` | 恒为 2（起、止） |
+
+不做映射的理由：映射表需要维护（内部服务名随环境变化），映射错误比不映射更危险。
+代价是 `eq domain` 与 `eq 53` 会被判为不同配置 —— 这个差异交由后续的**配置规范**统一
+（标准规则里统一写数字），而不是在解析层猜。
+
+### 1.7 归一化字段对照
+
+以下差异归一后为**同一 JSON**（不产生漂移）：
+
+| 差异 | 归一动作 |
+|---|---|
+| `0.0.0.255` vs `/24` | 反掩码 → CIDR |
+| `10.33.103.136 0` vs `host 10.33.103.136` vs `10.33.103.136/32` | 统一 `host` + `/32` |
+| 协议省略 vs 显式 `ip` | 补 `ip` |
+| 目的地址省略 vs `any` | 补 `any` |
+| 端口运算符大小写 | 统一小写 |
+
+以下视为**不同 JSON**：
+
+| 差异 | 原因 |
+|---|---|
+| `seq` 不同 / 规则顺序不同 | 序号决定匹配顺序，是配置内容 |
+| `portgroup X` vs 内联 `eq 80` | 不展开组比对，保留为不同 |
+| 地址组内条目顺序不同 | 当前参与指纹，顺序敏感 |
+
+---
+
+## 二、数据库存储
+
+### 2.1 表清单
+
+| 对象 | 标准规则表 | 设备实际配置表 |
+|---|---|---|
+| ACL | `acl_standards` | `acl_records` |
+| 地址组 | `addrgroup_standards` | `addrgroup_records` |
+| 端口组 | `portgroup_standards` | `portgroup_records` |
+
+问题处理表三对象共用：`acl_issue_records`。
+
+设备实际配置表写入策略与前缀列表一致：每次采集先按 `device_ip` 删除再批量插入，
+库中只保留最新一次。不保留历史版本，需要历史时查设备备份配置。
+
+### 2.2 acl_records
+
+```sql
+DROP TABLE IF EXISTS acl_records;
+CREATE TABLE acl_records (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    device_ip VARCHAR(15) NOT NULL COMMENT '设备IP地址',
+    device_name VARCHAR(128) NOT NULL COMMENT '设备名称/hostname',
+    vendor VARCHAR(32) NOT NULL COMMENT 'cisco_nx, cisco_ios, cisco_xr, h3c, huawei',
+    acl_name VARCHAR(64) NOT NULL COMMENT 'ACL标识名：有名字用名字，纯编号时存编号字符串',
+    acl_number INT DEFAULT NULL COMMENT 'ACL编号（仅编号定义时有值，命名ACL为NULL）',
+    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
+    acl_kind VARCHAR(16) DEFAULT NULL COMMENT '类别：basic, advanced, l2, custom, named',
+    rule_count INT NOT NULL DEFAULT 0 COMMENT '规则条数（冗余，列表页免解析JSON）',
+    fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256，组引用保留组名不展开）',
+    dangling_count INT NOT NULL DEFAULT 0 COMMENT '引用了未定义组的规则数',
+    entries JSON NOT NULL COMMENT '标准化规则内容，裸数组',
+    collected_at VARCHAR(10) NOT NULL COMMENT '采集时间（10位时间戳）',
+
+    UNIQUE KEY uk_device_acl_collected (device_ip, acl_name, acl_type, collected_at),
+    INDEX idx_acl_number (acl_number, acl_type),
+    INDEX idx_acl_fingerprint (acl_name, acl_type, fingerprint),
+    INDEX idx_device_ip (device_ip)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='ACL-设备实际配置表';
+```
+
+约束说明：
+
+- **`acl_type` 必须进唯一键**。`ip access-list 3999` 与 `ipv6 access-list 3999` 是两个独立 ACL，编号空间不重叠，不加此字段会互相覆盖
+- **`acl_name` 总是有值**，编号定义也存编号字符串，使两种情况共用同一条读取路径
+- **`acl_number` 不进唯一键**，它由 `acl_name` 推导，不独立；进唯一键会因推导差异产生重复记录
+- `acl_number` 用 `INT` 而非字符串，避免 `"2999"` 与 `"02999"` 被当成两个 ACL
+
+### 2.3 addrgroup_records
+
+```sql
+DROP TABLE IF EXISTS addrgroup_records;
+CREATE TABLE addrgroup_records (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    device_ip VARCHAR(15) NOT NULL COMMENT '设备IP地址',
+    device_name VARCHAR(128) NOT NULL COMMENT '设备名称/hostname',
+    vendor VARCHAR(32) NOT NULL COMMENT '设备厂商',
+    group_name VARCHAR(64) NOT NULL COMMENT '地址组名称，如 og_ip_idcnet',
+    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
+    entry_count INT NOT NULL DEFAULT 0 COMMENT '条目数',
+    ref_count INT NOT NULL DEFAULT 0 COMMENT '被ACL规则引用次数（采集时统计）',
+    fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
+    entries JSON NOT NULL COMMENT '结构化条目，裸数组',
+    collected_at VARCHAR(10) NOT NULL COMMENT '采集时间（10位时间戳）',
+
+    UNIQUE KEY uk_device_group_collected (device_ip, group_name, acl_type, collected_at),
+    INDEX idx_group_fingerprint (group_name, fingerprint),
+    INDEX idx_device_ip (device_ip)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='地址组-设备实际配置表';
+```
+
+### 2.4 portgroup_records
+
+```sql
+DROP TABLE IF EXISTS portgroup_records;
+CREATE TABLE portgroup_records (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    device_ip VARCHAR(15) NOT NULL COMMENT '设备IP地址',
+    device_name VARCHAR(128) NOT NULL COMMENT '设备名称/hostname',
+    vendor VARCHAR(32) NOT NULL COMMENT '设备厂商',
+    group_name VARCHAR(64) NOT NULL COMMENT '端口组名称，如 og_port_per',
+    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
+    entry_count INT NOT NULL DEFAULT 0 COMMENT '条目数',
+    ref_count INT NOT NULL DEFAULT 0 COMMENT '被ACL规则引用次数（采集时统计）',
+    fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
+    entries JSON NOT NULL COMMENT '结构化条目，裸数组',
+    collected_at VARCHAR(10) NOT NULL COMMENT '采集时间（10位时间戳）',
+
+    UNIQUE KEY uk_device_group_collected (device_ip, group_name, acl_type, collected_at),
+    INDEX idx_group_fingerprint (group_name, fingerprint),
+    INDEX idx_device_ip (device_ip)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='端口组-设备实际配置表';
+```
+
+### 2.5 标准规则表
+
+三张表结构一致，与 `prefix_list_standards` 对齐：
+
+```sql
+DROP TABLE IF EXISTS acl_standards;
+CREATE TABLE acl_standards (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    name VARCHAR(64) NOT NULL COMMENT 'ACL标识名：有名字用名字，纯编号时存编号字符串',
+    acl_number INT DEFAULT NULL COMMENT 'ACL编号（仅编号定义时有值，命名ACL为NULL）',
+    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
+    acl_kind VARCHAR(16) DEFAULT NULL COMMENT '类别：basic, advanced, l2, custom, named',
+    fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
+    entries JSON NOT NULL COMMENT '标准配置内容，裸数组',
+    description TEXT COMMENT '规则说明',
+    is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用：1-启用，0-禁用',
+    created_at VARCHAR(10) NOT NULL COMMENT '创建时间（10位时间戳）',
+    updated_at VARCHAR(10) NOT NULL COMMENT '更新时间（10位时间戳）',
+    created_by VARCHAR(64) COMMENT '创建人',
+
+    UNIQUE KEY uk_name_type_fingerprint (name, acl_type, fingerprint)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='ACL-标准规则表';
+
+DROP TABLE IF EXISTS addrgroup_standards;
+CREATE TABLE addrgroup_standards (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    name VARCHAR(64) NOT NULL COMMENT '地址组名称',
+    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
+    fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
+    entries JSON NOT NULL COMMENT '标准配置内容，裸数组',
+    description TEXT COMMENT '规则说明',
+    is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用：1-启用，0-禁用',
+    created_at VARCHAR(10) NOT NULL COMMENT '创建时间（10位时间戳）',
+    updated_at VARCHAR(10) NOT NULL COMMENT '更新时间（10位时间戳）',
+    created_by VARCHAR(64) COMMENT '创建人',
+
+    UNIQUE KEY uk_name_type_fingerprint (name, acl_type, fingerprint)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='地址组-标准规则表';
+
+DROP TABLE IF EXISTS portgroup_standards;
+CREATE TABLE portgroup_standards (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    name VARCHAR(64) NOT NULL COMMENT '端口组名称',
+    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
+    fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
+    entries JSON NOT NULL COMMENT '标准配置内容，裸数组',
+    description TEXT COMMENT '规则说明',
+    is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用：1-启用，0-禁用',
+    created_at VARCHAR(10) NOT NULL COMMENT '创建时间（10位时间戳）',
+    updated_at VARCHAR(10) NOT NULL COMMENT '更新时间（10位时间戳）',
+    created_by VARCHAR(64) COMMENT '创建人',
+
+    UNIQUE KEY uk_name_type_fingerprint (name, acl_type, fingerprint)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='端口组-标准规则表';
+```
+
+> 标准表统一使用列名 `name`（对应 JSON 中的 `acl_name` / `group_name`），
+> 与前缀列表 `prefix_list_standards` 保持一致。
+
+### 2.6 acl_issue_records
+
+```sql
+DROP TABLE IF EXISTS acl_issue_records;
+CREATE TABLE acl_issue_records (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '记录ID',
+
+    object_type ENUM('acl', 'addrgroup', 'portgroup') NOT NULL DEFAULT 'acl'
+        COMMENT '问题所属对象类型',
+
+    standard_id BIGINT NOT NULL COMMENT '标准规则ID',
+    standard_name VARCHAR(64) NOT NULL COMMENT '标准规则名称',
+
+    device_ip VARCHAR(15) NOT NULL COMMENT '设备IP',
+    device_name VARCHAR(128) NOT NULL COMMENT '设备名称',
+    device_vendor VARCHAR(32) NOT NULL COMMENT '设备厂商',
+
+    issue_type ENUM('drifted', 'missing', 'dangling') NOT NULL DEFAULT 'drifted'
+        COMMENT '问题类型：drifted=配置漂移, missing=缺失配置, dangling=引用了未定义的组',
+    dangling_refs JSON DEFAULT NULL COMMENT '悬空引用明细：[{seq, position, group_name}]',
+
+    standard_entries JSON NOT NULL COMMENT '标准配置条目',
+    device_entries JSON NOT NULL COMMENT '设备配置条目',
+
+    status ENUM('pending', 'processing', 'completed', 'ignored') NOT NULL DEFAULT 'pending'
+        COMMENT '处理状态：pending=待处理, processing=处理中, completed=已完成, ignored=已忽略',
+
+    change_ticket_id VARCHAR(64) DEFAULT NULL COMMENT '变更工单ID',
+
+    created_by VARCHAR(64) DEFAULT NULL COMMENT '创建人',
+    created_at VARCHAR(10) NOT NULL COMMENT '创建时间（10位时间戳）',
+    processed_at VARCHAR(10) DEFAULT NULL COMMENT '处理完成时间（10位时间戳）',
+    remark TEXT DEFAULT NULL COMMENT '备注信息',
+
+    INDEX idx_standard_id (standard_id),
+    INDEX idx_device_ip (device_ip),
+    INDEX idx_status (status),
+    INDEX idx_object_type (object_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='ACL 问题处理记录表';
+```
+
+`dangling_refs` 明细格式：
+
+```json
+[
+  {"seq": 390, "position": "dst", "group_name": "og_ip_IT"},
+  {"seq": 120, "position": "dst_port", "group_name": "og_port_xxx"}
+]
+```
+
+`position` 取值：`src` / `dst` / `src_port` / `dst_port`。
+
+### 2.7 字段与 JSON 对应关系
+
+| JSON 字段 | acl_records 列 | 说明 |
+|---|---|---|
+| `acl_name` | `acl_name` | 直接对应 |
+| `acl_number` | `acl_number` | 直接对应 |
+| `acl_type` | `acl_type` | 直接对应 |
+| `acl_kind` | `acl_kind` | 直接对应 |
+| `entries` | `entries` | `json.dumps()` 存入 |
+| — | `fingerprint` | 由前四个字段 + `entries` 计算，不存于 JSON |
+| — | `rule_count` | `len(entries)`，冗余列 |
+| — | `dangling_count` | 采集时统计，不存于 JSON |
+
+| JSON 字段 | addrgroup_records 列 | 说明 |
+|---|---|---|
+| `group_name` | `group_name` | 直接对应 |
+| `acl_type` | `acl_type` | 直接对应 |
+| `entries` | `entries` | `json.dumps()` 存入 |
+| — | `entry_count` | `len(entries)`，冗余列 |
+| — | `fingerprint` | 由 `group_name` + `entries` 计算 |
+| — | `ref_count` | 采集时统计 |
+
+`portgroup_records` 与 `addrgroup_records` 对应关系一致。
+
+---
+
+## 附录：真实配置样本
+
+| 厂商 | 文件 |
+|---|---|
+| H3C | `IDC/DC19割接相关/配置文件/割接前/new_csw1_dc19_m01.log` |
+| Cisco NX-OS | `IDC/DC19割接相关/配置文件/割接前/rsw2_mdu1_prod_dc19_m01.log` |
+| Cisco NX-OS（对象组用法） | `docs/network/办公网到IDC拦截机制分析.md` |
+| 变更操作记录 | `config_b300_service_acl.txt` |
+
+## 附录：解析回归用例
+
+`acl_office_to_idc`（44 条规则）作为解析器回归测试的输入，覆盖了当前所有语法形态：
+
+```
+ip access-list acl_office_to_idc
+  statistics per-entry
+  100 permit tcp any any established
+  110 permit icmp any any
+  200 permit tcp any addrgroup og_ip_idcnet portgroup og_port_per
+  210 permit ip any addrgroup og_ip_ad_idc
+  230 permit tcp any 10.37.0.0/16 eq 2181
+  240 permit tcp any addrgroup op_ip_oa_zhiyuan portgroup og_port_oa_zhiyuan
+  260 permit tcp any addrgroup og_ip_relay eq 22
+  280 permit tcp any addrgroup og_ip_git eq 60022
+  281 permit tcp any 10.19.46.19/32 eq 8099
+  290 permit tcp any 10.8.83.96/32 portgroup og_port_payftp
+  320 permit ip addrgroup og_ip_ad_office addrgroup og_ip_ad_idc
+  330 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_idcnet eq 3389
+  340 permit tcp any addrgroup og_ip_bigdata_proxy portgroup og_port_bigdata_proxy
+  370 permit tcp any addrgroup og_ip_jindie portgroup og_port_jindie
+  380 permit tcp any addrgroup og_ip_oa portgroup og_port_oa
+  400 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_idcnet range 5900 5930
+  420 permit tcp any addrgroup og_ip_vdds eq 3308
+  430 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_jindie eq 139
+  440 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_jindie eq 445
+  450 permit ip any 10.32.226.210/32
+  500 permit ip any 10.18.24.12/32
+  510 permit ip any 10.32.192.148/32
+  520 permit ip 172.24.12.14/32 any
+  550 permit udp any addrgroup og_ip_dns_24h eq domain
+  560 permit tcp any addrgroup og_ip_dns_24h eq domain
+  600 permit tcp addrgroup og_ip_ob_relay 10.18.8.8/32 eq 1433
+  610 permit tcp addrgroup og_ip_ob_relay 10.18.8.3/32 eq 1433
+  615 permit tcp any 10.18.24.49/32 eq 27017
+  620 permit tcp any 10.32.113.34/32 eq 4430
+  630 permit ip any 172.31.3.100/32
+  640 permit tcp any 10.19.47.6/32 eq 56666
+  645 permit tcp any 10.32.88.201/32 eq 9210
+  655 permit tcp any 10.19.19.73/32 eq 9092
+  660 permit ip any 10.37.2.106/32
+  661 permit ip any 10.37.12.84/32
+  675 permit tcp any 10.34.131.176/32 range 60001 60099
+  720 permit tcp any 10.19.46.53/32 eq 3389
+  725 permit tcp any 10.33.160.148/32 eq 222
+  730 permit tcp any 10.26.0.128/28 range 18000 19000
+  900 deny tcp any any portgroup og_port_deny
+  910 deny tcp any addrgroup og_ip_idcnet
+  1000 permit ip any any
+```
+
+该样本覆盖的形态：
+
+| 形态 | 出现位置 |
+|---|---|
+| 块内非规则行（`statistics per-entry`） | 第 2 行，须跳过 |
+| 规则选项 `established` | 100 |
+| `icmp` 协议（无端口） | 110 |
+| 源 any + 目的地址组 + 端口组 | 200 |
+| `ip` 协议 + 目的地址组（无端口） | 210 |
+| 目的 CIDR + 内联端口 | 230 |
+| 源地址组 + 目的地址组（双组） | 320、330、400、430、440、600、610 |
+| 目的地址组 + `eq` 数字端口 | 260、280、420 |
+| 目的地址组 + 端口组 | 340、370、380 |
+| 目的 host/32 + `eq` | 281、615、620、640、645、655、720、725 |
+| 目的 host/32 + 端口组 | 290 |
+| 目的 CIDR + `range` | 400、675、730 |
+| 源 host/32 + 目的 any | 520 |
+| `udp` + 端口别名 `domain` | 550 |
+| `tcp` + 端口别名 `domain` | 560 |
+| 目的地址组、**无端口**（游标耗尽收尾） | 910 |
+| 目的 any + 端口组 | 900 |
+| 兜底 `permit ip any any` | 1000 |
+
+**未覆盖**的形态（v1 无需支持，留作已知缺口）：源端口内联、源端口组、
+`gt`/`lt`/`neq` 运算符、ICMP type 关键字、命名端口的 `range`。

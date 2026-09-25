@@ -101,7 +101,7 @@ MCP_TOOLS_prompt = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "group": {"type": "string", "description": "出口分组名，默认“博兴出口”，可选：博兴出口 / M5机房出口 / M5到博兴"},
+                "group": {"type": "string", "description": "出口分组名，默认“博兴出口”，可选：博兴出口/博兴入口 / M5机房出口 / M5机房入口"},
                 "top_n": {"type": "integer", "description": "每个方向返回前 N 个 IP，默认 5"}
             },
             "required": []

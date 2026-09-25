@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")  # 屏蔽 verify_certs=False / LibreSSL 的告
 # ============================ 默认参数 ============================
 
 DEFAULT_GROUP = "博兴出口"
-DEFAULT_LAST_MINUTES = 15
+DEFAULT_LAST_MINUTES = 30
 DEFAULT_TOP_N = 5
 
 # ============================ 出口分组 ============================
@@ -32,6 +32,14 @@ GROUPS = {
         ],
         "egress_regex": [r"出方向接口( .*)?"],
     },
+    "博兴入口": {
+        "index": "elastiflow-*-ecs-*",
+        "hosts": [
+            "dc07-prod-dc07-bx-fw-bj01host-039671",
+            "dc07-prod-dc07-bx-fw-bj01host-039672",
+        ],
+        "ingress_regex": [r"出方向接口( .*)?"],
+    },
     "M5机房出口": {
         "index": "elastiflow-*-ecs-*",
         "hosts": [
@@ -40,16 +48,13 @@ GROUPS = {
         ],
         "egress_regex": [r"出方向接口( .*)?"],
     },
-    "M5到博兴": {
+    "M5机房入口": {
         "index": "elastiflow-*-ecs-*",
         "hosts": [
-            "bbs1_dc07_m01",
-            "bbs2_dc07_m01",
+            "dc09_fw1",
+            "dc09_fw2",
         ],
-        "ingress_regex": [
-            r"Ethernet1/5( .*)?",
-            r"Ethernet1/6( .*)?",
-        ],
+        "ingress_regex": [r"出方向接口( .*)?"],
     },
 }
 
@@ -306,5 +311,5 @@ def query_flow_traffic(group=None, top_n=None):
 
 if __name__ == '__main__':
     # 博兴出口 M5机房出口
-    test = query_flow_traffic(group="博兴出口", top_n=10)
+    test = query_flow_traffic(group="博兴入口", top_n=10)
     print(test)

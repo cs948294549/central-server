@@ -36,6 +36,11 @@ def netmask2length(netmask):
     return sum([bin(int(i)).count("1") for i in netmask.split(".")])
 
 
+def wildcard2length(wildcard):
+    """反掩码转前缀长度（Cisco ACL wildcard mask）"""
+    return 32 - netmask2length(wildcard)
+
+
 def getstartend(dest, mask):
     gateint = ip2decimalism(dest)
     maskint = ip2decimalism(mask)
@@ -215,20 +220,22 @@ if __name__ == '__main__':
     # print(getIPaddressStrV6(ipv6_byte=bytes.fromhex(it["start"])))
     # print(getIPaddressStrV6(ipv6_byte=bytes.fromhex(it["end"])))
 
-    ret = [
-        {"ip": "192.168.1.0", "mask": "24"},
-        {"ip": "192.168.4.0", "mask": "22"},
-        {"ip": "192.168.2.0", "mask": "24"},
-        {"ip": "192.168.3.0", "mask": "24"},
-        {"ip": "192.168.4.0", "mask": "24"},
-        {"ip": "192.168.5.0", "mask": "24"},
-        {"ip": "192.168.6.0", "mask": "24"},
-        {"ip": "192.168.0.0", "mask": "22"},
-        {"ip": "192.168.7.0", "mask": "24"},
-        {"ip": "192.168.0.0", "mask": "16"},
-    ]
-    tree = test_ipam_tree(ret)
-    print(json.dumps(tree, indent=4, ensure_ascii=False))
+    # ret = [
+    #     {"ip": "192.168.1.0", "mask": "24"},
+    #     {"ip": "192.168.4.0", "mask": "22"},
+    #     {"ip": "192.168.2.0", "mask": "24"},
+    #     {"ip": "192.168.3.0", "mask": "24"},
+    #     {"ip": "192.168.4.0", "mask": "24"},
+    #     {"ip": "192.168.5.0", "mask": "24"},
+    #     {"ip": "192.168.6.0", "mask": "24"},
+    #     {"ip": "192.168.0.0", "mask": "22"},
+    #     {"ip": "192.168.7.0", "mask": "24"},
+    #     {"ip": "192.168.0.0", "mask": "16"},
+    # ]
+    # tree = test_ipam_tree(ret)
+    # print(json.dumps(tree, indent=4, ensure_ascii=False))
+    aa = wildcard2length("0.0.3.255")
+    print(aa)
 
 
 
