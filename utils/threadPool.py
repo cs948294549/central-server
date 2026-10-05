@@ -34,7 +34,8 @@ class MyThread(threading.Thread):
         except Exception:
             return None
 
-
+#
+# task = {"name":"", "func": xxx, "kwargs": {}}
 def execAllFunctions(tasks, max_workers=8, callback=None):
     result = {}
     def cb(future, name):
@@ -44,7 +45,14 @@ def execAllFunctions(tasks, max_workers=8, callback=None):
     with ThreadPoolExecutor(max_workers=max_workers) as p:
         # 提交任务
         for task in tasks:
-            future = p.submit(task["func"], *task["args"], **task["kwargs"])
+            args = task.get("args") or ()
+            kwargs = task.get("kwargs") or {}
+            if kwargs:
+                future = p.submit(task["func"], **kwargs)
+            elif args:
+                future = p.submit(task["func"], *args)
+            else:
+                future = p.submit(task["func"])
             future.add_done_callback(functools.partial(cb, name=task["name"]))
 
     # 回调函数

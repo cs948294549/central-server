@@ -318,31 +318,11 @@ if __name__ == '__main__':
 
     logger = setup_logger()
 
+    iplist = ["172.19.1.21",]
 
-    # at = []
-    #
-    # t = threading.Thread(target=t1, args=("a1",))
-    # t.start()
-    # at.append(t)
-    # t = threading.Thread(target=t2, args=("a2",))
-    # t.start()
-    # at.append(t)
-    # t = threading.Thread(target=t3, args=("a3",))
-    # t.start()
-    # at.append(t)
-    #
-    #
-    # for t in at:
-    #     t.join()
-
-    # print("======",ConfigLoader.config)
-    # t1("a1")
-    # t4("a1")
-    # aa = SSHClientFactory._identify_vendor("47.98.235.241")
-    # print(aa)
-
-    a1 = run_ssh_command(host="10.92.42.60", vendor='huawei', commands=["dis ip int brie"])
-    print(a1)
+    for ip in iplist:
+        a1 = run_ssh_command(host=ip, vendor='cisco_nx', commands=["conf t",'ntp server 10.1.1.9', 'end', "copy run start"])
+        print(a1)
 
 
 
