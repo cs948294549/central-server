@@ -225,7 +225,7 @@ if __name__ == "__main__":
     query_month = "2026-08"
     tag_key = DEFAULT_TAG_KEY
     tag_value = DEFAULT_TAG_VALUE
-    show_details = False
+    show_details = True
 
     # 简单的参数解析
     if len(sys.argv) > 1:

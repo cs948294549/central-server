@@ -204,8 +204,15 @@ class SSHConnectionPool:
                 logger.info("新建连接==={} {}".format(str(client), conn_name))
                 return self.hosts[host][conn_name]
         else:
-            # 创建客户端失败，需要释放锁并清理连接信息
-            logger.error(f"创建设备 {host} 的SSH客户端失败，释放锁并清理连接")
+            # 创建客户端成功但没有可挂载的槽位，或创建失败
+            if client:
+                logger.error(f"设备 {host} 无可用连接槽位，关闭新建的SSH客户端")
+                try:
+                    client.close()
+                except Exception as e:
+                    logger.warning(f"关闭SSH客户端失败: {e}")
+            else:
+                logger.error(f"创建设备 {host} 的SSH客户端失败，释放锁并清理连接")
             with self.lock:
                 if host in self.hosts and conn_name in self.hosts[host]:
                     try:
@@ -229,16 +236,25 @@ class SSHConnectionPool:
                         logger.warning("{}释放连接失败，失败原因{}".format(host, str(e)))
 
     def disconnect(self, host: str, conn_name: str):
+        # 先从池中摘除，再在锁外关闭，避免 close 阻塞整个连接池
+        client_info = None
         with self.lock:
-            if host not in self.hosts:
-                pass
-            else:
-                if conn_name in self.hosts[host]:
-                    try:
-                        del self.hosts[host][conn_name]
-                        logger.info("删除连接==={}".format(conn_name))
-                    except Exception as e:
-                        logger.warning("{}删除连接失败，失败原因{}".format(host, str(e)))
+            if host in self.hosts and conn_name in self.hosts[host]:
+                client_info = self.hosts[host].pop(conn_name)
+                logger.info("删除连接==={}".format(conn_name))
+                if not self.hosts[host]:
+                    del self.hosts[host]
+
+        if client_info is None:
+            return
+
+        client = client_info.get("client")
+        if client:
+            try:
+                client.close()
+                logger.info("关闭连接==={}".format(conn_name))
+            except Exception as e:
+                logger.warning("{}关闭连接失败，失败原因{}".format(host, str(e)))
 
     def execute_command(self, host, commands: List[str], vendor: str='') -> Dict[str, str]:
         if not isinstance(commands, list):

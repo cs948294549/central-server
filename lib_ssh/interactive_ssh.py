@@ -242,35 +242,41 @@ class InteractiveSSHManager:
         Returns:
             bool: 是否创建成功
         """
+        # 先在锁内摘除旧会话，关闭动作放到锁外，避免持锁阻塞
         with self.lock:
-            # 如果会话已存在，先断开
-            if session_id in self.sessions:
-                logger.info(f"会话 {session_id} 已存在，先断开旧会话")
-                self.close_session(session_id)
+            old_session = self.sessions.pop(session_id, None)
+        if old_session:
+            logger.info(f"会话 {session_id} 已存在，先断开旧会话")
+            old_session.disconnect()
 
-            # 创建输出回调函数
-            def output_callback(data):
-                if self.output_sender:
-                    self.output_sender(session_id, data)
-                else:
-                    logger.warning(f"未配置 output_sender，无法发送会话 {session_id} 的输出")
-
-            # 创建新会话
-            session = InteractiveSSHSession(
-                host=host,
-                username=username,
-                password=password,
-                output_callback=output_callback
-            )
-
-            # 尝试连接
-            if session.connect():
-                self.sessions[session_id] = session
-                logger.info(f"SSH 会话已创建: {session_id} -> {host}")
-                return True
+        # 创建输出回调函数
+        def output_callback(data):
+            if self.output_sender:
+                self.output_sender(session_id, data)
             else:
-                logger.error(f"SSH 会话创建失败: {session_id} -> {host}")
-                return False
+                logger.warning(f"未配置 output_sender，无法发送会话 {session_id} 的输出")
+
+        # 创建新会话
+        session = InteractiveSSHSession(
+            host=host,
+            username=username,
+            password=password,
+            output_callback=output_callback
+        )
+
+        # 尝试连接（connect 会阻塞数秒，不能放在锁内）
+        if not session.connect():
+            logger.error(f"SSH 会话创建失败: {session_id} -> {host}")
+            return False
+
+        with self.lock:
+            existing = self.sessions.pop(session_id, None)
+            self.sessions[session_id] = session
+        if existing:
+            existing.disconnect()
+
+        logger.info(f"SSH 会话已创建: {session_id} -> {host}")
+        return True
 
     def send_command(self, session_id: str, command: str, padding: str = ""):
         """
