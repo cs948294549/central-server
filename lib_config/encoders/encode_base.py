@@ -7,7 +7,12 @@
 import logging
 from abc import ABC
 from typing import List, Optional, Dict, Any, Callable
-from lib_config.models import PrefixListConfig
+from lib_config.models import (
+    PrefixListConfig,
+    AclConfig,
+    AddrGroupConfig,
+    PortGroupConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +135,12 @@ class BaseEncoder(ABC):
         """
         if section == 'prefix_lists':
             return [PrefixListConfig.from_dict(d) for d in data]
+        if section == 'access_lists':
+            return [AclConfig.from_dict(d) for d in data]
+        if section == 'address_groups':
+            return [AddrGroupConfig.from_dict(d) for d in data]
+        if section == 'port_groups':
+            return [PortGroupConfig.from_dict(d) for d in data]
         # 后续扩展其他类型
         return []
 

@@ -391,10 +391,17 @@ CREATE TABLE prefix_list_records (
     INDEX idx_device_ip (device_ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='地址前缀列表-设备实际配置表';
 
--- 地址前缀问题处理记录表：记录配置漂移和缺失问题的处理流程
-DROP TABLE IF EXISTS prefix_list_issue_records;
-CREATE TABLE prefix_list_issue_records (
+-- 策略配置问题处理记录表（通用）：前缀列表 / ACL / 地址组 / 端口组共用
+-- 四类对象的问题都是「标准配置 vs 设备配置」的比对结果，字段结构一致，用 object_type 区分
+DROP TABLE IF EXISTS policy_issue_records;
+CREATE TABLE policy_issue_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '记录ID',
+
+    -- 问题所属对象类型：决定生成变更工单时走哪个分支
+    -- 用字符类型而非 ENUM，后续新增对象类型不需要改表结构
+    -- 已知取值：prefix_list, acl, addrgroup, portgroup
+    object_type VARCHAR(32) NOT NULL DEFAULT 'prefix_list'
+        COMMENT '问题所属对象类型',
 
     -- 标准规则信息
     standard_id BIGINT NOT NULL COMMENT '标准规则ID',
@@ -406,8 +413,10 @@ CREATE TABLE prefix_list_issue_records (
     device_vendor VARCHAR(32) NOT NULL COMMENT '设备厂商：cisco_nx, cisco_ios, cisco_xr, h3c, huawei',
 
     -- 问题类型
-    issue_type ENUM('drifted', 'missing') NOT NULL DEFAULT 'drifted'
-        COMMENT '问题类型：drifted=配置漂移, missing=缺失配置',
+    issue_type ENUM('drifted', 'missing', 'dangling') NOT NULL DEFAULT 'drifted'
+        COMMENT '问题类型：drifted=配置漂移, missing=缺失配置, dangling=引用了未定义的组',
+    dangling_refs JSON DEFAULT NULL
+        COMMENT '悬空引用明细：[{seq, position, group_name}]，position 取值 src/dst/src_port/dst_port，仅 ACL 类使用',
 
     -- 配置数据（JSON格式，用于对比展示）
     standard_entries JSON NOT NULL COMMENT '标准配置条目',
@@ -427,17 +436,18 @@ CREATE TABLE prefix_list_issue_records (
     remark TEXT DEFAULT NULL COMMENT '备注信息',
 
     -- 索引
+    INDEX idx_object_type (object_type),
     INDEX idx_standard_id (standard_id),
     INDEX idx_device_ip (device_ip),
     INDEX idx_status (status)
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='地址前缀问题处理记录表';
+COMMENT='策略配置问题处理记录表（通用）';
 
 -- 示例数据说明：
 -- 1. 规则制定：在 prefix_list_standards 插入标准配置，系统生成 fingerprint
 -- 2. 规则记录：定期采集设备配置并插入 prefix_list_records
--- 3. 问题处理：从管理配置创建问题记录到 prefix_list_issue_records，进行流程跟踪和工单管理
+-- 3. 问题处理：从管理配置创建问题记录到 policy_issue_records，进行流程跟踪和工单管理
 
 -- ============================================
 -- 数据库初始化完成

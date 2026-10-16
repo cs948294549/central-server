@@ -369,14 +369,11 @@ CREATE TABLE addrgroup_records (
     device_name VARCHAR(128) NOT NULL COMMENT '设备名称/hostname',
     vendor VARCHAR(32) NOT NULL COMMENT '设备厂商',
     group_name VARCHAR(64) NOT NULL COMMENT '地址组名称，如 og_ip_idcnet',
-    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
-    entry_count INT NOT NULL DEFAULT 0 COMMENT '条目数',
-    ref_count INT NOT NULL DEFAULT 0 COMMENT '被ACL规则引用次数（采集时统计）',
     fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
     entries JSON NOT NULL COMMENT '结构化条目，裸数组',
     collected_at VARCHAR(10) NOT NULL COMMENT '采集时间（10位时间戳）',
 
-    UNIQUE KEY uk_device_group_collected (device_ip, group_name, acl_type, collected_at),
+    UNIQUE KEY uk_device_group_collected (device_ip, group_name, collected_at),
     INDEX idx_group_fingerprint (group_name, fingerprint),
     INDEX idx_device_ip (device_ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -393,14 +390,11 @@ CREATE TABLE portgroup_records (
     device_name VARCHAR(128) NOT NULL COMMENT '设备名称/hostname',
     vendor VARCHAR(32) NOT NULL COMMENT '设备厂商',
     group_name VARCHAR(64) NOT NULL COMMENT '端口组名称，如 og_port_per',
-    acl_type VARCHAR(16) NOT NULL DEFAULT 'ipv4' COMMENT '地址族：ipv4, ipv6',
-    entry_count INT NOT NULL DEFAULT 0 COMMENT '条目数',
-    ref_count INT NOT NULL DEFAULT 0 COMMENT '被ACL规则引用次数（采集时统计）',
     fingerprint CHAR(64) NOT NULL COMMENT '配置指纹（SHA256）',
     entries JSON NOT NULL COMMENT '结构化条目，裸数组',
     collected_at VARCHAR(10) NOT NULL COMMENT '采集时间（10位时间戳）',
 
-    UNIQUE KEY uk_device_group_collected (device_ip, group_name, acl_type, collected_at),
+    UNIQUE KEY uk_device_group_collected (device_ip, group_name, collected_at),
     INDEX idx_group_fingerprint (group_name, fingerprint),
     INDEX idx_device_ip (device_ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -538,11 +532,8 @@ COMMENT='ACL 问题处理记录表';
 | JSON 字段 | addrgroup_records 列 | 说明 |
 |---|---|---|
 | `group_name` | `group_name` | 直接对应 |
-| `acl_type` | `acl_type` | 直接对应 |
 | `entries` | `entries` | `json.dumps()` 存入 |
-| — | `entry_count` | `len(entries)`，冗余列 |
-| — | `fingerprint` | 由 `group_name` + `entries` 计算 |
-| — | `ref_count` | 采集时统计 |
+| — | `fingerprint` | 由 `group_name` + `acl_type` + `entries` 计算（`acl_type` 只参与计算，不落库） |
 
 `portgroup_records` 与 `addrgroup_records` 对应关系一致。
 

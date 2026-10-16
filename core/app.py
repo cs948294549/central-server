@@ -21,6 +21,7 @@ from api.api_mcp import mcp_bp
 from api.api_config import config_bp
 from api.api_change_mgmt import change_mgmt_bp
 from api.api_policy import prefix_list_bp
+from api.api_acl import acl_bp
 
 # 导入 SSH 终端蓝图
 from api.websocket_ssh_bp import websocket_ssh_bp
@@ -76,6 +77,7 @@ def create_app():
     app.register_blueprint(config_bp)
     app.register_blueprint(change_mgmt_bp)
     app.register_blueprint(prefix_list_bp)
+    app.register_blueprint(acl_bp)
 
     # 注册 SSH 终端蓝图
     app.register_blueprint(websocket_ssh_bp)

@@ -16,6 +16,8 @@ class PolicyType(str, Enum):
     """策略类型"""
     PREFIX_LIST = "prefix_list"
     ACL = "acl"
+    ADDRESS_GROUP = "addrgroup"
+    PORT_GROUP = "portgroup"
 
 
 class Action(str, Enum):
@@ -171,6 +173,129 @@ class AclConfig:
         return PolicyType.ACL
 
 
+# ==================== 地址组模型 ====================
+
+@dataclass
+class AddrGroupEntry:
+    """地址组条目"""
+    seq: int                          # 序列号
+    kind: str                         # 写法: host（host x）/ network（x/n）
+    addresses: List[str]              # 地址列表，如 ["10.33.144.129/32"]
+    description: Optional[str] = None # 描述信息
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典（所有键始终存在）"""
+        return {
+            'seq': self.seq,
+            'kind': self.kind,
+            'addresses': self.addresses,
+            'description': self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AddrGroupEntry':
+        """从字典创建对象"""
+        return cls(
+            seq=data['seq'],
+            kind=data.get('kind') or 'host',
+            addresses=data.get('addresses') or [],
+            description=data.get('description'),
+        )
+
+
+@dataclass
+class AddrGroupConfig:
+    """地址组（地址簿）标准化配置"""
+    name: str                         # 组名
+    entries: List[AddrGroupEntry]     # 条目列表，按 seq 升序
+    addr_type: str = 'ipv4'           # ipv4 / ipv6
+    description: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典（所有键始终存在）"""
+        return {
+            'name': self.name,
+            'addr_type': self.addr_type,
+            'description': self.description,
+            'entries': [entry.to_dict() for entry in self.entries],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AddrGroupConfig':
+        """从字典创建对象"""
+        return cls(
+            name=data['name'],
+            entries=[AddrGroupEntry.from_dict(e) for e in data.get('entries') or []],
+            addr_type=data.get('addr_type', 'ipv4'),
+            description=data.get('description'),
+        )
+
+    @property
+    def policy_type(self) -> str:
+        """策略类型"""
+        return PolicyType.ADDRESS_GROUP
+
+
+# ==================== 端口组模型 ====================
+
+@dataclass
+class PortGroupEntry:
+    """端口组条目"""
+    seq: int                          # 序列号
+    op: str                           # 运算符: eq / gt / lt / neq / range
+    ports: List[Any] = field(default_factory=list)  # 端口列表，数字存整数，别名存字符串
+    description: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典（所有键始终存在）"""
+        return {
+            'seq': self.seq,
+            'op': self.op,
+            'ports': self.ports,
+            'description': self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'PortGroupEntry':
+        """从字典创建对象"""
+        return cls(
+            seq=data['seq'],
+            op=data.get('op'),
+            ports=data.get('ports') or [],
+            description=data.get('description'),
+        )
+
+
+@dataclass
+class PortGroupConfig:
+    """端口组（端口簿）标准化配置"""
+    name: str                         # 组名
+    entries: List[PortGroupEntry]     # 条目列表，按 seq 升序
+    description: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典（所有键始终存在）"""
+        return {
+            'name': self.name,
+            'description': self.description,
+            'entries': [entry.to_dict() for entry in self.entries],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'PortGroupConfig':
+        """从字典创建对象"""
+        return cls(
+            name=data['name'],
+            entries=[PortGroupEntry.from_dict(e) for e in data.get('entries') or []],
+            description=data.get('description'),
+        )
+
+    @property
+    def policy_type(self) -> str:
+        """策略类型"""
+        return PolicyType.PORT_GROUP
+
+
 # ==================== 解析结果包装 ====================
 
 @dataclass
@@ -178,17 +303,22 @@ class ParseResult:
     """配置解析结果"""
     prefix_lists: List[PrefixListConfig] = field(default_factory=list)
     access_lists: List[AclConfig] = field(default_factory=list)
+    address_groups: List[AddrGroupConfig] = field(default_factory=list)
+    port_groups: List[PortGroupConfig] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
             'prefix_lists': [pl.to_dict() for pl in self.prefix_lists],
             'access_lists': [acl.to_dict() for acl in self.access_lists],
+            'address_groups': [ag.to_dict() for ag in self.address_groups],
+            'port_groups': [pg.to_dict() for pg in self.port_groups],
         }
 
     def get_total_count(self) -> int:
         """获取总数"""
-        return len(self.prefix_lists) + len(self.access_lists)
+        return (len(self.prefix_lists) + len(self.access_lists) +
+                len(self.address_groups) + len(self.port_groups))
 
     def is_empty(self) -> bool:
         """是否为空"""

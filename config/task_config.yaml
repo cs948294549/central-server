@@ -33,6 +33,13 @@ tasks:
     schedule: "0 23 * * *"  # 每天凌晨10点执行
     description: "更新地址前缀记录"
     enabled: true
+  - id: collect_access_lists
+    type: cron
+    module: tasks.collect_access_lists
+    function: run
+    schedule: "30 23 * * *"  # 紧随前缀列表采集之后
+    description: "更新ACL记录"
+    enabled: true
   # 示例：间隔任务（默认禁用）
   # - id: example_interval_task
   #   type: interval

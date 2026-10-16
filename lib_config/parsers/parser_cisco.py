@@ -4,6 +4,7 @@ Cisco 配置解析器
 支持解析 Cisco NX-OS / IOS / IOS-XR 设备的策略配置
 """
 
+import ipaddress
 import re
 import logging
 from typing import Any, Dict, List, Optional
@@ -13,6 +14,10 @@ from lib_config.models import (
     PrefixListEntry,
     AclConfig,
     AclEntry,
+    AddrGroupConfig,
+    AddrGroupEntry,
+    PortGroupConfig,
+    PortGroupEntry,
     Action
 )
 from utils.ipaddr import wildcard2length, length2netmask, getNet
@@ -32,9 +37,68 @@ class CiscoParser(BaseParser):
     def _init_available_sections(self) -> None:
         """初始化支持的配置项"""
         self.available_sections = {
-            'prefix_lists',   # 地址前缀列表
-            'access_lists',   # 访问控制列表
+            'prefix_lists',    # 地址前缀列表
+            'access_lists',    # 访问控制列表
+            'address_groups',  # 地址组（地址簿）
+            'port_groups',     # 端口组（端口簿）
         }
+
+    # ==================== 地址 / 端口文本归一化 ====================
+
+    def _parse_addr(self, text: Optional[str]) -> Optional[Dict[str, Any]]:
+        """地址文本归一化为 AddressSpec"""
+        if not text:
+            return None
+
+        tokens = text.split()
+        lowered = tokens[0].lower()
+
+        if lowered == 'any':
+            return {'type': 'any'}
+
+        if lowered == 'host':
+            return {'type': 'host', 'address': f'{tokens[1]}/{"128" if ":" in tokens[1] else "32"}'}
+
+        if lowered in ('addrgroup', 'object-group'):
+            return {'type': 'addrgroup', 'name': tokens[-1]}
+
+        if '/' in tokens[0]:
+            address, length = tokens[0].split('/', 1)
+            if not length.isdigit():
+                logger.debug(f"[{self.vendor}] 无法识别的地址掩码长度: {text}")
+                return None
+            if ':' in address:
+                return {'type': 'host' if length == '128' else 'network', 'address': tokens[0]}
+            if length == '32':
+                return {'type': 'host', 'address': tokens[0]}
+            return {'type': 'network',
+                    'address': f'{getNet(address, length2netmask(int(length)))}/{length}'}
+
+        # 点分十进制, 可能跟反掩码
+        if len(tokens) == 1:
+            return {'type': 'host', 'address': f'{tokens[0]}/32'}
+
+        length = wildcard2length(tokens[1])
+        if length == 32:
+            return {'type': 'host', 'address': f'{tokens[0]}/32'}
+        return {'type': 'network',
+                'address': f'{getNet(tokens[0], length2netmask(length))}/{length}'}
+
+    def _parse_port(self, text: Optional[str]) -> Optional[Dict[str, Any]]:
+        """端口文本归一化为 PortSpec, 数字存整数, 别名存字符串"""
+        if not text:
+            return None
+
+        tokens = text.split()
+        lowered = tokens[0].lower()
+
+        if lowered in ('portgroup', 'object-group'):
+            return {'type': 'portgroup', 'name': tokens[-1]}
+
+        ports = []
+        for token in tokens[1:]:
+            ports.append(int(token) if token.isdigit() else token)
+        return {'type': 'direct', 'op': lowered, 'ports': ports}
 
     def parse_prefix_lists(self) -> List[PrefixListConfig]:
         """
@@ -170,61 +234,6 @@ class CiscoParser(BaseParser):
             re.IGNORECASE
         )
 
-        def parse_addr(text: Optional[str]) -> Optional[Dict[str, Any]]:
-            """地址文本归一化为 AddressSpec"""
-            if not text:
-                return None
-
-            tokens = text.split()
-            lowered = tokens[0].lower()
-
-            if lowered == 'any':
-                return {'type': 'any'}
-
-            if lowered == 'host':
-                return {'type': 'host', 'address': f'{tokens[1]}/{"128" if ":" in tokens[1] else "32"}'}
-
-            if lowered in ('addrgroup', 'object-group'):
-                return {'type': 'addrgroup', 'name': tokens[-1]}
-
-            if '/' in tokens[0]:
-                address, length = tokens[0].split('/', 1)
-                if not length.isdigit():
-                    logger.debug(f"[{self.vendor}] 无法识别的地址掩码长度: {text}")
-                    return None
-                if ':' in address:
-                    return {'type': 'host' if length == '128' else 'network', 'address': tokens[0]}
-                if length == '32':
-                    return {'type': 'host', 'address': tokens[0]}
-                return {'type': 'network',
-                        'address': f'{getNet(address, length2netmask(int(length)))}/{length}'}
-
-            # 点分十进制, 可能跟反掩码
-            if len(tokens) == 1:
-                return {'type': 'host', 'address': f'{tokens[0]}/32'}
-
-            length = wildcard2length(tokens[1])
-            if length == 32:
-                return {'type': 'host', 'address': f'{tokens[0]}/32'}
-            return {'type': 'network',
-                    'address': f'{getNet(tokens[0], length2netmask(length))}/{length}'}
-
-        def parse_port(text: Optional[str]) -> Optional[Dict[str, Any]]:
-            """端口文本归一化为 PortSpec, 数字存整数, 别名存字符串"""
-            if not text:
-                return None
-
-            tokens = text.split()
-            lowered = tokens[0].lower()
-
-            if lowered in ('portgroup', 'object-group'):
-                return {'type': 'portgroup', 'name': tokens[-1]}
-
-            ports = []
-            for token in tokens[1:]:
-                ports.append(int(token) if token.isdigit() else token)
-            return {'type': 'direct', 'op': lowered, 'ports': ports}
-
         # 按 (标识, 地址族) 分组存储
         access_lists_dict = {}
 
@@ -273,10 +282,10 @@ class CiscoParser(BaseParser):
                         if candidate:
                             # 端口位置解析不出来说明该规则无端口
                             if candidate.groupdict().get('src_port') is not None and \
-                                    parse_port(candidate.group('src_port')) is None:
+                                    self._parse_port(candidate.group('src_port')) is None:
                                 continue
                             if candidate.groupdict().get('dst_port') is not None and \
-                                    parse_port(candidate.group('dst_port')) is None:
+                                    self._parse_port(candidate.group('dst_port')) is None:
                                 continue
                             rule = candidate
                             break
@@ -285,8 +294,8 @@ class CiscoParser(BaseParser):
                         logger.debug(f"[{self.vendor}] 忽略无法识别的行: {content}")
                         continue
 
-                    src = parse_addr(rule.group('src'))
-                    dst = parse_addr(rule.group('dst'))
+                    src = self._parse_addr(rule.group('src'))
+                    dst = self._parse_addr(rule.group('dst'))
 
                     # 目的地址省略时补 any
                     if src is not None and dst is None and not rule.group('dst'):
@@ -309,9 +318,9 @@ class CiscoParser(BaseParser):
                         action=Action.PERMIT if rule.group('action').lower() == 'permit' else Action.DENY,
                         protocol=rule.group('protocol').lower(),
                         src=src,
-                        src_port=parse_port(rule.group('src_port')),
+                        src_port=self._parse_port(rule.group('src_port')),
                         dst=dst,
-                        dst_port=parse_port(rule.group('dst_port')),
+                        dst_port=self._parse_port(rule.group('dst_port')),
                         options=options
                     ))
 
@@ -333,6 +342,180 @@ class CiscoParser(BaseParser):
 
         return access_lists
 
+    def parse_address_groups(self) -> List[AddrGroupConfig]:
+        """
+        解析 Cisco 地址组（地址簿）
+
+        Cisco 格式示例:
+        object-group ip address og_ip_relay
+          10 host 10.33.144.129
+          20 host 10.32.19.83
+        object-group ip address og_ip_idcnet
+          10 10.32.0.0/14
+          20 10.36.0.0/16
+        object-group ipv6 address og_ip_v6
+          10 host 2408:8000::1
+
+        条目只有两种写法: host <IP> 与 <IP>/<LEN>，均归一化为 CIDR
+
+        Returns:
+            List[AddrGroupConfig]: 地址组配置列表（ACL 规则内以 addrgroup 名称引用）
+        """
+        header_pattern = re.compile(
+            r'^object-group\s+(?P<family>ipv6|ip)\s+address\s+(?P<name>\S+)$',
+            re.IGNORECASE
+        )
+
+        # [seq] host x | [seq] x/n
+        entry_pattern = re.compile(
+            r'^(?:\d+\s+)?'
+            r'(?:(?P<host>host)\s+)?'
+            r'(?P<value>\S+)$',
+            re.IGNORECASE
+        )
+
+        def normalize_net(cidr: str) -> str:
+            """x/n 归一化为网络号/长度, 如 10.32.1.5/14 -> 10.32.0.0/14"""
+            net = ipaddress.ip_network(cidr, strict=False)
+            return f'{net.network_address}/{net.prefixlen}'
+
+        groups = []
+        if not self.config_tree:
+            return groups
+
+        for node in self.config_tree:
+            header = header_pattern.match(node['content'].strip())
+            if not header:
+                continue
+
+            name = header.group('name')
+            addr_type = 'ipv6' if header.group('family').lower() == 'ipv6' else 'ipv4'
+            k = 0
+            entries = []
+
+            for child in node['child']:
+                content = child['content'].strip()
+                if '!' in content:
+                    content = content.split('!', 1)[0].strip()
+                if not content:
+                    continue
+
+                k += 1
+                seq = int(content.split()[0]) if content.split()[0].isdigit() else k * 10
+
+                match = entry_pattern.match(content)
+                if not match:
+                    logger.debug(f"[{self.vendor}] 忽略无法识别的地址组行: {content}")
+                    continue
+
+                literal = match.group('value')
+
+                try:
+                    if match.group('host'):
+                        kind = 'host'
+                        addresses = [f'{literal}/{"128" if ":" in literal else "32"}']
+                    else:
+                        kind = 'network'
+                        addresses = [normalize_net(literal)]
+                except ValueError as err:
+                    logger.debug(f"[{self.vendor}] 地址组 {name} 行解析失败({err}): {content}")
+                    continue
+
+                entries.append(AddrGroupEntry(
+                    seq=seq, kind=kind, addresses=addresses, description=None
+                ))
+
+            entries.sort(key=lambda e: e.seq)
+            groups.append(AddrGroupConfig(name=name, entries=entries, addr_type=addr_type))
+
+        logger.info(f"[{self.vendor}] 解析到 {len(groups)} 个地址组")
+        for group in groups:
+            logger.debug(f"  - {group.name}({group.addr_type}): {len(group.entries)} 条")
+
+        return groups
+
+    def parse_port_groups(self) -> List[PortGroupConfig]:
+        """
+        解析 Cisco 端口组（端口簿）
+
+        Cisco 格式示例:
+        object-group ip port og_port_bigdata_proxy
+          10 eq 7777
+          20 eq 8042
+        object-group ip port og_port_web
+          10 range 8080 8090
+          20 gt 1024
+          30 neq 80
+
+        条目为 <op> <端口号>，op 取 eq / gt / lt / neq / range（range 带两个端口号）
+
+        Returns:
+            List[PortGroupConfig]: 端口组配置列表（ACL 规则内以 portgroup 名称引用）
+        """
+        header_pattern = re.compile(
+            r'^object-group\s+\S+\s+port\s+(?P<name>\S+)$',
+            re.IGNORECASE
+        )
+
+        # eq 80 / gt 1024 / lt 1024 / neq 80 / range 80 90
+        entry_pattern = re.compile(
+            r'^(?:\d+\s+)?'
+            r'(?P<op>eq|gt|lt|neq|range)\s+'
+            r'(?P<value>.+)$',
+            re.IGNORECASE
+        )
+
+        groups = []
+        if not self.config_tree:
+            return groups
+
+        for node in self.config_tree:
+            header = header_pattern.match(node['content'].strip())
+            if not header:
+                continue
+
+            name = header.group('name')
+            k = 0
+            entries = []
+
+            for child in node['child']:
+                content = child['content'].strip()
+                if '!' in content:
+                    content = content.split('!', 1)[0].strip()
+                if not content:
+                    continue
+
+                k += 1
+                seq = int(content.split()[0]) if content.split()[0].isdigit() else k * 10
+
+                match = entry_pattern.match(content)
+                if not match:
+                    logger.debug(f"[{self.vendor}] 忽略无法识别的端口组行: {content}")
+                    continue
+
+                op = match.group('op').lower()
+                tokens = match.group('value').split()
+
+                # 端口值, 数字存整数, 别名(domain/www)存字符串
+                try:
+                    ports = [int(t) if t.isdigit() else t for t in tokens[:2 if op == 'range' else 1]]
+                except (ValueError, IndexError) as err:
+                    logger.debug(f"[{self.vendor}] 端口组 {name} 行解析失败({err}): {content}")
+                    continue
+
+                entries.append(PortGroupEntry(
+                    seq=seq, op=op, ports=ports, description=None
+                ))
+
+            entries.sort(key=lambda e: e.seq)
+            groups.append(PortGroupConfig(name=name, entries=entries))
+
+        logger.info(f"[{self.vendor}] 解析到 {len(groups)} 个端口组")
+        for group in groups:
+            logger.debug(f"  - {group.name}: {len(group.entries)} 条")
+
+        return groups
+
 
 # ==================== 测试代码 ====================
 
@@ -343,240 +526,95 @@ if __name__ == "__main__":
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    # Cisco 配置示例
-    cisco_config = """
+    cisco_config = '''
+object-group ip address og_ip_idcnet
+  10 10.32.0.0/14 
+  20 10.36.0.0/16 
+  30 10.16.0.0/16 
+  40 10.128.0.0/12 
+object-group ip address og_ip_relay
+  10 host 10.33.144.129
+  20 host 10.32.19.83
+  30 host 10.33.102.136
+  40 host 10.39.128.29
+  50 host 10.39.128.30
+  60 host 10.33.144.157
+object-group ip address og_ip_security_source
+  10 host 172.24.33.97
+  20 host 172.24.33.126
+object-group ip address og_ip_vdds
+  10 host 10.39.160.8
+object-group ip port og_port_bigdata_proxy
+  10 eq 7777
+  20 eq 8042
+  30 eq 8080
+  40 eq 8088
+  50 eq 16010
+  60 eq 16030
+  70 eq 18080
+  80 eq 18088
+  90 eq 19888
+  100 eq 50070
+  110 eq 10002
+object-group ip port og_port_db
+  10 eq 27017
+object-group ip port og_port_deny
+  10 eq 23
+  20 eq 22
+  30 eq 2181
+object-group ip port og_port_oa
+  10 range 8080 8090
+  20 eq domain
+  30 gt 1024
+  40 lt 1024
+  50 neq 80
 ip access-list 2999
-  10 permit ip 10.143.170.0/24 any 
-  100 permit ip 10.33.103.136/32 any 
-  500 permit ip 10.33.130.3/32 any 
-  510 permit ip 10.33.130.7/32 any 
-  520 permit ip 10.33.130.4/32 any 
-  530 permit ip 10.33.130.6/32 any 
-  540 permit ip 10.33.130.8/32 any 
-  550 permit ip 10.33.162.163/32 any 
-  560 permit ip 10.33.162.164/32 any 
-  570 permit ip 10.33.162.161/32 any 
-  580 permit ip 10.33.194.150/32 any 
-  590 permit ip 10.33.194.3/32 any 
-  600 permit ip 10.33.130.17/32 any 
-  610 permit ip 10.32.228.179/32 any 
-  620 permit ip 10.32.0.164/32 any 
-  630 permit ip 10.32.0.134/32 any 
-  640 permit ip 10.33.114.19/32 any 
-  650 permit ip 10.32.116.124/32 any 
-  660 permit ip 10.32.115.190/32 any 
-  10000 deny ip any any 
-ipv6 access-list 3999
-  10000 deny ipv6 any any 
+  10 permit ip 10.143.170.0/24 any
+  100 permit ip 10.33.103.136/32 any
+  10000 deny ip any any
 ip access-list acl_office_to_idc
   statistics per-entry
-  100 permit tcp any any established 
-  110 permit icmp any any 
-  200 permit tcp any addrgroup og_ip_idcnet portgroup og_port_per 
-  210 permit ip any addrgroup og_ip_ad_idc 
-  230 permit tcp any 10.37.0.0/16 eq 2181 
-  240 permit tcp any addrgroup op_ip_oa_zhiyuan portgroup og_port_oa_zhiyuan 
-  260 permit tcp any addrgroup og_ip_relay eq 22 
-  280 permit tcp any addrgroup og_ip_git eq 60022 
-  281 permit tcp any 10.19.46.19/32 eq 8099 
-  290 permit tcp any 10.8.83.96/32 portgroup og_port_payftp 
-  320 permit ip addrgroup og_ip_ad_office addrgroup og_ip_ad_idc 
-  330 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_idcnet eq 3389 
-  340 permit tcp any addrgroup og_ip_bigdata_proxy portgroup og_port_bigdata_proxy 
-  370 permit tcp any addrgroup og_ip_jindie portgroup og_port_jindie 
-  380 permit tcp any addrgroup og_ip_oa portgroup og_port_oa 
-  400 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_idcnet range 5900 5930 
-  420 permit tcp any addrgroup og_ip_vdds eq 3308 
-  430 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_jindie eq 139 
-  440 permit tcp addrgroup og_ip_ob_relay addrgroup og_ip_jindie eq 445 
-  450 permit ip any 10.32.226.210/32 
-  500 permit ip any 10.18.24.12/32 
-  510 permit ip any 10.32.192.148/32 
-  520 permit ip 172.24.12.14/32 any 
-  550 permit udp any addrgroup og_ip_dns_24h eq domain 
-  560 permit tcp any addrgroup og_ip_dns_24h eq domain 
-  600 permit tcp addrgroup og_ip_ob_relay 10.18.8.8/32 eq 1433 
-  610 permit tcp addrgroup og_ip_ob_relay 10.18.8.3/32 eq 1433 
-  615 permit tcp any 10.18.24.49/32 eq 27017 
-  620 permit tcp any 10.32.113.34/32 eq 4430 
-  630 permit ip any 172.31.3.100/32 
-  640 permit tcp any 10.19.47.6/32 eq 56666 
-  645 permit tcp any 10.32.88.201/32 eq 9210 
-  655 permit tcp any 10.19.19.73/32 eq 9092 
-  660 permit ip any 10.37.2.106/32 
-  661 permit ip any 10.37.12.84/32 
-  675 permit tcp any 10.34.131.176/32 range 60001 60099 
-  720 permit tcp any 10.19.46.53/32 eq 3389 
-  725 permit tcp any 10.33.160.148/32 eq 222 
-  730 permit tcp any 10.26.0.128/28 range 18000 19000 
-  900 deny tcp any any portgroup og_port_deny 
-  910 deny tcp any addrgroup og_ip_idcnet 
-  1000 permit ip any any 
-ip access-list copp-system-acl-eigrp
-  10 permit eigrp any 224.0.0.10/32 
-ipv6 access-list copp-system-acl-eigrp6
-  10 permit eigrp any ff02::a/128 
-ip access-list copp-system-acl-icmp
-  10 permit icmp any any 
-    """
-    cisco_config='''
-ip access-list 2999
-  10 permit ip 10.143.170.0/24 any 
-  100 permit ip 10.33.103.136/32 any 
-  500 permit ip 10.33.130.3/32 any 
-  510 permit ip 10.33.130.7/32 any 
-  520 permit ip 10.33.130.4/32 any 
-  530 permit ip 10.33.130.6/32 any 
-  540 permit ip 10.33.130.8/32 any 
-  550 permit ip 10.33.162.163/32 any 
-  560 permit ip 10.33.162.164/32 any 
-  570 permit ip 10.33.162.161/32 any 
-  580 permit ip 10.33.194.150/32 any 
-  590 permit ip 10.33.194.3/32 any 
-  600 permit ip 10.33.130.17/32 any 
-  610 permit ip 10.32.228.179/32 any 
-  620 permit ip 10.32.0.164/32 any 
-  630 permit ip 10.32.0.134/32 any 
-  640 permit ip 10.33.114.19/32 any 
-  650 permit ip 10.32.116.124/32 any 
-  660 permit ip 10.32.115.190/32 any 
-  10000 deny ip any any 
-ipv6 access-list 3999
-  10000 deny ipv6 any any 
-ip access-list QOS-test
-  10 permit ip 172.25.40.176/32 10.0.0.0/8 
-  20 permit ip 172.25.40.176/32 172.16.0.0/12 
-  30 permit ip 172.25.40.176/32 192.168.0.0/16 
-ip access-list QOS-test-all
-  10 permit ip 172.25.44.111/32 172.25.200.202/32 
-ip access-list acl_office_to_idc
-  statistics per-entry
-  10 permit ip any 10.32.192.148/32 
-  90 permit udp any any 
-  100 permit tcp any any established 
-  110 permit icmp any any 
-  120 permit tcp any addrgroup og_ip_idcnet portgroup og_port_per 
-  140 permit ip any 172.17.5.101/32 
-  150 permit ip any 172.17.5.102/32 
-  160 permit ip any 10.32.0.133/32 
-  165 permit ip any 172.26.3.100/32 
-  170 permit tcp any 10.33.19.17/32 eq 60022 
-  171 permit tcp any 10.33.19.20/32 eq 60022 
-  210 permit tcp any addrgroup og_ip_relay eq 22 
-  230 permit tcp any 10.37.0.0/16 eq 2181 
-  231 permit tcp any 10.37.0.0/16 eq 8081 
-  240 permit tcp any addrgroup og_ip_git eq 60022 
-  260 permit tcp any 10.8.83.96/32 portgroup og_port_payftp 
-  270 permit tcp any 10.8.80.144/32 eq 8082 
-  280 permit tcp any 10.33.144.131/32 eq 65231 
-  290 permit ip 172.25.3.100/32 addrgroup og_ip_ad_idc 
-  300 permit ip 172.25.7.253/32 addrgroup og_ip_ad_idc 
-  305 permit ip 172.25.7.254/32 addrgroup og_ip_ad_idc 
-  306 permit ip 172.31.3.100/32 addrgroup og_ip_ad_idc 
-  310 permit tcp any addrgroup og_ip_bigdata_proxy portgroup og_port_bigdata_proxy 
-  330 permit tcp addrgroup og_ip_zeus_office addrgroup og_ip_zeus_idc eq 22 
-  360 permit tcp any addrgroup og_ip_jindie portgroup og_port_jindie 
-  410 permit tcp any addrgroup og_ip_vdds eq 3308 
-  450 permit ip any 10.32.226.210/32 
-  470 permit tcp any 10.19.47.4/32 eq 8864 
-  480 permit tcp any 10.32.208.163/32 eq 8888 
-  490 permit tcp any 10.19.47.13/32 eq 3306 
-  491 remark oa_daily_db_wangzhicheng
-  495 permit tcp any 10.19.46.19/32 eq 8099 
-  496 permit tcp any 10.19.46.19/32 eq 8864 
-  497 remark oa_daily_server_zhangji
-  498 permit tcp any 10.19.47.11/32 eq 8864 
-  499 remark oa_prod_server_zhangji
-  500 permit ip any 10.18.24.12/32 
-  510 permit tcp any 10.33.96.171/32 eq 9200 
-  520 permit tcp any 10.32.229.17/32 eq 4242 
-  560 permit udp any addrgroup og_ip_dns_24h eq domain 
-  570 permit tcp any addrgroup og_ip_dns_24h eq domain 
-  580 permit tcp any 10.39.160.14/32 eq 1883 
-  581 permit tcp any 10.39.160.21/32 eq 1883 
-  582 permit tcp any 10.39.160.18/32 eq 10000 
-  583 permit tcp any 10.39.160.18/32 range 10002 10004 
-  584 permit tcp any 10.39.160.19/32 eq 10000 
-  585 permit tcp any 10.39.160.19/32 range 10002 10004 
-  600 permit tcp any 10.129.18.128/32 eq 58901 
-  610 permit tcp any 10.32.0.168/32 eq 8089 
-  611 remark rejie-sdwan
-  612 permit tcp any 10.32.0.168/32 eq 30001 
-  613 permit tcp any 10.32.0.168/32 eq 4334 
-  615 permit tcp any 10.18.24.49/32 eq 27017 
-  616 permit tcp any 10.18.24.46/32 eq 27017 
-  617 permit tcp any 10.18.24.29/32 eq 27017 
-  618 permit tcp any 10.19.64.9/32 eq 27017 
-  619 permit tcp any 10.32.227.130/32 eq 32080 
-  620 permit tcp any 10.20.17.12/32 eq 32080 
-  633 permit tcp any 10.39.160.24/32 eq 20006 
-  635 permit tcp any 10.14.1.10/32 eq 1433 
-  640 permit tcp any 10.32.118.72/32 eq 22 
-  645 permit tcp any 10.32.88.201/32 eq 9210 
-  650 permit tcp any 10.49.16.156/32 eq 20881 
-  655 permit ip any 10.20.49.16/32 
-  660 permit ip any 10.20.49.8/32 
-  665 permit tcp any 10.49.32.207/32 eq www 
-  670 permit tcp any 10.32.100.216/32 eq 9621 
-  675 permit tcp any 10.34.131.176/32 range 60001 60099 
-  700 permit tcp any 10.33.103.136/32 eq 5201 
-  710 permit tcp any 10.35.112.170/32 eq 10051 
-  715 permit tcp any 10.32.231.131/32 eq 10051 
-  720 permit tcp any 10.19.46.53/32 eq 3389 
-  730 permit tcp any 10.32.0.168/32 eq 8443 
-  740 permit tcp any 10.20.48.17/32 eq 3389 
-  750 permit tcp any 10.39.128.80/32 eq 10001 
-  751 permit tcp any 10.39.128.80/32 eq 10002 
-  755 permit tcp any 10.143.160.162/32 eq 5901 
-  760 permit ip any 10.32.98.78/32 
-  765 permit tcp any 10.129.32.193/32 range 8081 8085 
-  770 permit tcp any 10.39.128.80/32 eq 10005 
-  795 permit tcp any 10.14.1.13/32 eq 1433 
-  865 permit tcp any 10.48.11.114/32 eq 10000 
-  870 permit tcp any 10.26.0.128/28 range 18000 19000 
-  880 permit tcp any 10.26.247.0/27 range 8081 8082 
-  900 deny tcp any any portgroup og_port_deny 
-  910 deny tcp any addrgroup og_ip_idcnet 
-  1000 permit ip any any 
-policy-map type queuing test
-  class type queuing c-out-8q-q7
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q6
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q5
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q4
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q3
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q2
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q1
-    bandwidth remaining percent 0
-  class type queuing c-out-8q-q-default
-    bandwidth remaining percent 100'''
+  100 permit tcp any any established
+  200 permit tcp any addrgroup og_ip_idcnet portgroup og_port_per
+  210 permit tcp any addrgroup og_ip_relay eq 22
+  340 permit tcp any addrgroup og_ip_bigdata_proxy portgroup og_port_bigdata_proxy
+  900 deny tcp any any portgroup og_port_deny
+  910 deny tcp any addrgroup og_ip_idcnet
+  1000 permit ip any any
+'''
 
     # 测试解析器
     from lib_config import get_parser
     import json
 
     print("=" * 60)
-    print("Cisco ACL 解析测试")
+    print("Cisco 配置解析测试")
     print("=" * 60)
 
     # 获取解析器
     parser = get_parser('cisco_nx', cisco_config)
     print(f"\n{parser}\n")
 
-    # 只解析 ACL
-    print("=== parse(sections=['access_lists']) ===")
-    result = parser.parse(sections=['access_lists'])
+    # 解析 ACL / 地址组 / 端口组
+    result = parser.parse(sections=['access_lists', 'address_groups', 'port_groups'])
 
-    print(f"\n解析结果:")
+    print("\n解析结果:")
     print(f"  ACL 数量: {len(result.access_lists)}")
-
+    print(f"  地址组数量: {len(result.address_groups)}")
+    print(f"  端口组数量: {len(result.port_groups)}")
+    print(json.dumps(result.to_dict(), ensure_ascii=False))
     for acl in result.access_lists:
         print(f"\n  ACL: {acl.acl_name}  type={acl.acl_type}  kind={acl.acl_kind}  number={acl.acl_number}")
         print(f"    规则数: {len(acl.entries)}")
         for entry in acl.entries:
+            print(f"      {json.dumps(entry.to_dict(), ensure_ascii=False)}")
+
+    for group in result.address_groups:
+        print(f"\n  地址组: {group.name}  type={group.addr_type}")
+        for entry in group.entries:
+            print(f"      {json.dumps(entry.to_dict(), ensure_ascii=False)}")
+
+    for group in result.port_groups:
+        print(f"\n  端口组: {group.name}")
+        for entry in group.entries:
             print(f"      {json.dumps(entry.to_dict(), ensure_ascii=False)}")

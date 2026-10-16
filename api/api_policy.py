@@ -1,6 +1,7 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
 from tables.PrefixListDB import PrefixListDB
+from tables.PolicyIssueDB import PolicyIssueDB
 from function_policy.func_prefix import (
     create_standard,
     update_standard,
@@ -8,11 +9,11 @@ from function_policy.func_prefix import (
     get_standard_statistics,
     get_standard_device_list,
     batch_create_issues,
-    group_records_by_fingerprint,
     compare_entries_text_diff,
     create_prefix_list_change_order,
     create_new_issue
 )
+from function_policy.func_issue import group_records_by_fingerprint
 import logging
 
 logger = logging.getLogger(__name__)
@@ -199,10 +200,14 @@ def get_records_grouped():
 
 @prefix_list_bp.route('/issues/list', methods=['POST'])
 def get_issues_list():
-    """获取问题处理记录列表"""
+    """获取问题处理记录列表（只返回前缀列表类）"""
     try:
         data = request.json or {}
-        db = PrefixListDB()
+        # 问题记录表为多类型共用，本蓝图固定只查前缀列表
+        if not data.get("object_type"):
+            data["object_type"] = "prefix_list"
+
+        db = PolicyIssueDB()
         result = db.getIssueRecordsList(data)
 
         if result != "failed":
@@ -273,10 +278,10 @@ def create_new_issue_record():
 
 @prefix_list_bp.route('/issues/statistics', methods=['POST'])
 def get_issues_statistics():
-    """获取问题处理记录统计"""
+    """获取问题处理记录统计（只统计前缀列表类）"""
     try:
-        db = PrefixListDB()
-        result = db.getIssueStatistics({})
+        db = PolicyIssueDB()
+        result = db.getIssueStatistics({"object_type": "prefix_list"})
 
         if result != "failed":
             return APIResponse.success(data=result, message="查询成功")
@@ -297,7 +302,7 @@ def delete_issue_record():
             return APIResponse.param_error(message="缺少参数: id")
 
         issue_id = data["id"]
-        db = PrefixListDB()
+        db = PolicyIssueDB()
         result = db.deleteIssueRecord({"id": issue_id})
 
         if result != "failed" and result > 0:
@@ -326,21 +331,23 @@ def update_issue_status():
             return APIResponse.param_error(message="无效的状态值")
 
         # 获取issue记录，查询设备IP
-        db_query = PrefixListDB()
+        db_query = PolicyIssueDB()
         issue_records = db_query.getIssueRecordsList({"id": issue_id})
 
         if not issue_records or len(issue_records) == 0:
             return APIResponse.error(message="记录不存在")
 
         # 更新状态
-        db_update = PrefixListDB()
+        db_update = PolicyIssueDB()
         result = db_update.updateIssueStatus({"id": issue_id, "status": status})
 
         if result != "failed" and result > 0:
             # 如果标记为已完成，触发采集更新
             if status == 'completed':
                 device_ip = issue_records[0].get("device_ip")
-                if device_ip:
+                object_type = issue_records[0].get("object_type")
+                # 采集器按对象类型区分，非前缀列表类型暂不支持回采
+                if device_ip and object_type == "prefix_list":
                     from function_policy.func_prefix import collect_and_update_prefix_lists
                     try:
                         collect_result = collect_and_update_prefix_lists(device_ip)
