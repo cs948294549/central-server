@@ -1,9 +1,8 @@
+"""ACL 标准规则、设备配置记录、问题处理记录接口"""
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
 from tables.AccessListDB import AccessListDB
 from tables.PolicyIssueDB import PolicyIssueDB
-from function_policy import func_addrgroup
-from function_policy import func_portgroup
 from function_policy.func_access_list import (
     create_standard,
     update_standard,
@@ -24,12 +23,6 @@ logger = logging.getLogger(__name__)
 
 # 创建蓝图
 acl_bp = Blueprint('acl', __name__, url_prefix='/acl')
-
-# 地址组与端口组接口一致，只有库层实现不同，按 kind 分派
-GROUP_MODULES = {
-    "addrgroup": func_addrgroup,
-    "portgroup": func_portgroup
-}
 
 
 def _get_username():
@@ -206,156 +199,6 @@ def get_standard_device_list_api():
 
     except Exception as e:
         logger.error(f"获取ACL标准规则设备列表异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-# ==================== 地址组 / 端口组接口 ====================
-
-def _get_group_module(kind):
-    """按 kind 取得对应的组管理模块"""
-    return GROUP_MODULES.get(kind)
-
-
-@acl_bp.route('/groups/list', methods=['POST'])
-def get_group_list():
-    """获取地址组或端口组列表"""
-    try:
-        data = request.json or {}
-        module = _get_group_module(data.get("kind"))
-        if not module:
-            return APIResponse.param_error(message="无效的 kind，可选: addrgroup, portgroup")
-
-        result = module.get_group_list(data)
-
-        if result["success"]:
-            return APIResponse.success(data=result["data"], message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"查询组列表异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@acl_bp.route('/groups/detail', methods=['POST'])
-def get_group_detail():
-    """获取地址组或端口组详情"""
-    try:
-        data = request.json
-        if not data or "id" not in data:
-            return APIResponse.param_error(message="缺少参数: id")
-
-        module = _get_group_module(data.get("kind"))
-        if not module:
-            return APIResponse.param_error(message="无效的 kind，可选: addrgroup, portgroup")
-
-        result = module.get_group_detail(data["id"])
-
-        if result["success"]:
-            return APIResponse.success(data=result["data"], message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"查询组详情异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@acl_bp.route('/groups/create', methods=['POST'])
-def create_group_api():
-    """创建地址组或端口组"""
-    try:
-        data = request.json
-        username = _get_username()
-
-        module = _get_group_module(data.get("kind") if data else None)
-        if not module:
-            return APIResponse.param_error(message="无效的 kind，可选: addrgroup, portgroup")
-
-        logger.info(f"{username}创建{data.get('kind')}，数据: {data}")
-        result = module.create_group(data, username)
-
-        if result["success"]:
-            return APIResponse.success(data=result.get("data"), message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"创建组异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@acl_bp.route('/groups/update', methods=['POST'])
-def update_group_api():
-    """更新地址组或端口组"""
-    try:
-        data = request.json
-        username = _get_username()
-
-        module = _get_group_module(data.get("kind") if data else None)
-        if not module:
-            return APIResponse.param_error(message="无效的 kind，可选: addrgroup, portgroup")
-
-        logger.info(f"{username}更新{data.get('kind')}，数据: {data}")
-        result = module.update_group(data, username)
-
-        if result["success"]:
-            return APIResponse.success(message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"更新组异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@acl_bp.route('/groups/delete', methods=['POST'])
-def delete_group_api():
-    """删除地址组或端口组"""
-    try:
-        data = request.json
-        if not data or "id" not in data:
-            return APIResponse.param_error(message="缺少参数: id")
-
-        module = _get_group_module(data.get("kind"))
-        if not module:
-            return APIResponse.param_error(message="无效的 kind，可选: addrgroup, portgroup")
-
-        username = _get_username()
-        logger.info(f"{username}删除{data.get('kind')}，ID: {data['id']}")
-        result = module.delete_group(data["id"])
-
-        if result["success"]:
-            return APIResponse.success(message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"删除组异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
-@acl_bp.route('/groups/toggle_active', methods=['POST'])
-def toggle_group_active_api():
-    """切换地址组或端口组的启用状态"""
-    try:
-        data = request.json
-        if not data or "id" not in data:
-            return APIResponse.param_error(message="缺少参数: id")
-
-        module = _get_group_module(data.get("kind"))
-        if not module:
-            return APIResponse.param_error(message="无效的 kind，可选: addrgroup, portgroup")
-
-        result = module.toggle_group_active(data["id"])
-
-        if result["success"]:
-            return APIResponse.success(message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"切换组状态异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
