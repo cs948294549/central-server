@@ -340,7 +340,9 @@ def compare_record_with_standard(standard_id, device_ip):
             return {"success": False, "message": "标准规则不存在"}
 
         # 按名称 + 地址族定位设备上的同一个 ACL
-        records = db.getRecordsList({
+        # DB 方法各自在 finally 关闭连接，同一实例不能连续调用两次
+        db2 = AccessListDB()
+        records = db2.getRecordsList({
             "device_ip": device_ip,
             "acl_name": standard["name"],
             "acl_type": standard["acl_type"]
@@ -400,7 +402,8 @@ def create_issue_record(standard_id, device_ip, device_name, device_vendor, rema
         if standard == "failed":
             return {"success": False, "message": "标准规则不存在"}
 
-        records = db.getRecordsList({
+        db2 = AccessListDB()
+        records = db2.getRecordsList({
             "device_ip": device_ip,
             "acl_name": standard["name"],
             "acl_type": standard["acl_type"]

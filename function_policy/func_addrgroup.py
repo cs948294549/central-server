@@ -460,7 +460,8 @@ def compare_group_with_standard(standard_id, device_ip):
         if standard == "failed":
             return {"success": False, "message": "标准规则不存在"}
 
-        records = db.getRecordsList({
+        # DB 方法各自在 finally 关闭连接，同一实例不能连续调用两次
+        records = AddrGroupDB().getRecordsList({
             "device_ip": device_ip,
             "group_name": standard["name"]
         })
