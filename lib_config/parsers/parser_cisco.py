@@ -24,6 +24,9 @@ from utils.ipaddr import wildcard2length, length2netmask, getNet
 
 logger = logging.getLogger(__name__)
 
+# 系统自动生成的 ACL, 名称统一以 copp 开头, 不属于业务策略, 不采集
+IGNORED_ACL_PREFIXES = ('copp',)
+
 
 @register_parser('cisco_nx')
 @register_parser('cisco_ios')
@@ -244,6 +247,12 @@ class CiscoParser(BaseParser):
                     continue
 
                 ident = header.group('ident')
+
+                # copp 开头的 ACL 是系统策略, 直接跳过（含 ipv6）
+                if ident.lower().startswith(IGNORED_ACL_PREFIXES):
+                    logger.debug(f"[{self.vendor}] 跳过系统 ACL: {ident}")
+                    continue
+
                 kind = header.group('kind')
                 acl_type = 'ipv6' if header.group('family').lower() == 'ipv6' else 'ipv4'
                 if kind:
