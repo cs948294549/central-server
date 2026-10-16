@@ -431,3 +431,26 @@ class IpamDB(mysqldb_netops):
         finally:
             self.cursor.close()
             self.conn.close()
+
+    def delete_ipaddr_expired(self, days=7):
+        """删除超过指定天数未更新的自动采集IP地址记录，返回删除条数"""
+        try:
+            cutoff = str(int(time.time()) - days * 86400)
+            # 只清理自动采集数据(gateway/arp)，保留人工录入记录
+            # update_time 为 10 位秒级时间戳字符串，空值的历史记录一并清理
+            sql = """DELETE FROM ipam_ipaddr
+                     WHERE collect_type IN ('gateway', 'arp')
+                       AND (update_time IS NULL
+                            OR update_time = ''
+                            OR update_time < %s)"""
+            self.cursor.execute(sql, (cutoff,))
+            deleted = self.cursor.rowcount
+            self.conn.commit()
+            return deleted
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"清理过期IP地址记录失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()

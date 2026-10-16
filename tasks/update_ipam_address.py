@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 TASK_CONFIG = {
     "batch_size": 200,  # 批量写入大小
     "enabled": True,    # 是否启用任务
+    "retain_days": 7,   # 数据保留天数，超期未更新的记录会被清理
 }
 
 
@@ -48,6 +49,7 @@ def run():
     2. 从采集数据库读取ARP信息
     3. 转换为IPAM地址格式
     4. 批量写入IPAM数据库
+    5. 清理超过 retain_days 天未更新的历史记录
     """
     if not TASK_CONFIG["enabled"]:
         logger.info("IPAM地址更新任务已禁用")
@@ -222,6 +224,18 @@ def run():
                 logger.error(f"批次 {i}/{len(split_datas)}: 写入异常 - {e}")
 
         logger.info(f"IPAM地址更新任务完成 - 总记录数: {total_count}, 成功批次: {success_batches}, 失败批次: {failed_batches}")
+
+        # 4. 清理历史数据：删除超过保留天数未更新的自动采集记录(人工录入不受影响)
+        retain_days = TASK_CONFIG["retain_days"]
+        try:
+            db_ipam = IpamDB()
+            deleted = db_ipam.delete_ipaddr_expired(retain_days)
+            if deleted == "failed":
+                logger.error("清理过期数据失败")
+            else:
+                logger.info(f"清理 {retain_days} 天前的历史数据完成，删除 {deleted} 条记录")
+        except Exception as e:
+            logger.error(f"清理过期数据异常: {e}")
 
     except Exception as e:
         logger.error(f"IPAM地址更新任务执行失败: {e}")
