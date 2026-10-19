@@ -145,7 +145,7 @@ def get_standard_device_list_api():
 # ==================== 设备配置记录接口 ====================
 
 @prefix_list_bp.route('/records/list', methods=['POST'])
-def get_records_list():
+def get_records_list_api():
     """获取设备配置记录列表"""
     try:
         data = request.json or {}
