@@ -14,11 +14,12 @@ from tables.PolicyIssueDB import PolicyIssueDB
 from tables.CollectDB import CollectDB
 from function_collector.func_config import get_latest_config_by_ip
 from function_tools.text_diff_tool import check_diff_simple
-from lib_config import get_parser
+from lib_config import get_parser, get_encoder
 from function_policy.func_issue import (
     OBJECT_TYPE_ACL,
     batch_create_issue_records,
     diff_entries_by_seq,
+    build_device_commands,
     create_change_order
 )
 import json
@@ -937,31 +938,58 @@ def prepare_access_list_devices(record):
     """
     为单条 ACL 问题记录生成变更命令
 
-    ACL 目前没有 encoder（lib_config/encoders 下只实现了 prefix_lists 段），
-    因此这里只做标准配置与设备配置的比对，命令留空并给出告警，
-    待 encode_*.py 支持 access_lists 段后再在此处补上命令生成。
-
-    :return: {"skipped": True} 表示无需变更；
-             否则返回 {"cmd_exec", "cmd_roll", "tag", "warning"}
+    :param record: 问题记录（已含 object_type=acl）
+    :return: {"cmd_exec", "cmd_roll", "tag"} 或 {"skipped": True}
     """
+    device_ip = record.get("device_ip")
+    vendor = record.get("device_vendor", "cisco_nx")
+    acl_name = record.get("standard_name", "")
     standard_entries = record.get("standard_entries", [])
     device_entries = record.get("device_entries", [])
-    acl_name = record.get("standard_name", "")
+
+    logger.info(f"处理设备 {device_ip}, vendor={vendor}, acl={acl_name}")
+    logger.info(f"  标准条目数: {len(standard_entries)}, 设备条目数: {len(device_entries)}")
 
     diff = diff_entries_by_seq(standard_entries, device_entries, _entry_signature)
 
     if not diff["add"] and not diff["delete"]:
         return {"skipped": True}
 
-    warning = (f"ACL 暂不支持命令编码，需人工处理："
-               f"新增 {len(diff['add'])} 条，删除 {len(diff['delete'])} 条")
+    logger.info(f"设备 {device_ip}: 添加 {len(diff['add'])} 条，删除 {len(diff['delete'])} 条")
 
-    return {
-        "cmd_exec": "",
-        "cmd_roll": "",
-        "tag": f"acl:{acl_name}",
-        "warning": warning
-    }
+    encoder = get_encoder(vendor)
+
+    def append_name_type(record, entries):
+        # 问题记录不存 acl_type / acl_kind，从标准规则回查；取不到按 ipv4 named 处理
+        standard = AccessListDB().getStandardDetail({"id": record.get("standard_id")})
+        if standard == "failed":
+            acl_type, acl_kind, acl_number = "ipv4", "named", None
+        else:
+            acl_type = standard.get("acl_type") or "ipv4"
+            acl_kind = standard.get("acl_kind") or "named"
+            acl_number = standard.get("acl_number")
+
+        return {
+            "access_lists": [{
+                "acl_name": record.get("standard_name", ""),
+                "acl_number": acl_number,
+                "acl_type": acl_type,
+                "acl_kind": acl_kind,
+                "entries": entries
+            }]
+        }
+
+    commands = build_device_commands(
+        record,
+        diff,
+        encoder,
+        sections=['access_lists'],
+        entry_diff_applier=append_name_type
+    )
+
+    commands["tag"] = f"acl:{acl_name}"
+
+    return commands
 
 
 def create_access_list_change_order(issue_ids, username, title=None):

@@ -145,3 +145,23 @@ def create_change_order(order_content, devices):
             "code": -1,
             "message": f"创建工单失败: {str(e)}"
         }, ensure_ascii=False)
+
+
+if __name__ == '__main__':
+    info = {
+        "title": "工单标题",
+        "descrip": "工单详细描述"
+    }
+    devices = [
+        {
+            "ip": "",
+            "batch": 1,
+            "cmd_exec": "",
+            "cmd_roll": "",
+            "tag": "",
+            "is_auto": 0
+        }
+    ]
+
+    order_info = create_change_order(info, devices)
+    print(order_info)

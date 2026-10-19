@@ -11,10 +11,14 @@ from utils.fingerprint import calculate_fingerprint
 from tables.AddrGroupDB import AddrGroupDB
 from tables.AccessListDB import AccessListDB
 from function_policy.func_access_list import normalize_entries
+from lib_config import get_encoder
 from function_policy.func_issue import (
     OBJECT_TYPE_ADDRGROUP,
-    batch_create_issue_records
+    batch_create_issue_records,
+    diff_entries_by_seq,
+    build_device_commands
 )
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -577,3 +581,65 @@ def batch_create_group_issues(standard_id, devices, username, remark=""):
     except Exception as err:
         logger.error(f"批量创建地址组问题记录失败: {err}")
         return {"success": False, "message": f"批量创建失败: {str(err)}"}
+
+
+def _addr_entry_signature(entry):
+    """
+    生成地址组条目的可比签名（忽略 seq，seq 已作为比对 key）
+    :param entry: {seq, kind, addresses, description}
+    :return: 规范化 JSON 字符串
+    """
+    return json.dumps({
+        "kind": entry.get("kind"),
+        "addresses": entry.get("addresses") or []
+    }, sort_keys=True, ensure_ascii=False)
+
+
+def prepare_addrgroup_devices(record):
+    """
+    为单条地址组问题记录生成变更命令
+
+    :param record: 问题记录（已含 object_type=addrgroup）
+    :return: {"cmd_exec", "cmd_roll", "tag"} 或 {"skipped": True}
+    """
+    device_ip = record.get("device_ip")
+    vendor = record.get("device_vendor", "cisco_nx")
+    group_name = record.get("standard_name", "")
+    standard_entries = normalize_entries(record.get("standard_entries", []))
+    device_entries = normalize_entries(record.get("device_entries", []))
+
+    logger.info(f"处理设备 {device_ip}, vendor={vendor}, addrgroup={group_name}")
+    logger.info(f"  标准条目数: {len(standard_entries)}, 设备条目数: {len(device_entries)}")
+
+    diff = diff_entries_by_seq(standard_entries, device_entries, _addr_entry_signature)
+
+    if not diff["add"] and not diff["delete"]:
+        return {"skipped": True}
+
+    logger.info(f"设备 {device_ip}: 添加 {len(diff['add'])} 条，删除 {len(diff['delete'])} 条")
+
+    encoder = get_encoder(vendor)
+
+    def append_group(record, entries):
+        # 问题记录不存地址族，从标准规则回查；取不到按 ipv4 处理
+        standard = AddrGroupDB().getGroupDetail({"id": record.get("standard_id")})
+        addr_type = "ipv4" if standard == "failed" else (standard.get("acl_type") or "ipv4")
+        return {
+            "address_groups": [{
+                "name": record.get("standard_name", ""),
+                "addr_type": addr_type,
+                "entries": entries
+            }]
+        }
+
+    commands = build_device_commands(
+        record,
+        diff,
+        encoder,
+        sections=['address_groups'],
+        entry_diff_applier=append_group
+    )
+
+    commands["tag"] = f"addrgroup:{group_name}"
+
+    return commands

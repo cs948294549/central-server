@@ -48,16 +48,177 @@ def _get_prepare_devices(object_type):
     if object_type == OBJECT_TYPE_ACL:
         from function_policy.func_access_list import prepare_access_list_devices
         return prepare_access_list_devices
+    if object_type == OBJECT_TYPE_ADDRGROUP:
+        from function_policy.func_addrgroup import prepare_addrgroup_devices
+        return prepare_addrgroup_devices
+    if object_type == OBJECT_TYPE_PORTGROUP:
+        from function_policy.func_portgroup import prepare_portgroup_devices
+        return prepare_portgroup_devices
     return None
 
 
-def update_issue_status(issue_id, update_data):
+def get_issue_list(data):
+    """
+    获取问题处理记录列表（跨对象类型，object_type 为空查全部）
+    :param data: 查询条件，见 PolicyIssueDB.getIssueRecordsList
+    :return: {success: bool, data: [], message: str}
+    """
+    try:
+        db = PolicyIssueDB()
+        result = db.getIssueRecordsList(data or {})
+
+        if result == "failed":
+            return {"success": False, "message": "查询失败"}
+
+        # 附带中文标签，前端无需再维护一份映射
+        for record in result:
+            record["object_type_label"] = get_object_type_label(record.get("object_type"))
+
+        return {"success": True, "data": result, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取问题处理记录列表失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
+def get_issue_detail(data):
+    """
+    获取问题处理记录详情
+    :param data: {id}
+    :return: {success: bool, data: {}, message: str}
+    """
+    try:
+        if not data or "id" not in data:
+            return {"success": False, "message": "缺少参数: id"}
+
+        db = PolicyIssueDB()
+        result = db.getIssueRecordDetail({"id": data["id"]})
+
+        if result == "failed":
+            return {"success": False, "message": "记录不存在"}
+
+        result["object_type_label"] = get_object_type_label(result.get("object_type"))
+        return {"success": True, "data": result, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取问题处理记录详情失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
+def delete_issue(data):
+    """
+    删除问题处理记录
+    :param data: {id}
+    :return: {success: bool, message: str}
+    """
+    try:
+        if not data or "id" not in data:
+            return {"success": False, "message": "缺少参数: id"}
+
+        db = PolicyIssueDB()
+        result = db.deleteIssueRecord({"id": data["id"]})
+
+        if result != "failed" and result > 0:
+            return {"success": True, "message": "删除成功"}
+        return {"success": False, "message": "删除失败，记录可能不存在"}
+
+    except Exception as err:
+        logger.error(f"删除问题处理记录失败: {err}")
+        return {"success": False, "message": f"删除失败: {str(err)}"}
+
+
+def get_issue_statistics(data):
+    """
+    获取问题处理记录统计
+    :param data: {object_type} 可选
+    :return: {success: bool, data: {pending, processing, completed, ignored, total}, message: str}
+    """
+    try:
+        db = PolicyIssueDB()
+        result = db.getIssueStatistics(data or {})
+
+        if result == "failed":
+            return {"success": False, "message": "查询失败"}
+
+        return {"success": True, "data": result, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取问题处理统计失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
+def _recollect_by_object_type(object_type, device_ip):
+    """
+    标记完成后按对象类型触发设备回采，失败不影响状态更新
+    """
+    try:
+        if object_type == OBJECT_TYPE_PREFIX_LIST:
+            from function_policy.func_prefix import collect_and_update_prefix_lists
+            result = collect_and_update_prefix_lists(device_ip)
+            logger.info(f"标记完成后触发前缀列表采集，设备: {device_ip}，结果: {result}")
+        elif object_type == OBJECT_TYPE_ACL:
+            from function_policy.func_access_list import collect_and_update_access_lists
+            result = collect_and_update_access_lists(device_ip)
+            logger.info(f"标记完成后触发 ACL 采集，设备: {device_ip}，结果: {result}")
+        else:
+            # 地址组/端口组随 ACL 采集更新，暂无独立回采入口
+            logger.info(f"{get_object_type_label(object_type)} 暂不支持独立回采，跳过设备 {device_ip}")
+    except Exception as err:
+        logger.error(f"触发设备 {device_ip} 采集失败: {err}")
+
+
+def change_issue_status(data):
+    """
+    更新问题处理记录状态（统一接口用）
+    :param data: {id, status}
+    :return: {success: bool, message: str}
+    """
+    try:
+        if not data or "id" not in data or "status" not in data:
+            return {"success": False, "message": "缺少参数: id 或 status"}
+
+        status = data["status"]
+        if status not in ('pending', 'processing', 'completed', 'ignored'):
+            return {"success": False, "message": "无效的状态值"}
+
+        db = PolicyIssueDB()
+        record = db.getIssueRecordDetail({"id": data["id"]})
+
+        if record == "failed":
+            return {"success": False, "message": "记录不存在"}
+
+        db = PolicyIssueDB()
+        result = db.updateIssueStatus({"id": data["id"], "status": status})
+
+        if result == "failed" or result <= 0:
+            return {"success": False, "message": "更新失败，记录可能不存在"}
+
+        # 标记完成后回采，确认设备配置是否已与标准一致
+        if status == "completed" and record.get("device_ip"):
+            _recollect_by_object_type(record.get("object_type"), record["device_ip"])
+
+        return {"success": True, "message": "状态更新成功"}
+
+    except Exception as err:
+        logger.error(f"更新问题处理记录状态失败: {err}")
+        return {"success": False, "message": f"更新失败: {str(err)}"}
+
+
+def update_issue_status(issue_id, update_data=None):
     """
     更新问题处理记录状态
-    :param issue_id: 问题记录ID
+
+    两种调用方式：
+    - update_issue_status(issue_id, {status, ...})：指定字段更新
+    - update_issue_status({id, status})：统一接口的状态流转（含完成回采）
+
+    :param issue_id: 问题记录ID 或 参数字典
     :param update_data: 更新数据 {status, change_ticket_id, processed_at, remark}
     :return: {success: bool, message: str}
     """
+    if isinstance(issue_id, dict) and update_data is None:
+        return change_issue_status(issue_id)
+
     try:
         update_data["id"] = issue_id
         db = PolicyIssueDB()
@@ -71,6 +232,186 @@ def update_issue_status(issue_id, update_data):
     except Exception as err:
         logger.error(f"更新问题处理记录状态失败: {err}")
         return {"success": False, "message": f"更新失败: {str(err)}"}
+
+
+def _get_standard_entries(object_type, standard_id):
+    """
+    按对象类型取标准规则的名称与条目
+    :return: (standard_name, entries) 或 None
+    """
+    from function_policy.func_access_list import normalize_entries
+
+    if object_type == OBJECT_TYPE_PREFIX_LIST:
+        from tables.PrefixListDB import PrefixListDB
+        standard = PrefixListDB().getStandardDetail({"id": standard_id})
+    elif object_type == OBJECT_TYPE_ACL:
+        from tables.AccessListDB import AccessListDB
+        standard = AccessListDB().getStandardDetail({"id": standard_id})
+    elif object_type == OBJECT_TYPE_ADDRGROUP:
+        from tables.AddrGroupDB import AddrGroupDB
+        standard = AddrGroupDB().getGroupDetail({"id": standard_id})
+    elif object_type == OBJECT_TYPE_PORTGROUP:
+        from tables.PortGroupDB import PortGroupDB
+        standard = PortGroupDB().getGroupDetail({"id": standard_id})
+    else:
+        return None
+
+    if standard == "failed":
+        return None
+
+    return standard["name"], normalize_entries(standard.get("entries"))
+
+
+def compare_issue_text_diff(data):
+    """
+    配置差异对比（按对象类型分发到各自的渲染逻辑）
+
+    取数优先级：
+    1. 直接传入 src_entries / target_entries
+    2. 传 issue_id：从问题记录取 device_entries / standard_entries
+    3. 传 standard_id + device_ip：从标准规则与设备记录库取
+
+    :param data: {object_type, issue_id | standard_id+device_ip | src_entries+target_entries, full_diff}
+    :return: {success: bool, data: {html}, message: str}
+    """
+    try:
+        object_type = (data or {}).get("object_type")
+        if not object_type:
+            return {"success": False, "message": "缺少参数: object_type"}
+
+        full_diff = bool(data.get("full_diff"))
+
+        if data.get("src_entries") is not None and data.get("target_entries") is not None:
+            src_entries = data.get("src_entries")
+            target_entries = data.get("target_entries")
+        elif data.get("issue_id"):
+            db = PolicyIssueDB()
+            record = db.getIssueRecordDetail({"id": data["issue_id"]})
+            if record == "failed":
+                return {"success": False, "message": "记录不存在"}
+            src_entries = record.get("device_entries") or []
+            target_entries = record.get("standard_entries") or []
+        elif data.get("standard_id") and data.get("device_ip"):
+            src_entries, target_entries = _load_entries_for_compare(
+                object_type, data["standard_id"], data["device_ip"]
+            )
+            if src_entries is None:
+                return {"success": False, "message": "标准规则或设备配置不存在"}
+        else:
+            return {"success": False, "message": "缺少参数: issue_id 或 standard_id+device_ip"}
+
+        if object_type == OBJECT_TYPE_PREFIX_LIST:
+            from function_policy.func_prefix import compare_entries_text_diff
+            return compare_entries_text_diff(src_entries, target_entries, full_diff=full_diff)
+        if object_type == OBJECT_TYPE_ACL:
+            from function_policy.func_access_list import compare_entries_text_diff
+            return compare_entries_text_diff(src_entries, target_entries, full_diff=full_diff)
+        if object_type == OBJECT_TYPE_ADDRGROUP:
+            from function_policy.func_addrgroup import compare_group_text_diff
+            return compare_group_text_diff(src_entries, target_entries, full_diff=full_diff)
+        if object_type == OBJECT_TYPE_PORTGROUP:
+            from function_policy.func_portgroup import compare_group_text_diff
+            return compare_group_text_diff(src_entries, target_entries, full_diff=full_diff)
+
+        return {"success": False, "message": f"不支持的对象类型: {object_type}"}
+
+    except Exception as err:
+        logger.error(f"配置差异对比失败: {err}")
+        return {"success": False, "message": f"对比失败: {str(err)}"}
+
+
+def _load_entries_for_compare(object_type, standard_id, device_ip):
+    """
+    从标准规则与设备记录库取出两侧条目
+    :return: (device_entries, standard_entries)；任一侧缺失返回 (None, None)
+    """
+    from function_policy.func_access_list import normalize_entries
+
+    if object_type == OBJECT_TYPE_PREFIX_LIST:
+        from tables.PrefixListDB import PrefixListDB
+        standard = PrefixListDB().getStandardDetail({"id": standard_id})
+        records = PrefixListDB().getRecordsList({"device_ip": device_ip, "pl_name": standard["name"]}) \
+            if standard != "failed" else "failed"
+    elif object_type == OBJECT_TYPE_ACL:
+        from tables.AccessListDB import AccessListDB
+        standard = AccessListDB().getStandardDetail({"id": standard_id})
+        # 同名 ACL 在 v4/v6 下是两条独立配置，必须带 acl_type 过滤
+        records = AccessListDB().getRecordsList({
+            "device_ip": device_ip,
+            "acl_name": standard["name"],
+            "acl_type": standard.get("acl_type")
+        }) if standard != "failed" else "failed"
+    elif object_type in (OBJECT_TYPE_ADDRGROUP, OBJECT_TYPE_PORTGROUP):
+        if object_type == OBJECT_TYPE_ADDRGROUP:
+            from tables.AddrGroupDB import AddrGroupDB
+            db_cls = AddrGroupDB
+        else:
+            from tables.PortGroupDB import PortGroupDB
+            db_cls = PortGroupDB
+        standard = db_cls().getGroupDetail({"id": standard_id})
+        records = db_cls().getRecordsList({"device_ip": device_ip, "group_name": standard["name"]}) \
+            if standard != "failed" else "failed"
+    else:
+        return None, None
+
+    if standard == "failed" or records == "failed" or len(records) == 0:
+        return None, None
+
+    return normalize_entries(records[0].get("entries")), normalize_entries(standard.get("entries"))
+
+
+def create_new_issue(data, username):
+    """
+    手动创建问题处理记录（缺失配置类型）
+    :param data: {object_type, standard_id, device_ip, device_name, device_vendor, remark}
+    :param username: 创建人
+    :return: {success: bool, data: {id}, message: str}
+    """
+    try:
+        if not data or not data.get("object_type") or not data.get("standard_id") or not data.get("device_ip"):
+            return {"success": False, "message": "缺少参数: object_type, standard_id, device_ip"}
+
+        object_type = data["object_type"]
+        device_ip = data["device_ip"]
+
+        standard_info = _get_standard_entries(object_type, data["standard_id"])
+        if not standard_info:
+            return {"success": False, "message": "标准规则不存在"}
+        standard_name, standard_entries = standard_info
+
+        device_name = data.get("device_name", "")
+        device_vendor = data.get("device_vendor", "")
+        if not device_name or not device_vendor:
+            from tables.CollectDB import CollectDB
+            devices = CollectDB().getDeviceList({"host": device_ip})
+            if devices and len(devices) > 0:
+                device_name = device_name or devices[0].get("sysname", device_ip)
+                device_vendor = device_vendor or devices[0].get("vendor", "unknown")
+        if not device_name:
+            return {"success": False, "message": f"设备 {device_ip} 不存在"}
+
+        db = PolicyIssueDB()
+        result = db.createIssueRecord({
+            "object_type": object_type,
+            "standard_id": data["standard_id"],
+            "standard_name": standard_name,
+            "device_ip": device_ip,
+            "device_name": device_name,
+            "device_vendor": device_vendor or "unknown",
+            "issue_type": "missing",
+            "standard_entries": standard_entries,
+            "device_entries": [],
+            "created_by": username,
+            "remark": data.get("remark", "")
+        })
+
+        if result != "failed":
+            return {"success": True, "data": {"id": result}, "message": "创建成功"}
+        return {"success": False, "message": "创建失败"}
+
+    except Exception as err:
+        logger.error(f"创建新问题记录失败: {err}")
+        return {"success": False, "message": f"创建失败: {str(err)}"}
 
 
 def batch_create_issue_records(object_type, standard_id, standard_name, standard_entries, device_list, created_by):

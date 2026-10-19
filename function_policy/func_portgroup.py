@@ -14,8 +14,12 @@ from tables.AccessListDB import AccessListDB
 from function_policy.func_access_list import normalize_entries
 from function_policy.func_issue import (
     OBJECT_TYPE_PORTGROUP,
-    batch_create_issue_records
+    batch_create_issue_records,
+    diff_entries_by_seq,
+    build_device_commands
 )
+from lib_config import get_encoder
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -579,3 +583,61 @@ def batch_create_group_issues(standard_id, devices, username, remark=""):
     except Exception as err:
         logger.error(f"批量创建端口组问题记录失败: {err}")
         return {"success": False, "message": f"批量创建失败: {str(err)}"}
+
+
+def _port_entry_signature(entry):
+    """
+    生成端口组条目的可比签名（忽略 seq，seq 已作为比对 key）
+    :param entry: {seq, op, ports, description}
+    :return: 规范化 JSON 字符串
+    """
+    return json.dumps({
+        "op": entry.get("op"),
+        "ports": entry.get("ports") or []
+    }, sort_keys=True, ensure_ascii=False)
+
+
+def prepare_portgroup_devices(record):
+    """
+    为单条端口组问题记录生成变更命令
+
+    :param record: 问题记录（已含 object_type=portgroup）
+    :return: {"cmd_exec", "cmd_roll", "tag"} 或 {"skipped": True}
+    """
+    device_ip = record.get("device_ip")
+    vendor = record.get("device_vendor", "cisco_nx")
+    group_name = record.get("standard_name", "")
+    standard_entries = normalize_entries(record.get("standard_entries", []))
+    device_entries = normalize_entries(record.get("device_entries", []))
+
+    logger.info(f"处理设备 {device_ip}, vendor={vendor}, portgroup={group_name}")
+    logger.info(f"  标准条目数: {len(standard_entries)}, 设备条目数: {len(device_entries)}")
+
+    diff = diff_entries_by_seq(standard_entries, device_entries, _port_entry_signature)
+
+    if not diff["add"] and not diff["delete"]:
+        return {"skipped": True}
+
+    logger.info(f"设备 {device_ip}: 添加 {len(diff['add'])} 条，删除 {len(diff['delete'])} 条")
+
+    encoder = get_encoder(vendor)
+
+    def append_group(record, entries):
+        return {
+            "port_groups": [{
+                "name": record.get("standard_name", ""),
+                "entries": entries
+            }]
+        }
+
+    commands = build_device_commands(
+        record,
+        diff,
+        encoder,
+        sections=['port_groups'],
+        entry_diff_applier=append_group
+    )
+
+    commands["tag"] = f"portgroup:{group_name}"
+
+    return commands
