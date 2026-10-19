@@ -18,7 +18,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 class PolicyIssueDB(mysqldb_netops):
     """策略配置问题处理记录通用库层"""
 
@@ -249,51 +248,6 @@ class PolicyIssueDB(mysqldb_netops):
         except Exception as err:
             logger.error("======PolicyIssueDB updateIssueRecordStatus error========\n{}".format(str(err)))
             self.conn.rollback()
-            return "failed"
-        finally:
-            self.cursor.close()
-            self.conn.close()
-
-    def getIssueStatistics(self, data):
-        """
-        获取问题处理记录统计
-        :param data: {object_type} 可选，按对象类型统计
-        :return: {pending, processing, completed, ignored, total}或"failed"
-        """
-        data = waf(data) if data else {}
-        try:
-            conditions = []
-            if data.get("object_type"):
-                conditions.append("object_type='" + str(data["object_type"]) + "'")
-
-            sql = """SELECT status, COUNT(*) as count
-                     FROM policy_issue_records"""
-            if len(conditions) > 0:
-                sql = sql + " WHERE " + " AND ".join(conditions)
-            sql = sql + " GROUP BY status"
-
-            self.cursor.execute(sql)
-            results = self.cursor.fetchall()
-
-            statistics = {
-                "pending": 0,
-                "processing": 0,
-                "completed": 0,
-                "ignored": 0
-            }
-
-            for row in results:
-                status = row[0]
-                count = row[1]
-                if status in statistics:
-                    statistics[status] = count
-
-            statistics["total"] = sum(statistics.values())
-
-            return statistics
-
-        except Exception as err:
-            logger.error("======PolicyIssueDB getIssueStatistics error========\n{}".format(str(err)))
             return "failed"
         finally:
             self.cursor.close()

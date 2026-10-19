@@ -237,34 +237,6 @@ def delete_group(group_id):
         return {"success": False, "message": f"删除失败: {str(err)}"}
 
 
-def toggle_group_active(group_id):
-    """
-    切换地址组标准规则的启用状态
-    :param group_id: 规则ID
-    :return: {success: bool, message: str}
-    """
-    try:
-        db = AddrGroupDB()
-        current = db.getGroupDetail({"id": group_id})
-
-        if current == "failed":
-            return {"success": False, "message": "规则不存在"}
-
-        new_value = 0 if current["is_active"] else 1
-
-        db = AddrGroupDB()
-        result = db.updateGroup({"id": group_id, "is_active": new_value})
-
-        if result != "failed" and result > 0:
-            return {"success": True, "message": "状态更新成功"}
-        else:
-            return {"success": False, "message": "状态更新失败"}
-
-    except Exception as err:
-        logger.error(f"切换地址组状态失败: {err}")
-        return {"success": False, "message": f"状态更新失败: {str(err)}"}
-
-
 def get_group_statistics(standard_id):
     """
     获取地址组的设备应用统计

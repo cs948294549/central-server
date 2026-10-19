@@ -92,22 +92,6 @@ def update_issue_status():
         return APIResponse.server_error(message=f"更新失败: {str(e)}")
 
 
-@policy_issue_bp.route('/statistics', methods=['POST'])
-def get_issue_statistics():
-    """获取问题处理记录统计"""
-    try:
-        data = request.json or {}
-        result = func_issue.get_issue_statistics(data)
-
-        if result.get("success"):
-            return APIResponse.success(data=result.get("data"), message=result.get("message", "查询成功"))
-        return APIResponse.error(message=result.get("message", "查询失败"))
-
-    except Exception as e:
-        logger.error(f"获取问题处理统计失败: {e}", exc_info=True)
-        return APIResponse.server_error(message=f"查询失败: {str(e)}")
-
-
 @policy_issue_bp.route('/compare/text_diff', methods=['POST'])
 def compare_text_diff():
     """配置差异对比，支持 issue_id 或 standard_id + device_ip 或直接传 entries"""

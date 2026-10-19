@@ -127,26 +127,6 @@ def delete_issue(data):
         return {"success": False, "message": f"删除失败: {str(err)}"}
 
 
-def get_issue_statistics(data):
-    """
-    获取问题处理记录统计
-    :param data: {object_type} 可选
-    :return: {success: bool, data: {pending, processing, completed, ignored, total}, message: str}
-    """
-    try:
-        db = PolicyIssueDB()
-        result = db.getIssueStatistics(data or {})
-
-        if result == "failed":
-            return {"success": False, "message": "查询失败"}
-
-        return {"success": True, "data": result, "message": "查询成功"}
-
-    except Exception as err:
-        logger.error(f"获取问题处理统计失败: {err}")
-        return {"success": False, "message": f"查询失败: {str(err)}"}
-
-
 def _recollect_by_object_type(object_type, device_ip):
     """
     标记完成后按对象类型触发设备回采，失败不影响状态更新
@@ -198,36 +178,6 @@ def change_issue_status(data):
             _recollect_by_object_type(record.get("object_type"), record["device_ip"])
 
         return {"success": True, "message": "状态更新成功"}
-
-    except Exception as err:
-        logger.error(f"更新问题处理记录状态失败: {err}")
-        return {"success": False, "message": f"更新失败: {str(err)}"}
-
-
-def update_issue_status(issue_id, update_data=None):
-    """
-    更新问题处理记录状态
-
-    两种调用方式：
-    - update_issue_status(issue_id, {status, ...})：指定字段更新
-    - update_issue_status({id, status})：统一接口的状态流转（含完成回采）
-
-    :param issue_id: 问题记录ID 或 参数字典
-    :param update_data: 更新数据 {status, change_ticket_id, processed_at, remark}
-    :return: {success: bool, message: str}
-    """
-    if isinstance(issue_id, dict) and update_data is None:
-        return change_issue_status(issue_id)
-
-    try:
-        update_data["id"] = issue_id
-        db = PolicyIssueDB()
-        result = db.updateIssueRecordStatus(update_data)
-
-        if result != "failed" and result > 0:
-            return {"success": True, "message": "更新成功"}
-        else:
-            return {"success": False, "message": "更新失败，记录可能不存在"}
 
     except Exception as err:
         logger.error(f"更新问题处理记录状态失败: {err}")
@@ -477,27 +427,6 @@ def batch_create_issue_records(object_type, standard_id, standard_name, standard
     except Exception as err:
         logger.error(f"批量创建问题处理记录失败: {err}")
         return {"success": [], "failed": []}
-
-
-def group_records_by_fingerprint(records):
-    """
-    按指纹分组设备记录
-    :param records: 设备记录列表
-    :return: {fingerprint: [device_records]}
-    """
-    try:
-        grouped = {}
-        for record in records:
-            fingerprint = record["fingerprint"]
-            if fingerprint not in grouped:
-                grouped[fingerprint] = []
-            grouped[fingerprint].append(record)
-
-        return grouped
-
-    except Exception as err:
-        logger.error(f"分组失败: {err}")
-        return {}
 
 
 def diff_entries_by_seq(standard_entries, device_entries, entry_signature):

@@ -14,8 +14,7 @@ from function_policy.func_issue import (
     batch_create_issue_records,
     diff_entries_by_seq,
     build_device_commands,
-    create_change_order,
-    update_issue_status
+    create_change_order
 )
 import json
 import logging
@@ -379,65 +378,6 @@ def batch_create_issues(standard_id, devices, username, remark=""):
         return {"success": False, "message": f"批量创建失败: {str(err)}"}
 
 
-
-
-def create_new_issue(device_ip, standard_id, username, remark=""):
-    """
-    创建新的问题处理记录（手动创建缺失配置类型）
-    :param device_ip: 设备IP
-    :param standard_id: 标准规则ID
-    :param username: 创建人
-    :param remark: 备注
-    :return: {success: bool, data: {id}, message: str}
-    """
-    try:
-        # 查询设备信息
-        collector_db = CollectDB()
-        devices = collector_db.getDeviceList({"host": device_ip})
-
-        if not devices or len(devices) == 0:
-            return {"success": False, "message": f"设备 {device_ip} 不存在"}
-
-        device_info = devices[0]
-
-        # 查询标准规则信息
-        prefix_db_standard = PrefixListDB()
-        standard = prefix_db_standard.getStandardDetail({"id": standard_id})
-
-        if standard == "failed":
-            return {"success": False, "message": "标准规则不存在"}
-
-        # 准备创建数据
-        standard_entries = standard["entries"].get("entries", []) if isinstance(standard["entries"], dict) else standard["entries"]
-
-        issue_data = {
-            "object_type": OBJECT_TYPE_PREFIX_LIST,
-            "standard_id": standard_id,
-            "standard_name": standard["name"],
-            "device_ip": device_ip,
-            "device_name": device_info.get("sysname", device_ip),
-            "device_vendor": device_info.get("vendor", "unknown"),
-            "issue_type": "missing",
-            "standard_entries": standard_entries,
-            "device_entries": [],
-            "created_by": username,
-            "remark": remark
-        }
-
-        # 创建记录
-        issue_db_create = PolicyIssueDB()
-        result = issue_db_create.createIssueRecord(issue_data)
-
-        if result != "failed":
-            return {"success": True, "data": {"id": result}, "message": "创建成功"}
-        else:
-            return {"success": False, "message": "创建失败"}
-
-    except Exception as err:
-        logger.error(f"创建新问题记录失败: {err}")
-        return {"success": False, "message": f"创建失败: {str(err)}"}
-
-
 def get_device_statistics_for_standard(standard_id, standard_name, standard_fingerprint):
     """
     获取标准规则的设备应用统计
@@ -617,8 +557,6 @@ def compare_configurations(standard_entries, device_entries):
         }
 
 
-
-
 def collect_and_update_prefix_lists(ip):
     """
     采集指定设备的前缀列表配置并更新到数据库
@@ -765,8 +703,6 @@ def compare_entries_text_diff(src_entries, target_entries, full_diff=False):
         }
 
 
-
-
 def _prefix_entry_signature(entry):
     """
     生成前缀列表条目的可比签名（忽略 seq，seq 已作为比对 key）
@@ -827,182 +763,3 @@ def prepare_prefix_list_devices(record):
 
     return commands
 
-
-def create_prefix_list_change_order(issue_ids, username, title=None):
-    """
-    根据问题处理记录创建前缀列表变更工单
-
-    实际逻辑在 func_issue.create_change_order，本函数保留为兼容入口。
-
-    :param issue_ids: 问题处理记录ID列表
-    :param username: 创建人
-    :param title: 工单标题（可选，不提供则自动生成）
-    :return: {"success": bool, "data": {"op_id": str}, "message": str}
-    """
-    return create_change_order(issue_ids, username, title)
-
-# def create_prefix_list_change_order(issue_ids, username, title=None):
-#     """
-#     根据问题处理记录创建前缀列表变更工单
-#     :param issue_ids: 问题处理记录ID列表
-#     :param username: 创建人
-#     :param title: 工单标题（可选，不提供则自动生成）
-#     :return: {"success": bool, "data": {"op_id": str}, "message": str}
-#     """
-#     try:
-#         if not issue_ids or len(issue_ids) == 0:
-#             return {"success": False, "message": "缺少参数: issue_ids"}
-#         logger.info(f"开始处理前缀列表变更工单，issue_ids: {issue_ids}, title: {title}")
-#         # 1. 查询所有问题记录
-#         issue_records = []
-#         not_found_ids = []
-#         for issue_id in issue_ids:
-#             logger.info(f"查询问题记录 ID: {issue_id}")
-#             # 每次循环创建新的数据库连接
-#             db = PrefixListDB()
-#             record = db.getIssueRecordDetail({"id": issue_id})
-#             if record and record != "failed":
-#                 issue_records.append(record)
-#                 logger.info(f"问题记录 {issue_id} 查询成功: device_ip={record.get('device_ip')}, standard_name={record.get('standard_name')}")
-#             else:
-#                 not_found_ids.append(issue_id)
-#                 logger.warning(f"问题记录 {issue_id} 不存在")
-#         if not_found_ids:
-#             return {
-#                 "success": False,
-#                 "message": f"以下问题记录不存在: {', '.join(map(str, not_found_ids))}"
-#             }
-#         if len(issue_records) == 0:
-#             return {"success": False, "message": "未找到有效的问题记录"}
-#         logger.info(f"成功查询到 {len(issue_records)} 条问题记录")
-#         # 2. 准备工单基本信息
-#         order_data = {
-#             "title": title if title else f"前缀列表配置变更-{len(issue_records)}台设备",
-#             "descrip": f"根据 {len(issue_records)} 条问题记录创建的变更工单",
-#             "op_type": "2"  # 固定为2
-#         }
-#         # 3. 为每个设备生成配置命令
-#         devices_data = []
-#         failed_devices = []
-#         skipped_devices = []
-#         for record in issue_records:
-#             try:
-#                 device_ip = record.get("device_ip")
-#                 vendor = record.get("device_vendor", "cisco_nx")
-#                 prefix_list_name = record.get("standard_name", "")
-#                 standard_entries = record.get("standard_entries", [])
-#                 device_entries = record.get("device_entries", [])
-#                 logger.info(f"处理设备 {device_ip}, vendor={vendor}, prefix_list={prefix_list_name}")
-#                 logger.info(f"  标准条目数: {len(standard_entries)}, 设备条目数: {len(device_entries)}")
-#                 # 对比标准条目和设备条目，找出需要添加和删除的
-#                 # 策略：
-#                 # 1. 标准中有但设备中没有的 -> 添加
-#                 # 2. 设备中有但标准中没有的 -> 删除
-#                 # 3. seq相同但内容不同的 -> 先删除旧的，再添加新的
-#                 # 将entries转换为可比较的格式（使用seq作为key）
-#                 device_entries_map = {entry.get("seq"): entry for entry in device_entries}
-#                 standard_entries_map = {entry.get("seq"): entry for entry in standard_entries}
-#                 add_entries = []
-#                 delete_entries = []
-#                 # 找出需要添加的（标准中有但设备中没有，或seq相同但内容不同）
-#                 for seq, std_entry in standard_entries_map.items():
-#                     if seq not in device_entries_map:
-#                         # 设备中没有，需要添加
-#                         add_entries.append(std_entry)
-#                     else:
-#                         # seq存在，检查内容是否一致
-#                         dev_entry = device_entries_map[seq]
-#                         # 比较action、prefix、ge、le字段
-#                         if (std_entry.get("action") != dev_entry.get("action") or
-#                             std_entry.get("prefix") != dev_entry.get("prefix") or
-#                             std_entry.get("ge") != dev_entry.get("ge") or
-#                             std_entry.get("le") != dev_entry.get("le")):
-#                             # 内容不一致，需要先删除再添加
-#                             delete_entries.append(dev_entry)
-#                             add_entries.append(std_entry)
-#                 # 找出需要删除的（设备中有但标准中没有）
-#                 for seq, dev_entry in device_entries_map.items():
-#                     if seq not in standard_entries_map:
-#                         delete_entries.append(dev_entry)
-#                 # 如果没有需要变更的内容，跳过
-#                 if not add_entries and not delete_entries:
-#                     skipped_devices.append(device_ip)
-#                     continue
-#                 logger.info(f"设备 {device_ip}: 添加 {len(add_entries)} 条，删除 {len(delete_entries)} 条")
-#                 # 获取对应厂商的编码器
-#                 encoder = get_encoder(vendor)
-#                 # 生成删除配置命令
-#                 cmd_delete = ""
-#                 if delete_entries:
-#                     delete_data = {
-#                         "prefix_lists": [{
-#                             "name": prefix_list_name,
-#                             "entries": delete_entries
-#                         }]
-#                     }
-#                     cmd_delete = encoder.encode(delete_data, sections=['prefix_lists'], operation='delete')
-#                     logger.info(f"  删除命令:\n{cmd_delete}")
-#                 # 生成添加配置命令
-#                 cmd_add = ""
-#                 if add_entries:
-#                     add_data = {
-#                         "prefix_lists": [{
-#                             "name": prefix_list_name,
-#                             "entries": add_entries
-#                         }]
-#                     }
-#                     cmd_add = encoder.encode(add_data, sections=['prefix_lists'], operation='add')
-#                 # 合并执行命令（先删除后添加）
-#                 cmd_exec_parts = []
-#                 if cmd_delete:
-#                     cmd_exec_parts.append(cmd_delete)
-#                 if cmd_add:
-#                     cmd_exec_parts.append(cmd_add)
-#                 cmd_exec = "\n".join(cmd_exec_parts)
-#                 # 生成回滚命令（反向操作）
-#                 cmd_roll_parts = []
-#                 if cmd_add:
-#                     cmd_roll_parts.append(encoder.encode(add_data, sections=['prefix_lists'], operation='delete'))
-#                 if cmd_delete:
-#                     cmd_roll_parts.append(encoder.encode(delete_data, sections=['prefix_lists'], operation='add'))
-#                 cmd_roll = "\n".join(cmd_roll_parts)
-#                 # 添加到设备列表
-#                 devices_data.append({
-#                     "ip": device_ip,
-#                     "batch": 1,
-#                     "cmd_exec": cmd_exec,
-#                     "cmd_roll": cmd_roll,
-#                     "tag": f"prefix-list:{prefix_list_name}"
-#                 })
-#             except Exception as e:
-#                 logger.error(f"处理问题记录 {record.get('id')} 配置生成失败: {e}", exc_info=True)
-#                 failed_devices.append(record.get('device_ip'))
-#         if len(devices_data) == 0:
-#             message = "所有设备配置生成失败或无需变更"
-#             if skipped_devices:
-#                 message += f"（跳过 {len(skipped_devices)} 台已一致的设备）"
-#             return {
-#                 "success": False,
-#                 "message": message,
-#                 "data": {
-#                     "failed_devices": failed_devices,
-#                     "skipped_devices": skipped_devices
-#                 }
-#             }
-#         # 4. 调用通用工单创建方法
-#         result = create_order_with_devices(order_data, devices_data, username)
-#         if failed_devices and result.get("success"):
-#             result["message"] += f"，配置生成失败: {', '.join(failed_devices)}"
-#             if "data" in result:
-#                 result["data"]["config_failed_devices"] = failed_devices
-#         if skipped_devices and result.get("success"):
-#             result["message"] += f"，跳过已一致设备: {len(skipped_devices)} 台"
-#             if "data" in result:
-#                 result["data"]["skipped_devices"] = skipped_devices
-#         return result
-#     except Exception as err:
-#         logger.error(f"创建前缀列表变更工单失败: {err}", exc_info=True)
-#         return {
-#             "success": False,
-#             "message": f"创建工单失败: {str(err)}"
-#         }

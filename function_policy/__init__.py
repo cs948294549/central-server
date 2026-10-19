@@ -12,10 +12,8 @@ from function_policy.func_prefix import (
 )
 
 from function_policy.func_issue import (
-    group_records_by_fingerprint,
     batch_create_issue_records,
     create_change_order,
-    update_issue_status,
 )
 
 __all__ = [
@@ -23,9 +21,7 @@ __all__ = [
     'get_device_statistics_for_standard',
     'get_device_list_for_standard',
     'compare_configurations',
-    'group_records_by_fingerprint',
     'batch_create_issue_records',
     'create_change_order',
-    'update_issue_status',
     'collect_and_update_prefix_lists'
 ]

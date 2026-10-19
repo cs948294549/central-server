@@ -244,34 +244,6 @@ def delete_standard(standard_id):
         return {"success": False, "message": f"删除失败: {str(err)}"}
 
 
-def toggle_standard_active(standard_id):
-    """
-    切换标准规则的启用状态
-    :param standard_id: 标准规则ID
-    :return: {success: bool, message: str}
-    """
-    try:
-        db = AccessListDB()
-        standard = db.getStandardDetail({"id": standard_id})
-
-        if standard == "failed":
-            return {"success": False, "message": "标准规则不存在"}
-
-        new_value = 0 if standard["is_active"] else 1
-
-        db = AccessListDB()
-        result = db.updateStandard({"id": standard_id, "is_active": new_value})
-
-        if result != "failed" and result > 0:
-            return {"success": True, "message": "状态更新成功"}
-        else:
-            return {"success": False, "message": "状态更新失败"}
-
-    except Exception as err:
-        logger.error(f"切换标准规则状态失败: {err}")
-        return {"success": False, "message": f"状态更新失败: {str(err)}"}
-
-
 def get_standard_statistics(standard_id):
     """
     获取标准规则的设备应用统计
@@ -497,61 +469,6 @@ def batch_create_issues(standard_id, devices, username, remark=""):
     except Exception as err:
         logger.error(f"批量创建问题处理记录失败: {err}")
         return {"success": False, "message": f"批量创建失败: {str(err)}"}
-
-
-def create_new_issue(device_ip, standard_id, username, remark=""):
-    """
-    创建新的问题处理记录（手动创建缺失配置类型）
-    :param device_ip: 设备IP
-    :param standard_id: 标准规则ID
-    :param username: 创建人
-    :param remark: 备注
-    :return: {success: bool, data: {id}, message: str}
-    """
-    try:
-        # 查询设备信息
-        collector_db = CollectDB()
-        devices = collector_db.getDeviceList({"host": device_ip})
-
-        if not devices or len(devices) == 0:
-            return {"success": False, "message": f"设备 {device_ip} 不存在"}
-
-        device_info = devices[0]
-
-        # 查询标准规则信息
-        acl_db = AccessListDB()
-        standard = acl_db.getStandardDetail({"id": standard_id})
-
-        if standard == "failed":
-            return {"success": False, "message": "标准规则不存在"}
-
-        standard_entries = normalize_entries(standard["entries"])
-
-        issue_data = {
-            "object_type": OBJECT_TYPE_ACL,
-            "standard_id": standard_id,
-            "standard_name": standard["name"],
-            "device_ip": device_ip,
-            "device_name": device_info.get("sysname", device_ip),
-            "device_vendor": device_info.get("vendor", "unknown"),
-            "issue_type": "missing",
-            "standard_entries": standard_entries,
-            "device_entries": [],
-            "created_by": username,
-            "remark": remark
-        }
-
-        issue_db = PolicyIssueDB()
-        result = issue_db.createIssueRecord(issue_data)
-
-        if result != "failed":
-            return {"success": True, "data": {"id": result}, "message": "创建成功"}
-        else:
-            return {"success": False, "message": "创建失败"}
-
-    except Exception as err:
-        logger.error(f"创建新问题记录失败: {err}")
-        return {"success": False, "message": f"创建失败: {str(err)}"}
 
 
 def get_device_statistics_for_standard(standard_name, acl_type, standard_fingerprint):
@@ -991,10 +908,3 @@ def prepare_access_list_devices(record):
 
     return commands
 
-
-def create_access_list_change_order(issue_ids, username, title=None):
-    """
-    根据问题处理记录创建 ACL 变更工单
-    实际逻辑在 func_issue.create_change_order，本函数保留为兼容入口。
-    """
-    return create_change_order(issue_ids, username, title)

@@ -124,27 +124,6 @@ def delete_group():
         logger.error(f"删除地址组异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
-
-@addrgroup_bp.route('/standards/toggle_active', methods=['POST'])
-def toggle_group_active():
-    """切换地址组启用状态"""
-    try:
-        data = request.json
-        if not data or "id" not in data:
-            return APIResponse.param_error(message="缺少参数: id")
-
-        result = func_addrgroup.toggle_group_active(data["id"])
-
-        if result["success"]:
-            return APIResponse.success(message=result["message"])
-        else:
-            return APIResponse.error(message=result["message"])
-
-    except Exception as e:
-        logger.error(f"切换地址组状态异常: {e}")
-        return APIResponse.server_error(message=f"接口异常: {str(e)}")
-
-
 @addrgroup_bp.route('/standards/statistics', methods=['POST'])
 def get_group_statistics():
     """获取地址组的设备应用统计"""
