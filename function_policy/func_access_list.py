@@ -186,6 +186,10 @@ def get_records_list(data):
     try:
         query = dict(data or {})
 
+        # 列表页的 ACL 名称筛选用模糊匹配，精确查询仍走 acl_name
+        if query.get("acl_name"):
+            query["acl_name_like"] = query.pop("acl_name")
+
         db = AccessListDB()
         result = db.getRecordsList(query)
 

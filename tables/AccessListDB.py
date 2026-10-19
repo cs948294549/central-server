@@ -303,6 +303,10 @@ class AccessListDB(mysqldb_netops):
             if "acl_name" in data.keys() and data["acl_name"]:
                 conditions.append("acl_name='" + str(data["acl_name"]) + "'")
 
+            # 按ACL名称模糊搜索
+            if "acl_name_like" in data.keys() and data["acl_name_like"]:
+                conditions.append("acl_name LIKE '%" + str(data["acl_name_like"]) + "%'")
+
             # 按地址族筛选
             if "acl_type" in data.keys() and data["acl_type"]:
                 conditions.append("acl_type='" + str(data["acl_type"]) + "'")

@@ -72,6 +72,10 @@ def get_records_list(data):
     try:
         query = dict(data or {})
 
+        # 列表页的前缀名称筛选用模糊匹配，精确查询仍走 pl_name
+        if query.get("pl_name"):
+            query["pl_name_like"] = query.pop("pl_name")
+
         db = PrefixListDB()
         result = db.getRecordsList(query)
 

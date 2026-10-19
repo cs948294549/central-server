@@ -272,6 +272,9 @@ class PortGroupDB(mysqldb_netops):
             if "group_name" in data.keys() and data["group_name"]:
                 conditions.append("group_name='" + str(data["group_name"]) + "'")
 
+            if "group_name_like" in data.keys() and data["group_name_like"]:
+                conditions.append("group_name LIKE '%" + str(data["group_name_like"]) + "%'")
+
             if "fingerprint" in data.keys() and data["fingerprint"]:
                 conditions.append("fingerprint='" + str(data["fingerprint"]) + "'")
 

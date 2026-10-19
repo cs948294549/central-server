@@ -307,6 +307,10 @@ def get_group_records_list(data):
             if data.get(key):
                 query[key] = data[key]
 
+        # 列表页的地址组名称筛选用模糊匹配，精确查询仍走 group_name
+        if query.get("group_name"):
+            query["group_name_like"] = query.pop("group_name")
+
         db = AddrGroupDB()
         result = db.getRecordsList(query)
 

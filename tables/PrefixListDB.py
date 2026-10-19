@@ -269,6 +269,10 @@ class PrefixListDB(mysqldb_netops):
             if "pl_name" in data.keys() and data["pl_name"]:
                 conditions.append("pl_name='" + str(data["pl_name"]) + "'")
 
+            # 按前缀列表名称模糊搜索
+            if "pl_name_like" in data.keys() and data["pl_name_like"]:
+                conditions.append("pl_name LIKE '%" + str(data["pl_name_like"]) + "%'")
+
             # 按指纹搜索
             if "fingerprint" in data.keys() and data["fingerprint"]:
                 conditions.append("fingerprint='" + str(data["fingerprint"]) + "'")
