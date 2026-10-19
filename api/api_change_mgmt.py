@@ -1,8 +1,6 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
 import logging
-import json
-import time
 from function_op import type_manage, group_manage, notify_manage, order_manage, device_cmd_manage, log_manage
 
 # 配置日志

@@ -132,6 +132,73 @@ def entry_to_text(entry):
     return " ".join(p for p in parts if p != "")
 
 
+def get_standard_list(data):
+    """
+    获取标准规则列表
+    :param data: {keyword/name, acl_type, is_active, ...}，keyword 兼容页面搜索框
+    :return: {success: bool, data: [], message: str}
+    """
+    try:
+        query = dict(data or {})
+        # 页面的搜索框走 keyword，库层按 name 查询
+        if query.get("keyword") and not query.get("name"):
+            query["name"] = query["keyword"]
+
+        db = AccessListDB()
+        result = db.getStandardsList(query)
+
+        if result == "failed":
+            return {"success": False, "message": "查询失败"}
+
+        return {"success": True, "data": result, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取ACL标准规则列表失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
+def get_standard_detail(standard_id):
+    """
+    获取标准规则详情
+    :param standard_id: 规则ID
+    :return: {success: bool, data: {}, message: str}
+    """
+    try:
+        db = AccessListDB()
+        result = db.getStandardDetail({"id": standard_id})
+
+        if result == "failed":
+            return {"success": False, "message": "标准规则不存在"}
+
+        return {"success": True, "data": result, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取ACL标准规则详情失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
+def get_records_list(data):
+    """
+    获取设备配置记录列表
+    :param data: {device_ip, standard_name, fingerprint, ...}
+    :return: {success: bool, data: [], message: str}
+    """
+    try:
+        query = dict(data or {})
+
+        db = AccessListDB()
+        result = db.getRecordsList(query)
+
+        if result == "failed":
+            return {"success": False, "message": "查询失败"}
+
+        return {"success": True, "data": result, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取ACL设备配置记录列表失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
 def create_standard(data, username):
     """
     创建标准规则（包含指纹计算）

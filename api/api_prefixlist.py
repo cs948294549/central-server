@@ -1,7 +1,8 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
-from tables.PrefixListDB import PrefixListDB
 from function_policy.func_prefix import (
+    get_standard_list,
+    get_records_list,
     create_standard,
     update_standard,
     delete_standard,
@@ -25,13 +26,12 @@ def get_standards_list():
     """获取标准规则列表"""
     try:
         data = request.json or {}
-        db = PrefixListDB()
-        result = db.getStandardsList(data)
+        result = get_standard_list(data)
 
-        if result != "failed":
-            return APIResponse.success(data=result, message="查询成功")
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
         else:
-            return APIResponse.error(message="查询失败")
+            return APIResponse.error(message=result["message"])
 
     except Exception as e:
         logger.error(f"查询标准规则列表异常: {e}")
@@ -149,13 +149,12 @@ def get_records_list():
     """获取设备配置记录列表"""
     try:
         data = request.json or {}
-        db = PrefixListDB()
-        result = db.getRecordsList(data)
+        result = get_records_list(data)
 
-        if result != "failed":
-            return APIResponse.success(data=result, message="查询成功")
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
         else:
-            return APIResponse.error(message="查询失败")
+            return APIResponse.error(message=result["message"])
 
     except Exception as e:
         logger.error(f"查询设备配置记录列表异常: {e}")

@@ -1,8 +1,10 @@
 """ACL 标准规则、设备配置记录、问题处理记录接口"""
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
-from tables.AccessListDB import AccessListDB
 from function_policy.func_access_list import (
+    get_standard_list,
+    get_standard_detail,
+    get_records_list,
     create_standard,
     update_standard,
     delete_standard,
@@ -32,17 +34,12 @@ def get_standards_list():
     """获取标准规则列表"""
     try:
         data = request.json or {}
-        # 页面的搜索框走 keyword，库层按 name 查询
-        if data.get("keyword") and not data.get("name"):
-            data["name"] = data["keyword"]
+        result = get_standard_list(data)
 
-        db = AccessListDB()
-        result = db.getStandardsList(data)
-
-        if result != "failed":
-            return APIResponse.success(data=result, message="查询成功")
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
         else:
-            return APIResponse.error(message="查询失败")
+            return APIResponse.error(message=result["message"])
 
     except Exception as e:
         logger.error(f"查询ACL标准规则列表异常: {e}")
@@ -50,20 +47,19 @@ def get_standards_list():
 
 
 @acl_bp.route('/standards/detail', methods=['POST'])
-def get_standard_detail():
+def get_standard_detail_api():
     """获取标准规则详情"""
     try:
         data = request.json
         if not data or "id" not in data:
             return APIResponse.param_error(message="缺少参数: id")
 
-        db = AccessListDB()
-        result = db.getStandardDetail({"id": data["id"]})
+        result = get_standard_detail(data["id"])
 
-        if result != "failed":
-            return APIResponse.success(data=result, message="查询成功")
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
         else:
-            return APIResponse.error(message="标准规则不存在")
+            return APIResponse.error(message=result["message"])
 
     except Exception as e:
         logger.error(f"查询ACL标准规则详情异常: {e}")
@@ -184,13 +180,12 @@ def get_records_list():
     """获取设备配置记录列表"""
     try:
         data = request.json or {}
-        db = AccessListDB()
-        result = db.getRecordsList(data)
+        result = get_records_list(data)
 
-        if result != "failed":
-            return APIResponse.success(data=result, message="查询成功")
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
         else:
-            return APIResponse.error(message="查询失败")
+            return APIResponse.error(message=result["message"])
 
     except Exception as e:
         logger.error(f"查询ACL设备配置记录异常: {e}")
