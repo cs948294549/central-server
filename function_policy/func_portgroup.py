@@ -3,9 +3,9 @@
 
 端口组以组名被 ACL 规则引用而不展开，因此额外提供引用计数：
 删除之前需要知道它被多少条标准规则引用，避免产生悬空引用。
-端口组还可以引用其他端口组（{type:"ref", name}），这里只统计被 ACL 规则引用的情况。
 
-条目两种结构（设计文档 1.4）：{protocol, op, ports} 端口条目 / {type:"ref", name} 组引用。
+条目结构与设备记录（采集侧）保持一致：{seq, op, ports:[...], description}。
+协议信息不属于端口组本身（由引用它的 ACL 规则决定），不参与存储和指纹计算。
 对应表：portgroup_standards，见 tables/PortGroupDB.py
 """
 from utils.fingerprint import calculate_fingerprint
@@ -31,9 +31,10 @@ def calculate_portgroup_fingerprint(name, acl_type, entries):
     """
     try:
         # acl_type 参与指纹：同名不同族是两条独立配置
+        # 字段结构需与采集侧 func_access_list.calculate_group_fingerprint 保持一致，
+        # 否则同一份配置在"标准规则"和"设备记录"两边算出的指纹不相等
         fingerprint = calculate_fingerprint({
-            "kind": "portgroup",
-            "name": name,
+            "group_name": name,
             "acl_type": acl_type,
             "entries": entries
         })
@@ -500,18 +501,15 @@ def compare_group_with_standard(standard_id, device_ip):
 def group_entry_to_text(entry):
     """
     将端口组条目渲染为可读文本（用于差异对比展示）
-    :param entry: {protocol, op, ports} / {type:"ref", name}
-    :return: 单行文本，如 "tcp eq 80, 443"、"ref: PORT_GROUP_A"
+    :param entry: {seq, op, ports:[...], description}
+    :return: 单行文本，如 "eq 80, 443"
     """
     if not entry:
         return ""
 
-    if entry.get("type") == "ref":
-        return f"ref: {entry.get('name', '')}"
-
     ports = entry.get("ports") or []
     ports_text = ", ".join(str(p) for p in ports if p is not None and p != "")
-    return f"{entry.get('protocol', '')} {entry.get('op', '')} {ports_text}".strip()
+    return f"{entry.get('op', '')} {ports_text}".strip()
 
 
 def compare_group_text_diff(src_entries, target_entries, full_diff=False):

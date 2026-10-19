@@ -4,7 +4,7 @@
 地址组以组名被 ACL 规则引用而不展开，因此额外提供引用计数：
 删除之前需要知道它被多少条标准规则引用，避免产生悬空引用。
 
-条目只保留两种类型（设计文档 1.3）：network 网段 / host 主机。
+条目结构与设备记录（采集侧）保持一致：{seq, kind:"network"|"host", addresses:[...], description}。
 对应表：addrgroup_standards，见 tables/AddrGroupDB.py
 """
 from utils.fingerprint import calculate_fingerprint
@@ -30,9 +30,10 @@ def calculate_addrgroup_fingerprint(name, acl_type, entries):
     """
     try:
         # acl_type 参与指纹：同名不同族是两条独立配置
+        # 字段结构需与采集侧 func_access_list.calculate_group_fingerprint 保持一致，
+        # 否则同一份配置在"标准规则"和"设备记录"两边算出的指纹不相等
         fingerprint = calculate_fingerprint({
-            "kind": "addrgroup",
-            "name": name,
+            "group_name": name,
             "acl_type": acl_type,
             "entries": entries
         })
@@ -499,19 +500,14 @@ def compare_group_with_standard(standard_id, device_ip):
 def group_entry_to_text(entry):
     """
     将地址组条目渲染为可读文本（用于差异对比展示）
-    :param entry: {type:"network"|"host", address} / {type:"range", start, end} / {type:"ref", name}
-    :return: 单行文本，如 "10.0.0.0/8"、"10.0.0.1 ~ 10.0.0.9"、"ref: ADDR_GROUP_A"
+    :param entry: {seq, kind:"network"|"host", addresses:[...], description}
+    :return: 单行文本，如 "10.0.0.0/8"
     """
     if not entry:
         return ""
 
-    entry_type = entry.get("type")
-
-    if entry_type == "ref":
-        return f"ref: {entry.get('name', '')}"
-    if entry_type == "range":
-        return f"{entry.get('start', '')} ~ {entry.get('end', '')}"
-    return entry.get("address", "") or ""
+    addresses = entry.get("addresses") or []
+    return ", ".join(addresses)
 
 
 def compare_group_text_diff(src_entries, target_entries, full_diff=False):
