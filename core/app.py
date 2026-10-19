@@ -20,7 +20,7 @@ from api.api_flowboard import flowboard_bp
 from api.api_mcp import mcp_bp
 from api.api_config import config_bp
 from api.api_change_mgmt import change_mgmt_bp
-from api.api_policy import prefix_list_bp
+from api.api_prefixlist import prefix_list_bp
 from api.api_acl import acl_bp
 from api.api_addrgroup import addrgroup_bp
 from api.api_portgroup import portgroup_bp
