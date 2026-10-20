@@ -2,6 +2,7 @@ from flask import Blueprint, request, g
 from api.api_response import APIResponse
 import logging
 from function_op import type_manage, group_manage, notify_manage, order_manage, device_cmd_manage, log_manage
+from utils.threadPool import execAllFunctions
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -964,11 +965,25 @@ def execute_batch():
 
         logger.info(f"✅ 安全检查通过: {username}批次执行工单{op_id}, 设备数{len(device_ids)}")
 
-        # 批量执行设备命令
+        # 批量执行设备命令(多线程)
+        tasks = [
+            {
+                "name": str(device_id),
+                "func": device_cmd_manage.execute_device_command,
+                "kwargs": {"dev_id": device_id, "username": username}
+            }
+            for device_id in device_ids
+        ]
+        results = execAllFunctions(tasks, max_workers=8)
+
         success_count = 0
         failed_count = 0
         for device_id in device_ids:
-            result = device_cmd_manage.execute_device_command(device_id, username)
+            result = results.get(str(device_id))
+            if not result:
+                failed_count += 1
+                logger.error(f"设备 {device_id} 执行异常, 未获取到执行结果")
+                continue
             if result.get('code') == 0:
                 success_count += 1
             else:
