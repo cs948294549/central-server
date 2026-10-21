@@ -100,6 +100,11 @@ class Config:
     es_password = ""
     es_verify_certs = False  # 生产环境建议使用 True 并配置证书
 
+    # Zabbix API 配置
+    zabbix_config = {
+        "api_url": "http://xxx/api_jsonrpc.php",
+        "api_token": "xxx"  # API token（必须修改为你自己的）
+    }
 
 class LocalConfig:
     sign_key = "xx"

@@ -96,7 +96,7 @@ def handle_mcp_request(req):
     """
     method = req.get("method")
     req_id = req.get("id")
-    logger.info(f"收到 MCP 请求: method={method}, id={req_id}")
+    logger.info(f"{str(g.user)}收到 MCP 请求: method={method}, id={req_id}")
 
     if method == "initialize":
         return {
