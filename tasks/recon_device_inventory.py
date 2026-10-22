@@ -7,10 +7,11 @@
 执行流程：
 1. 采集三源数据（Ocean / Zabbix / 平台采集），统一为标准设备记录
 2. 按归一化设备名匹配三源记录，识别同一台设备
-3. 按 PRD-01 第五章规则分类 A~I
-4. 应用豁免清单与容差规则
-5. 落库快照、设备明细、差异明细
-6. 推送本次新增的差异
+3. 剔除命中豁免清单的设备（不参与分类）
+4. 按 PRD-01 第五章规则分类 A~I
+5. 应用容差规则
+6. 落库快照、设备明细、差异明细
+7. 推送本次新增的差异
 
 口径说明：
 - Ocean 侧只取 status 为「正常」且设备名非空的记录，其余视为已下线/已清理，不参与对账。
@@ -56,7 +57,8 @@ TASK_CONFIG = {
     "batch_id": None,               # 为空时按执行时间生成
     "time_window_minutes": 60,      # 三源采集允许的时间差（PRD 第四章"快照问题"）
     "offline_confirm_rounds": 2,    # 连续 N 次对账缺失才判定下线（容差规则）
-    "exempt_file": "config/recon_exempt.json",  # 豁免清单（差异类型 H）
+    # 绝对路径：相对路径按进程工作目录解析，定时任务换目录启动会读到别的文件
+    "exempt_file": str(project_root / "config" / "recon_exempt.json"),  # 豁免清单，命中的设备不参与分类与告警
     "ocean_page_size": 100,         # Ocean 分页大小
     "ocean_max_pages": 500,         # 分页上限，防止接口异常导致死循环
     "zabbix_group_names": [         # Zabbix 交换机/防火墙主机组（精确匹配），必填
@@ -67,9 +69,10 @@ TASK_CONFIG = {
     "http_timeout": 30,             # HTTP 请求超时（秒）
 }
 
-# Zabbix 中只挂了这些模板的主机不是真设备（如 ping 监控组），排除
-# 只匹配"唯一模板"的情况：挂了该模板同时还有设备模板的主机仍保留
-ZABBIX_SKIP_ONLY_TEMPLATES = ("wjf 1s ICMP Ping Alarm",)
+# 「wjf 1s ICMP Ping Alarm」是全网兜底的 ping 监控模板：
+# 后续未加监控的设备统一补挂该模板，因此仅挂它的主机也是真实设备，纳入对账
+# 此类主机打 ping_only 标记，供后续补充 SNMP 监控时筛选
+ZABBIX_PING_TEMPLATES = ("wjf 1s ICMP Ping Alarm",)
 
 # Ocean 接口地址
 OCEAN_API_BASE = "http://api-o2.vdian.net/v1"
@@ -77,9 +80,9 @@ OCEAN_API_BASE = "http://api-o2.vdian.net/v1"
 # Ocean 状态口径：status 只有「正常」算在线，其余（待报废/维修等）一律视为不在线
 OCEAN_STATUS_ONLINE = "正常"
 
-# Ocean operationStatus 口径：Zabbix / 平台采集得到的设备，不应为以下取值
+# Ocean operationStatus 口径：Zabbix / 平台采集得到的设备，状态应为「正常」
+# 实际样本中还有 入库/待报废/报废/搬迁/待返修 等取值，统一按「非正常即为状态过期」判定
 OCEAN_STATUS_ACTIVE = "正常"
-OCEAN_STATUS_INVALID = ("入库", "待报废")
 
 # Ocean manufacturer 字段编码（当前样本中为整型，映射待补全，未知编码原样展示）
 OCEAN_MANUFACTURERS = {}
@@ -97,8 +100,7 @@ DIFF_C = "C"  # Ocean 正常、Zabbix 无、平台有：未纳入监控
 DIFF_D = "D"  # 仅 Ocean 正常：疑似僵尸资产
 DIFF_E = "E"  # Ocean 未登记、Zabbix 有：补登记 CMDB
 DIFF_F = "F"  # Ocean 未登记、平台有：补登记 CMDB
-DIFF_H = "H"  # 豁免
-DIFF_I = "I"  # Ocean 状态过期：采得到但 operationStatus 为 入库/待报废
+DIFF_I = "I"  # Ocean 状态过期：采得到但 operationStatus 非「正常」
 
 DIFF_TYPE_DESC = {
     DIFF_A: "三方一致",
@@ -107,9 +109,11 @@ DIFF_TYPE_DESC = {
     DIFF_D: "CMDB 独有，疑似僵尸资产",
     DIFF_E: "CMDB 未登记（仅 Zabbix 有）",
     DIFF_F: "CMDB 未登记（仅平台有）",
-    DIFF_H: "豁免",
-    DIFF_I: "CMDB 状态过期（采得到但状态为入库/待报废）",
+    DIFF_I: "CMDB 状态过期（采得到但状态非正常）",
 }
+
+# 分类时的剔除口径，用于保证「匹配数 = 差异数 + 豁免数 + 剔除数」
+DROP_STALE_OFFLINE = "CMDB 状态非正常且采不到（状态一致，无需处理）"
 
 
 # ============================================
@@ -233,6 +237,9 @@ def collect_zabbix_hosts():
 
     按 TASK_CONFIG["zabbix_group_names"] 过滤主机组——Zabbix 里混有台式机等非网络设备，
     不过滤会大量污染对账结果。只取启用的主机。
+
+    仅挂「wjf 1s ICMP Ping Alarm」的主机也计入：该模板是未加监控设备的兜底 ping 监控，
+    有它说明已经纳入监控，对账时应视为 Zabbix 侧存在（否则会被误判为 C 类未纳监控）。
     """
     zabbix = Config.zabbix_config or {}
     api_url = zabbix.get("api_url")
@@ -283,13 +290,12 @@ def collect_zabbix_hosts():
             continue
         seen_hostids.add(hostid)
 
-        # 只挂了 ping 类模板的主机是 ping 监控条目，不是真实设备
-        if _is_ping_only_host(host):
+        # 仅挂 ping 模板的主机：真实设备，但只纳入了 ping 监控，打标便于后续补监控
+        is_ping_only = _is_ping_only_host(host)
+        if is_ping_only:
             ping_only += 1
-            continue
 
-        iface = _pick_zabbix_interface(host.get("interfaces") or [])
-        ip = normalize_ip(iface.get("ip") if iface and iface.get("useip") == "1" else "")
+        ip = _zabbix_host_ip(host.get("interfaces") or [])
         if not ip:
             no_ip += 1
         records.append({
@@ -302,19 +308,18 @@ def collect_zabbix_hosts():
             ),
             "location": "",
             "status": "maintenance" if host.get("maintenance_status") == "1" else "enabled",
+            "ping_only": is_ping_only,
             "collected_at": collected_at,
         })
 
     if no_ip:
         logger.warning(f"Zabbix 主机中 {no_ip} 台未取到管理 IP（useip=0 或无接口），不参与 IP 匹配")
-    if ping_only:
-        logger.info(f"Zabbix 跳过仅挂 ping 模板的主机 {ping_only} 台")
-    logger.info(f"Zabbix 拉取完成：组 {group_names} 共 {len(records)} 台")
+    logger.info(f"Zabbix 拉取完成：组 {group_names} 共 {len(records)} 台，其中仅 ping 监控 {ping_only} 台")
     return records
 
 
 def _is_ping_only_host(host):
-    """主机所挂模板全部属于 ping 类模板时返回 True"""
+    """主机所挂模板全部属于 ping 类模板时返回 True（真实设备，只是未加深度监控）"""
     templates = {
         (t.get("name") or "").strip()
         for t in (host.get("parentTemplates") or [])
@@ -322,7 +327,27 @@ def _is_ping_only_host(host):
     }
     if not templates:
         return False
-    return templates.issubset(ZABBIX_SKIP_ONLY_TEMPLATES)
+    return templates.issubset(ZABBIX_PING_TEMPLATES)
+
+
+def _zabbix_host_ip(interfaces):
+    """
+    取主机管理 IP
+
+    主接口可能是 agent 接口（useip=1），但网络设备的地址在 SNMP 接口上；
+    仅挂 ping 模板的主机则只有一个 ICMP 接口。按主接口 → SNMP → 任一 useip=1 的顺序兜底
+    """
+    candidates = []
+    primary = _pick_zabbix_interface(interfaces)
+    if primary:
+        candidates.append(primary)
+    candidates.extend(interfaces)
+    for iface in candidates:
+        if iface.get("useip") == "1":
+            ip = normalize_ip(iface.get("ip"))
+            if ip:
+                return ip
+    return ""
 
 
 def _zabbix_call(api_url, api_token, payload):
@@ -552,38 +577,62 @@ def _display_name(sources):
 # 三、分类层
 # ============================================
 
-def classify(matched):
+def classify(matched, exemptions=None):
     """
     按 PRD-01 第五章规则输出差异明细
 
     匹配键是归一化设备名，差异记录的 ip 取 Ocean 管理 IP（无则取其他来源的 IP）
 
-    口径：Zabbix / 平台采集能拿到的设备，Ocean 的 operationStatus 不应为
-    入库/待报废。因此"状态过期"（I）与"未登记"（E/F）都要反过来修正 CMDB，
-    而不是反过来删监控。
+    口径：Zabbix / 平台采集能拿到的设备，Ocean 的 operationStatus 不应为非「正常」。
+    因此"状态过期"（I）与"未登记"（E/F）都要反过来修正 CMDB，而不是反过来删监控。
+    Ocean 状态非正常且也采不到的设备两边一致，不产生差异，单独计入 dropped。
 
     三源管理 IP 不一致属于正常现象，不做差异，仅在记录里展示各源 IP
+
+    Args:
+        matched: match_sources() 的匹配结果
+        exemptions: 豁免索引，见 load_exemptions()；命中者不参与分类
+
+    Returns:
+        (diffs, exempted, dropped)：
+        diffs 差异明细；exempted 被豁免剔除的设备记录；
+        dropped 为 {口径说明: [设备记录]}，是既不产生差异也不豁免的设备，
+        用于核对 len(matched) == len(diffs) + len(exempted) + 剔除总数
     """
+    exemptions = exemptions or {}
     diffs = []
+    exempted = []
+    dropped = {}
+
+    def _drop(reason, key, sources):
+        dropped.setdefault(reason, []).append(_build_drop_record(key, sources))
 
     for key, sources in matched.items():
+        # 豁免优先于一切分类：命中设备不进入 A~I，也不产生告警
+        exempt = find_exemption(exemptions, key, sources)
+        if exempt:
+            exempted.append(_build_exempt_record(key, sources, exempt))
+            continue
+
         ocean = sources[SOURCE_OCEAN]
         has_ocean = ocean is not None
         has_zabbix = sources[SOURCE_ZABBIX] is not None
         has_platform = sources[SOURCE_PLATFORM] is not None
         collected = has_zabbix or has_platform
 
-        # CMDB 状态不在线的设备不参与分类：它已登记过，不能算「CMDB 未登记」
-        if has_ocean and (ocean.get("operation_status") or "").strip() != OCEAN_STATUS_ONLINE:
-            continue
-
         display_name = _display_name(sources)
         names = _source_names(sources)
         ips = _source_ips(sources)
         ip = ips.get(SOURCE_OCEAN) or next(iter(ips.values()), "")
 
-        ocean_status = ocean.get("operation_status", "") if ocean else ""
-        ocean_stale = ocean_status in OCEAN_STATUS_INVALID
+        ocean_status = (ocean.get("operation_status") or "").strip() if ocean else ""
+        # 只要不是「正常」就算过期：样本里有 入库/待报废/报废/搬迁/待返修/维修 等多种取值
+        ocean_stale = has_ocean and ocean_status != OCEAN_STATUS_ACTIVE
+
+        if has_ocean and ocean_stale and not collected:
+            # CMDB 状态非正常、三源也采不到：两边一致，无需处理，不计入差异
+            _drop(DROP_STALE_OFFLINE, key, sources)
+            continue
 
         if collected and ocean_stale:
             # CMDB 登记了但状态过期：以采集结果为准，反向修正 CMDB
@@ -596,9 +645,6 @@ def classify(matched):
                 diff_type, note = DIFF_B, "监控在、平台未纳管，需加入平台采集"
             else:
                 diff_type, note = DIFF_C, "平台有采集、Zabbix 无监控，需纳入 Zabbix"
-        elif has_ocean and ocean_stale:
-            # 采不到且 CMDB 状态为入库/待报废，两者一致，无需处理
-            diff_type, note = DIFF_A, f"CMDB 状态为「{ocean_status}」且采不到，状态一致"
         elif has_ocean:
             diff_type, note = DIFF_D, "疑似僵尸资产，核实是否已下架"
         elif has_zabbix:
@@ -625,7 +671,35 @@ def classify(matched):
             "owner": "",
         })
 
-    return diffs
+    return diffs, exempted, dropped
+
+
+def _build_drop_record(key, sources):
+    """未产生差异也未豁免的设备记录，仅用于核对数量"""
+    return {
+        "key": key,
+        "name": _display_name(sources),
+        "ip": next(iter(_source_ips(sources).values()), ""),
+        "ocean_status": (sources.get(SOURCE_OCEAN) or {}).get("operation_status", ""),
+        "sources": [source for source in MATCH_SOURCES if sources.get(source)],
+    }
+
+
+def _build_exempt_record(key, sources, exempt):
+    """被豁免剔除的设备记录，仅用于日志与展示，不落库为差异"""
+    names = _source_names(sources)
+    ips = _source_ips(sources)
+    return {
+        "key": key,
+        "name": _display_name(sources),
+        "ip": ips.get(SOURCE_OCEAN) or next(iter(ips.values()), ""),
+        "ips": ips,
+        "names": names,
+        "exempt_match": exempt.get("_match", ""),   # 命中的是设备名还是 IP
+        "exempt_reason": exempt.get("reason", ""),
+        "owner": exempt.get("owner", ""),
+        "review_date": exempt.get("review_date", ""),
+    }
 
 
 def _source_desc(has_zabbix, has_platform):
@@ -639,50 +713,181 @@ def _source_desc(has_zabbix, has_platform):
 
 
 # ============================================
-# 四、豁免与容差
+# 四、容差
 # ============================================
 
 def load_exemptions():
     """
     读取豁免清单
 
+    命中的设备不参与分类：不进 A~I、不告警、不计入设备总数与对齐率。
+
     TODO: 豁免清单需落库管理（审批人、原因、复核时间），当前先用本地 JSON 占位
     格式：[{"name": "设备名", "ip": "x.x.x.x", "reason": "原因", "owner": "负责人", "review_date": "2026-12-31"}]
-    name 与 ip 至少填一个；同时填了两个键都会命中
+    name 与 ip 至少填一个；同时填了两个键都会被尝试匹配。
+    设备名与 IP 分两个索引存放，避免同名 IP 串键。
+
+    Returns:
+        {"names": {归一化设备名: item}, "ips": {IP: item}}
     """
     path = Path(TASK_CONFIG["exempt_file"])
+    empty = {"names": {}, "ips": {}}
     if not path.exists():
-        return {}
+        logger.warning(f"豁免清单不存在，本次不豁免任何设备: {path}")
+        return empty
     try:
         with open(path, "r", encoding="utf-8") as f:
             items = json.load(f)
     except Exception as e:
         logger.error(f"读取豁免清单失败: {e}")
-        return {}
+        return empty
 
-    exemptions = {}
+    if not isinstance(items, list):
+        logger.error(f"豁免清单格式错误，应为 JSON 数组: {path}")
+        return empty
+
+    exemptions = {"names": {}, "ips": {}}
     for item in items:
         if not isinstance(item, dict):
             continue
-        name_key = normalize_name(item.get("name"))
-        ip_key = normalize_ip(item.get("ip"))
+        name = item.get("name")
+        ip = item.get("ip")
+        name_key = normalize_name(name) if isinstance(name, str) else ""
+        ip_key = normalize_ip(ip) if isinstance(ip, str) else ""
         if name_key:
-            exemptions[name_key] = item
+            if name_key in exemptions["names"]:
+                logger.warning(f"豁免清单设备名重复，后一条覆盖前一条: {name}")
+            exemptions["names"][name_key] = item
         if ip_key:
-            exemptions.setdefault(ip_key, item)
+            if ip_key in exemptions["ips"]:
+                logger.warning(f"豁免清单 IP 重复，后一条覆盖前一条: {ip}")
+            exemptions["ips"][ip_key] = item
+        if not name_key and not ip_key:
+            logger.warning(f"豁免清单存在既无 name 也无 ip 的条目，已跳过: {item}")
+
+    logger.info(
+        f"豁免清单加载完成：设备名 {len(exemptions['names'])} 条，IP {len(exemptions['ips'])} 条"
+    )
     return exemptions
 
 
-def apply_exemptions(diffs, exemptions):
-    """命中豁免清单的差异标记为 H，不参与告警；按设备名（归一化）或 IP 匹配"""
+def source_counts(source_records):
+    """
+    三源数量口径
+
+    - Ocean：只算 operationStatus 为「正常」的记录（其余状态是已下线/待清理，不参与对账）
+    - Zabbix：采集到的全部启用主机
+    - 平台：采集到的全部纳管设备
+
+    只输出这三个数，不做逐源拆解。豁免清单只用于记录处理不了的设备，不计入这里的任何分类口径。
+    """
+    ocean_records = source_records.get(SOURCE_OCEAN) or []
+    counts = {
+        SOURCE_OCEAN: sum(
+            1 for r in ocean_records
+            if (r.get("operation_status") or "").strip() == OCEAN_STATUS_ACTIVE
+        ),
+        SOURCE_ZABBIX: len(source_records.get(SOURCE_ZABBIX) or []),
+        SOURCE_PLATFORM: len(source_records.get(SOURCE_PLATFORM) or []),
+    }
+    logger.info(
+        f"三源数量：Ocean 正常 {counts[SOURCE_OCEAN]} 台，"
+        f"Zabbix {counts[SOURCE_ZABBIX]} 台，平台 {counts[SOURCE_PLATFORM]} 台"
+    )
+    return counts
+
+
+def explain_gap(source_records, matched, diffs, exempted, dropped, source_conflicts):
+    """
+    解释各来源采集数的构成，A 类只统计三方都有的设备
+
+    三个来源口径不同（Ocean 建档全量 / Zabbix 监控主机 / 平台纳管设备），数量本来就不相等。
+    按来源原始记录逐条分桶，保证「采集 = 各桶之和」：
+
+        采集 = A + 其他差异 + Ocean 状态非正常 + 豁免 + 不参与对账 + 未参与匹配
+
+    "Ocean 状态非正常"只对 Ocean 有意义：这些记录已被采集进来（非空设备名），
+    只是 operationStatus 不是「正常」，不进 A。Zabbix / 平台没有这个分桶。
+    "未参与匹配"是来源内部重名或缺标识、在 build_device_index 阶段就被丢弃的记录。
+    """
+    a_keys = set()
+    other_keys = set()
     for diff in diffs:
-        exempt = exemptions.get(diff["key"]) or exemptions.get(diff["ip"])
-        if exempt:
-            diff["diff_type"] = DIFF_H
-            diff["exempt_reason"] = exempt.get("reason", "")
-            diff["owner"] = exempt.get("owner", "")
-            diff["note"] = f"豁免：{diff['exempt_reason']}"
-    return diffs
+        (a_keys if diff["diff_type"] == DIFF_A else other_keys).add(diff["key"])
+
+    exempt_keys = {item["key"] for item in exempted or []}
+    drop_keys = {item["key"] for items in (dropped or {}).values() for item in items}
+
+    gap_notes = {}
+    for source in MATCH_SOURCES:
+        records = source_records.get(source) or []
+        bucket = {"a": 0, "other": 0, "non_normal": 0, "exempt": 0, "dropped": 0}
+
+        for record in records:
+            # Ocean 状态非正常的记录直接归入该桶，不再看是否命中
+            if source == SOURCE_OCEAN and (
+                (record.get("operation_status") or "").strip() != OCEAN_STATUS_ACTIVE
+            ):
+                bucket["non_normal"] += 1
+                continue
+
+            key = normalize_name(record.get("name")) or normalize_ip(record.get("ip"))
+            if key in exempt_keys:
+                bucket["exempt"] += 1
+            elif key in a_keys:
+                bucket["a"] += 1
+            elif key in drop_keys:
+                bucket["dropped"] += 1
+            elif key in other_keys:
+                bucket["other"] += 1
+
+        pulled = len(records)
+        accounted = sum(bucket.values())
+        unmatched = pulled - accounted
+        conflicts = sum(1 for item in (source_conflicts or []) if item["source"] == source)
+
+        # 只列非零分桶：结果为 0 的类别不带出来，避免结论区噪音
+        parts = [f"A {bucket['a']}"]
+        if bucket["other"]:
+            parts.append(f"其他差异 {bucket['other']}")
+        if bucket["non_normal"]:
+            parts.append(f"{bucket['non_normal']}（状态非正常）")
+        if bucket["exempt"]:
+            parts.append(f"豁免 {bucket['exempt']}")
+        if bucket["dropped"]:
+            parts.append(f"不参与对账 {bucket['dropped']}")
+        if unmatched:
+            parts.append(f"未参与匹配 {unmatched}（重名/缺标识 {conflicts}）")
+
+        line = f"{source:<8} 采集 {pulled} = " + " + ".join(parts)
+        gap_notes[source] = dict(bucket, pulled=pulled, unmatched=unmatched, conflicts=conflicts, line=line)
+        logger.info(f"差额说明 {line}")
+    return gap_notes
+
+
+def find_exemption(exemptions, key, sources):
+    """
+    判断一台匹配后的设备是否命中豁免清单
+
+    先按匹配键（归一化设备名）匹配，再按三个来源各自的管理 IP 匹配。
+    命中返回豁免条目（带 _match 标识命中方式），未命中返回 None。
+    """
+    if not exemptions:
+        return None
+
+    name_item = exemptions["names"].get(key)
+    if name_item:
+        return dict(name_item, _match="name")
+
+    for source in MATCH_SOURCES:
+        ip = normalize_ip((sources.get(source) or {}).get("ip"))
+        if not ip:
+            continue
+        ip_item = exemptions["ips"].get(ip)
+        if ip_item:
+            return dict(ip_item, _match="ip")
+
+    return None
 
 
 def apply_tolerance(diffs, batch_id):
@@ -749,7 +954,7 @@ def notify_new_diffs(new_diffs):
     TODO: 接入平台已有消息/告警通道，不新增通道
     TODO: G/F 类型优先推送（冲突与野设备处置优先级最高）
     """
-    pending = [d for d in new_diffs if d["diff_type"] not in (DIFF_A, DIFF_H)]
+    pending = [d for d in new_diffs if d["diff_type"] != DIFF_A]
     logger.info(f"[TODO] 待推送新增差异 {len(pending)} 条")
 
 
@@ -798,20 +1003,37 @@ def run(batch_id=None):
             logger.warning(f"来源内部异常记录 {len(source_conflicts)} 条（缺标识或设备名重复）")
         logger.info(f"匹配完成：设备 {len(matched)} 台")
 
-        # 3. 分类
-        diffs = classify(matched)
+        # 3. 豁免：先于分类执行，命中的设备不进入 A~I
+        exemptions = load_exemptions()
 
-        # 4. 豁免与容差
-        diffs = apply_exemptions(diffs, load_exemptions())
+        # 4. 分类（豁免设备已剔除）
+        diffs, exempted, dropped = classify(matched, exemptions)
+        dropped_total = sum(len(items) for items in dropped.values())
+        if exempted or dropped_total:
+            logger.info(f"豁免 {len(exempted)} 台、不参与对账（CMDB 非正常且采不到）{dropped_total} 台")
+        # 数量必须闭合，否则说明分类里有分支静默丢设备
+        if len(matched) != len(diffs) + len(exempted) + dropped_total:
+            logger.error(
+                f"对账数量不闭合：匹配 {len(matched)} ≠ 差异 {len(diffs)} + 豁免 {len(exempted)} "
+                f"+ 不参与 {dropped_total}"
+            )
+
+        # 5. 三源数量口径 + 差额拆解
+        counts_by_source = source_counts(source_records)
+        gap_notes = explain_gap(
+            source_records, matched, diffs, exempted, dropped, source_conflicts
+        )
+
+        # 6. 容差
         diffs = apply_tolerance(diffs, batch_id)
 
-        # 5. 落库
+        # 7. 落库
         new_diffs = persist_diffs(batch_id, diffs)
 
-        # 6. 通知
+        # 8. 通知
         notify_new_diffs(new_diffs)
 
-        # 7. 汇总
+        # 9. 汇总
         counts = {}
         for diff in diffs:
             counts[diff["diff_type"]] = counts.get(diff["diff_type"], 0) + 1
@@ -820,7 +1042,10 @@ def run(batch_id=None):
 
         logger.info("=" * 60)
         logger.info(f"设备对账任务完成 batch={batch_id}，耗时 {int(time.time()) - start_time} 秒")
-        logger.info(f"设备总数: {len(diffs)}，对齐: {aligned}，对齐率: {aligned_rate}%")
+        logger.info(
+            f"设备总数: {len(diffs)}（另有豁免 {len(exempted)} 台未参与），"
+            f"对齐: {aligned}，对齐率: {aligned_rate}%"
+        )
         for diff_type in sorted(counts):
             logger.info(f"  类型 {diff_type}: {counts[diff_type]} 台  {DIFF_TYPE_DESC.get(diff_type, '')}")
         logger.info("=" * 60)
@@ -831,10 +1056,14 @@ def run(batch_id=None):
             "aligned_rate": aligned_rate,
             "counts": counts,
             "diffs": diffs,
+            "exempted": exempted,
+            "dropped": dropped,
+            "counts_by_source": counts_by_source,
+            "gap_notes": gap_notes,
             "source_conflicts": source_conflicts,
         }
 
-        # 8. 展示
+        # 9. 展示
         print_report(summary)
 
         return summary
@@ -852,9 +1081,29 @@ def print_report(summary):
     """
     print()
     print("=" * 70)
-    print(f"批次 {summary['batch_id']}  设备 {summary['total']} 台  对齐率 {summary['aligned_rate']}%")
+    print(
+        f"批次 {summary['batch_id']}  设备 {summary['total']} 台  对齐率 {summary['aligned_rate']}%"
+        f"  豁免 {len(summary.get('exempted') or [])} 台未参与"
+    )
     for diff_type in sorted(summary["counts"]):
         print(f"  类型 {diff_type}: {summary['counts'][diff_type]} 台  {DIFF_TYPE_DESC.get(diff_type, '')}")
+
+    counts_by_source = summary.get("counts_by_source") or {}
+    if counts_by_source:
+        print("-" * 70)
+        print(
+            "  三源数量：Ocean 正常 {} 台，Zabbix {} 台，平台 {} 台".format(
+                counts_by_source.get(SOURCE_OCEAN, 0),
+                counts_by_source.get(SOURCE_ZABBIX, 0),
+                counts_by_source.get(SOURCE_PLATFORM, 0),
+            )
+        )
+    gap_notes = summary.get("gap_notes") or {}
+    if gap_notes:
+        for source in MATCH_SOURCES:
+            row = gap_notes.get(source)
+            if row:
+                print(f"  {row['line']}")
     print("=" * 70)
 
     by_type = {}
@@ -888,22 +1137,6 @@ def print_report(summary):
             print("      管理IP  {}".format(
                 " | ".join(f"{source}={ip}" for source, ip in diff["ips"].items()) or "-"
             ))
-
-    if summary["source_conflicts"]:
-        print()
-        print(f"---- 来源内部异常（{len(summary['source_conflicts'])} 条）----")
-        for item in summary["source_conflicts"]:
-            record = item.get("record") or {}
-            line = f"  {item['source']:<9} {item['reason']:<18} {record.get('ip', '-') or '-':<16} {record.get('name', '')}"
-            if item["source"] == SOURCE_OCEAN:
-                line += f"  sn={record.get('sn', '') or '-'}"
-            print(line)
-            exist = item.get("exist")
-            if exist:
-                exist_line = f"      已存在: {exist.get('ip', '-')} {exist.get('name', '')}"
-                if item["source"] == SOURCE_OCEAN:
-                    exist_line += f"  sn={exist.get('sn', '') or '-'}"
-                print(exist_line)
 
 
 if __name__ == "__main__":
