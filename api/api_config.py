@@ -172,10 +172,10 @@ def delete_config():
 def get_changed_device_list():
     """
     获取最近发生过配置变更的设备列表
-    判定依据：每个IP最新一条配置记录的 created_at 与 updated_at 相同，即认为该设备发生过变更
+    判定依据：取每个IP最新一条配置记录，其 created_at 即该设备最近一次配置变更的时间
     请求参数:
     {
-        "days": 7  # 可选，只统计最近N天内的变更，不传则不限时间
+        "days": 7  # 可选，只统计最近N天内变更的设备，不传则返回所有有过变更记录的设备
     }
     返回字段与 /collector/getdeviceslist 一致
     """

@@ -175,9 +175,9 @@ class ConfigDB(mysqldb_netops):
         """
         获取最近发生过配置变更的设备列表，返回字段与 CollectDB.getDeviceList 保持一致
 
-        判定依据：每个IP只取最新一条配置记录，若该记录的 created_at 与 updated_at 相同，
-        说明这条记录是新采集后插入的（配置有变化）；
-        若不相同，说明配置无变化、只是对原记录执行了 update_config_time。
+        判定依据：每个IP只取最新一条配置记录，这条记录的 created_at 就是该设备最近一次
+        配置变更的时间（配置无变化时不会新增记录，只会刷新 updated_at），
+        因此用最新记录的 created_at 是否落在指定时间窗口内来判断是否有变更。
 
         :param days: 仅统计最近多少天内的变更，None 表示不限时间
         :return: list，失败返回 "failed"
@@ -191,12 +191,11 @@ class ConfigDB(mysqldb_netops):
                          SELECT ip, MAX(log_id) AS log_id
                          FROM dev_config
                          GROUP BY ip
-                     ) t ON c.log_id = t.log_id
-                     WHERE c.created_at = c.updated_at'''
+                     ) t ON c.log_id = t.log_id'''
             params = []
 
             if days:
-                sql += " AND CAST(c.created_at AS UNSIGNED) >= %s"
+                sql += " WHERE CAST(c.created_at AS UNSIGNED) >= %s"
                 params.append(int(time.time()) - int(days) * 86400)
 
             sql += " ORDER BY CAST(c.created_at AS UNSIGNED) DESC"

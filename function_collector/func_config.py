@@ -466,8 +466,3 @@ def get_device_config_diff(ip, op_id, full_diff=False):
             "after": None,
             "message": f"对比失败: {str(e)}"
         }
-
-
-if __name__ == '__main__':
-    aa = get_changed_devices(days=None)
-    print(aa)
