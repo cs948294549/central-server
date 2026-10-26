@@ -7,7 +7,8 @@ from function_collector.func_config import (
     compare_configs_by_id,
     delete_config_by_id,
     get_latest_config_by_ip,
-    get_device_config_diff
+    get_device_config_diff,
+    get_changed_devices
 )
 
 # 配置日志
@@ -164,6 +165,43 @@ def delete_config():
 
     except Exception as e:
         logger.error(f"删除配置记录失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@config_bp.route('/get_changed_devices', methods=['POST'])
+def get_changed_device_list():
+    """
+    获取最近发生过配置变更的设备列表
+    判定依据：每个IP最新一条配置记录的 created_at 与 updated_at 相同，即认为该设备发生过变更
+    请求参数:
+    {
+        "days": 7  # 可选，只统计最近N天内的变更，不传则不限时间
+    }
+    返回字段与 /collector/getdeviceslist 一致
+    """
+    try:
+        data = request.json or {}
+        days = data.get('days')
+
+        if days is not None:
+            try:
+                days = int(days)
+            except (TypeError, ValueError):
+                return APIResponse.error(message="参数 days 必须为整数")
+            if days <= 0:
+                return APIResponse.error(message="参数 days 必须大于0")
+
+        logger.info(f"{str(g.user)}查询变更设备列表，days={days}")
+
+        device_list = get_changed_devices(days)
+
+        if device_list == "failed":
+            return APIResponse.error(message="查询失败")
+
+        return APIResponse.success(data=device_list, message="查询成功")
+
+    except Exception as e:
+        logger.error(f"获取变更设备列表失败: {e}")
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
 
 

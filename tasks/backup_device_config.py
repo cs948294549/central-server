@@ -285,7 +285,7 @@ if __name__ == "__main__":
     )
 
     try:
-        filter_ips = ["172.19.2.27"]
+        filter_ips = ["172.24.10.28"]
         run(filter_ips=filter_ips)
         sys.exit(0)
     except KeyboardInterrupt:

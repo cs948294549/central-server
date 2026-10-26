@@ -27,6 +27,7 @@ VENDOR_CONFIG_COMMANDS = {
 # 避免配置实际未变化时被误判为有变更
 VENDOR_CONFIG_STABLE_START = {
     'cisco_nx': re.compile(r'^version\s'),
+    'cisco_ios': re.compile(r'^version\s'),
 }
 
 
@@ -367,6 +368,20 @@ def get_latest_config_by_ip(ip):
         return None
 
 
+def get_changed_devices(days=None):
+    """
+    获取最近发生过配置变更的设备列表
+    :param days: 仅统计最近多少天内的变更，None 表示不限时间
+    :return: list，失败返回 "failed"
+    """
+    try:
+        db = ConfigDB()
+        return db.get_latest_changed_devices(days)
+    except Exception as e:
+        logger.error(f"获取变更设备列表失败: {e}")
+        return "failed"
+
+
 def get_device_config_diff(ip, op_id, full_diff=False):
     """
     获取设备在指定工单中的配置前后对比
@@ -453,3 +468,6 @@ def get_device_config_diff(ip, op_id, full_diff=False):
         }
 
 
+if __name__ == '__main__':
+    aa = get_changed_devices(days=None)
+    print(aa)

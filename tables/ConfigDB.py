@@ -171,6 +171,57 @@ class ConfigDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def get_latest_changed_devices(self, days=None):
+        """
+        获取最近发生过配置变更的设备列表，返回字段与 CollectDB.getDeviceList 保持一致
+
+        判定依据：每个IP只取最新一条配置记录，若该记录的 created_at 与 updated_at 相同，
+        说明这条记录是新采集后插入的（配置有变化）；
+        若不相同，说明配置无变化、只是对原记录执行了 update_config_time。
+
+        :param days: 仅统计最近多少天内的变更，None 表示不限时间
+        :return: list，失败返回 "failed"
+        """
+        try:
+            sql = '''SELECT d.ip, d.sysname, d.sysdesc, d.syscontact, d.uptime, d.hardware,
+                            d.features, d.version, d.sys_type, d.vendor, d.timestamp
+                     FROM devices d
+                     INNER JOIN dev_config c ON c.ip = d.ip
+                     INNER JOIN (
+                         SELECT ip, MAX(log_id) AS log_id
+                         FROM dev_config
+                         GROUP BY ip
+                     ) t ON c.log_id = t.log_id
+                     WHERE c.created_at = c.updated_at'''
+            params = []
+
+            if days:
+                sql += " AND CAST(c.created_at AS UNSIGNED) >= %s"
+                params.append(int(time.time()) - int(days) * 86400)
+
+            sql += " ORDER BY CAST(c.created_at AS UNSIGNED) DESC"
+
+            proper = ["ip", "sysname", "sysdesc", "syscontact", "uptime", "hardware",
+                      "features", "version", "sys_type", "vendor", "timestamp"]
+            self.cursor.execute(sql, params)
+            result1 = self.cursor.fetchall()
+            results = []
+
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+
+            return results
+        except Exception as err:
+            logger.error("======ConfigDB get_latest_changed_devices error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def get_config_detail(self, log_id):
         """获取配置详情（包含完整配置内容）"""
         try:
