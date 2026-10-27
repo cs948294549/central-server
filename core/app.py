@@ -25,6 +25,7 @@ from api.api_acl import acl_bp
 from api.api_addrgroup import addrgroup_bp
 from api.api_portgroup import portgroup_bp
 from api.api_policy_issue import policy_issue_bp
+from api.api_wifi import wifi_bp
 
 # 导入 SSH 终端蓝图
 from api.websocket_ssh_bp import websocket_ssh_bp
@@ -84,6 +85,7 @@ def create_app():
     app.register_blueprint(addrgroup_bp)
     app.register_blueprint(portgroup_bp)
     app.register_blueprint(policy_issue_bp)
+    app.register_blueprint(wifi_bp)
 
     # 注册 SSH 终端蓝图
     app.register_blueprint(websocket_ssh_bp)
