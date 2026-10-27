@@ -206,6 +206,22 @@ def get_ap_pool():
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 
+@wifi_bp.route('/ap/list', methods=['POST'])
+def get_ap_list():
+    """AP 列表，支持名称 / MAC / IP / SN / 型号 / 分组 / 版本模糊筛选，AC / 状态精确筛选"""
+    try:
+        data = request.get_json(silent=True) or {}
+        result = func_ap.get_ap_list(data)
+
+        if result.get("success"):
+            return APIResponse.success(data=result.get("data"), message=result.get("message", "查询成功"))
+        return APIResponse.error(message=result.get("message", "查询失败"), code=result.get("code", 1))
+
+    except Exception as e:
+        logger.error(f"查询 AP 列表失败: {e}", exc_info=True)
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
 @wifi_bp.route('/ap/detail', methods=['POST'])
 def get_ap_detail():
     """AP 详情：基础信息 + 射频 + SSID"""

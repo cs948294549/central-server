@@ -50,6 +50,30 @@ def get_ap_pool():
         logger.error(f"查询 AP 池异常: {err}")
         return {"success": False, "data": None, "message": f"查询 AP 池异常: {err}"}
 
+def get_ap_list(data=None):
+    """
+    AP 列表，文本字段模糊匹配，AC / 状态精确匹配
+    :param data: {ap_name, ap_mac, ap_ip, sn, model, ap_group, sw_version, ac_id, online_status}
+    :return: {"success", "data": {"list", "total", "summary"}, "message"}
+    """
+    try:
+        rows = WifiDB().getApList(data or {})
+        if rows == "failed":
+            return {"success": False, "data": None, "message": "查询 AP 列表失败"}
+
+        summary = {"total": len(rows), "online": 0, "offline": 0, "unknown": 0, "clients": 0}
+        for row in rows:
+            status = row.get("online_status") or "unknown"
+            summary[status] = summary.get(status, 0) + 1
+            row["client_count"] = int(row.get("client_count") or 0)
+            summary["clients"] += row["client_count"]
+            row["last_seen_at"] = str(row.get("last_seen_at") or "")
+
+        return {"success": True, "data": {"list": rows, "total": len(rows), "summary": summary}, "message": "查询成功"}
+    except Exception as err:
+        logger.error(f"查询 AP 列表异常: {err}")
+        return {"success": False, "data": None, "message": f"查询 AP 列表异常: {err}"}
+
 def get_ap_detail(ap_mac):
     """
     AP 详情：基础信息 + 射频 + 开放 SSID

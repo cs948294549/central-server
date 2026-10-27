@@ -398,6 +398,58 @@ class WifiDB(mysqldb_netops):
 
     # ==================== AP ====================
 
+    def getApList(self, data=None):
+        """
+        AP 列表，带所属 AC 名称，支持条件筛选
+        :param data: {
+            "ap_name" / "ap_mac" / "ap_ip" / "sn" / "model" / "ap_group" / "sw_version": 模糊匹配,
+            "ac_id": 所属 AC,
+            "online_status": online / offline / unknown,
+        }
+        :return: 列表数据或"failed"
+        """
+        try:
+            data = data or {}
+            conditions = []
+            params = []
+
+            # 文本字段统一模糊匹配，字段名白名单拼进 SQL，值走参数
+            for field in ["ap_name", "ap_mac", "ap_ip", "sn", "model", "ap_group", "sw_version"]:
+                value = str(data.get(field) or "").strip()
+                if value:
+                    conditions.append("a." + field + " LIKE %s")
+                    params.append("%" + value + "%")
+
+            ac_id = int(data.get("ac_id") or 0)
+            if ac_id:
+                conditions.append("a.ac_id = %s")
+                params.append(ac_id)
+
+            online_status = str(data.get("online_status") or "").strip().lower()
+            if online_status in ["online", "offline", "unknown"]:
+                conditions.append("a.online_status = %s")
+                params.append(online_status)
+
+            fields = ["ap_mac", "ap_name", "sn", "online_status", "ap_ip", "model", "sw_version",
+                      "ap_group", "client_count", "lldp_name", "lldp_port", "ac_id", "last_seen_at", "ac_name"]
+            sql = """SELECT a.ap_mac, a.ap_name, a.sn, a.online_status, a.ap_ip, a.model, a.sw_version,
+                     a.ap_group, a.client_count, a.lldp_name, a.lldp_port, a.ac_id, a.last_seen_at,
+                     COALESCE(c.ac_name, '')
+                     FROM wifi_ap a LEFT JOIN wifi_ac c ON c.ac_id = a.ac_id"""
+            if conditions:
+                sql += " WHERE " + " AND ".join(conditions)
+            sql += " ORDER BY a.ac_id, a.ap_name, a.ap_mac"
+
+            self.cursor.execute(sql, params)
+            return [dict(zip(fields, row)) for row in self.cursor.fetchall()]
+
+        except Exception as err:
+            logger.error("======WifiDB getApList error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def getRadiosByAps(self, ap_macs):
         """
         批量取多个 AP 的射频，用于地图标签汇总
