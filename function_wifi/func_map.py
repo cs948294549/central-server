@@ -86,6 +86,14 @@ def get_map_detail(map_id):
             bands = [r.get("band") for r in ap_radios if r.get("band") not in (None, "")]
             utils = [r.get("utilization") for r in ap_radios if r.get("utilization") is not None]
             powers = [r.get("tx_power") for r in ap_radios if r.get("tx_power") is not None]
+            # 每个射频单独给一份，前端按射频各画一个利用率标签
+            radios_detail = [{
+                "radio_id": r.get("radio_id"),
+                "band": r.get("band") or "",
+                "channel": r.get("channel"),
+                "utilization": r.get("utilization"),
+                "tx_power": r.get("tx_power"),
+            } for r in ap_radios]
             last_seen_at = str(row.get("last_seen_at") or "")
             if last_seen_at > data_time:
                 data_time = last_seen_at
@@ -99,6 +107,7 @@ def get_map_detail(map_id):
                 "radio_count": len(ap_radios),
                 "channels": channels,
                 "bands": bands,
+                "radios": radios_detail,
                 "utilization": max(utils) if utils else None,
                 "tx_power": max(powers) if powers else None,
                 "client_count": int(row.get("client_count") or 0),
