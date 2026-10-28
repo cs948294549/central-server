@@ -468,7 +468,15 @@ class WifiDB(mysqldb_netops):
             # 文本字段统一模糊匹配，字段名白名单拼进 SQL，值走参数
             for field in ["ip", "username", "client_mac", "ap_name", "ssid", "band"]:
                 value = str(data.get(field) or "").strip()
-                if value:
+                if not value:
+                    continue
+                if field == "ap_name":
+                    # ap_name 为空时界面展示的是按 ap_mac 关联出来的名称，两个来源都匹配
+                    conditions.append("(c.ap_name LIKE %s OR EXISTS (SELECT 1 FROM wifi_ap p "
+                                      "WHERE p.ac_id = c.ac_id AND p.ap_mac = c.ap_mac AND p.ap_name LIKE %s))")
+                    params.append("%" + value + "%")
+                    params.append("%" + value + "%")
+                else:
                     conditions.append("c." + field + " LIKE %s")
                     params.append("%" + value + "%")
 
@@ -484,13 +492,24 @@ class WifiDB(mysqldb_netops):
 
             fields = ["client_mac", "username", "ip", "ap_mac", "ap_name", "ssid", "band", "channel",
                       "radio_id", "status", "vlan_id", "up_rate", "down_rate", "rssi", "ac_id", "ac_name"]
-            sql = """SELECT c.client_mac, c.username, c.ip, c.ap_mac, c.ap_name, c.ssid, c.band, c.channel,
+            # 终端上报的 ap_mac 可能是 Hex-STRING 解析出的乱码，以 ap_name 关联 AP 表取准确值；
+            # 反过来 ap_name 为空时用 ap_mac 兜底。用标量子查询避免 JOIN 出重复行
+            sql = """SELECT c.client_mac, c.username, c.ip,
+                     COALESCE(
+                         (SELECT p.ap_mac FROM wifi_ap p
+                          WHERE p.ac_id = c.ac_id AND p.ap_name = c.ap_name AND c.ap_name <> '' LIMIT 1),
+                         c.ap_mac, '') AS ap_mac,
+                     COALESCE(NULLIF(c.ap_name, ''),
+                         (SELECT p.ap_name FROM wifi_ap p
+                          WHERE p.ac_id = c.ac_id AND p.ap_mac = c.ap_mac AND c.ap_mac <> '' LIMIT 1), '') AS ap_name,
+                     c.ssid, c.band, c.channel,
                      c.radio_id, c.status, c.vlan_id, c.up_rate, c.down_rate, c.rssi, c.ac_id,
                      COALESCE(a.ac_name, '')
-                     FROM wifi_client c LEFT JOIN wifi_ac a ON a.ac_id = c.ac_id"""
+                     FROM wifi_client c
+                     LEFT JOIN wifi_ac a ON a.ac_id = c.ac_id"""
             if conditions:
                 sql += " WHERE " + " AND ".join(conditions)
-            sql += " ORDER BY c.ap_name, c.client_mac"
+            sql += " ORDER BY ap_name, c.client_mac"
 
             self.cursor.execute(sql, params)
             return [dict(zip(fields, row)) for row in self.cursor.fetchall()]
