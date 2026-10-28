@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 '''
 Wi-Fi 地图数据库操作
 对应表：wifi_ac、wifi_ap、wifi_radio、wifi_ssid、wifi_client、wifi_map、wifi_map_ap
-建表见 scripts/db_wifi.sql，设计见 docs/wifi_map_design.md
+建表见 scripts/db_create.sql，设计见 docs/wifi_map_design.md
 
 AP / 射频 / SSID / 终端四张快照表由 projects/collector 采集写入，这里只读；
 AC 与地图相关的表在这里维护。SQL 一律参数化，不再经过 waf 转义。

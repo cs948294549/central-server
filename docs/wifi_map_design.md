@@ -160,7 +160,7 @@ projects/collector/Module/
 
 ### 4.4 字段速览
 
-完整 DDL 见 `scripts/db_wifi.sql`。**所有 SNMP 采集表统一以 MAC 作为主键或索引。**
+完整 DDL 见 `scripts/db_create.sql`（Wi-Fi 地图功能表结构一节）。**所有 SNMP 采集表统一以 MAC 作为主键或索引。**
 
 | 表 | 主键 / 关键字段 | 说明 |
 |---|---|---|
@@ -205,7 +205,7 @@ projects/collector/Module/
 
 ### 6.1 数据库
 
-1. `scripts/db_wifi.sql`：建表语句，与现有脚本同风格（`DROP TABLE IF EXISTS` + 列注释 + `utf8mb4`）。
+1. `scripts/db_create.sql`：Wi-Fi 地图功能表结构已合并进这份初始化脚本的末尾（与现有脚本同风格：`DROP TABLE IF EXISTS` + 列注释 + `utf8mb4`）。
 2. `scripts/db_page.sql` 追加三条页面记录及对应 `pages_uri` 权限。
 
 ### 6.2 前端（chen_vue）
