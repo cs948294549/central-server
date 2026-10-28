@@ -450,6 +450,58 @@ class WifiDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def getClientList(self, data=None):
+        """
+        终端列表，带所属 AC 名称，支持条件筛选
+        :param data: {
+            "ip" / "username" / "client_mac" / "ap_name" / "ssid" / "band": 模糊匹配,
+            "ac_id": 所属 AC,
+            "status": online / offline,
+        }
+        :return: 列表数据或"failed"
+        """
+        try:
+            data = data or {}
+            conditions = []
+            params = []
+
+            # 文本字段统一模糊匹配，字段名白名单拼进 SQL，值走参数
+            for field in ["ip", "username", "client_mac", "ap_name", "ssid", "band"]:
+                value = str(data.get(field) or "").strip()
+                if value:
+                    conditions.append("c." + field + " LIKE %s")
+                    params.append("%" + value + "%")
+
+            ac_id = int(data.get("ac_id") or 0)
+            if ac_id:
+                conditions.append("c.ac_id = %s")
+                params.append(ac_id)
+
+            status = str(data.get("status") or "").strip().lower()
+            if status in ["online", "offline"]:
+                conditions.append("c.status = %s")
+                params.append(status)
+
+            fields = ["client_mac", "username", "ip", "ap_mac", "ap_name", "ssid", "band", "channel",
+                      "radio_id", "status", "vlan_id", "up_rate", "down_rate", "rssi", "ac_id", "ac_name"]
+            sql = """SELECT c.client_mac, c.username, c.ip, c.ap_mac, c.ap_name, c.ssid, c.band, c.channel,
+                     c.radio_id, c.status, c.vlan_id, c.up_rate, c.down_rate, c.rssi, c.ac_id,
+                     COALESCE(a.ac_name, '')
+                     FROM wifi_client c LEFT JOIN wifi_ac a ON a.ac_id = c.ac_id"""
+            if conditions:
+                sql += " WHERE " + " AND ".join(conditions)
+            sql += " ORDER BY c.ap_name, c.client_mac"
+
+            self.cursor.execute(sql, params)
+            return [dict(zip(fields, row)) for row in self.cursor.fetchall()]
+
+        except Exception as err:
+            logger.error("======WifiDB getClientList error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def getRadiosByAps(self, ap_macs):
         """
         批量取多个 AP 的射频，用于地图标签汇总
