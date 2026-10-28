@@ -529,8 +529,8 @@ class WifiDB(mysqldb_netops):
         try:
             if not ap_macs:
                 return []
-            fields = ["ap_mac", "radio_id", "band", "channel", "utilization", "tx_power"]
-            sql = """SELECT ap_mac, radio_id, band, channel, utilization, tx_power
+            fields = ["ap_mac", "radio_id", "band", "channel", "utilization", "client_count", "tx_power"]
+            sql = """SELECT ap_mac, radio_id, band, channel, utilization, client_count, tx_power
                      FROM wifi_radio WHERE ap_mac IN (""" + ",".join(["%s"] * len(ap_macs)) + """)
                      ORDER BY ap_mac, radio_id"""
             self.cursor.execute(sql, tuple(ap_macs))
@@ -538,6 +538,7 @@ class WifiDB(mysqldb_netops):
             for row in self.cursor.fetchall():
                 item = dict(zip(fields, row))
                 item["utilization"] = float(item["utilization"]) if item["utilization"] is not None else None
+                item["client_count"] = int(item["client_count"] or 0)
                 rows.append(item)
             return rows
 
