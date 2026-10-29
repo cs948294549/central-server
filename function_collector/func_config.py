@@ -150,6 +150,77 @@ def save_config_by_opid(ip, op_id):
         logger.error(f"设备 {ip} 变更单 {op_id} 配置采集异常: {e}")
         return result
 
+
+def backup_config_by_ip(ip):
+    """
+    采集指定设备的配置并备份到数据库（日常备份任务与前端手动备份共用）
+    与最新备份对比：配置无变化只更新采集时间，有变化或首次备份则新增记录
+    :param ip: 设备IP地址
+    :return: {success: bool, message: str, data: {device_info, changed}}
+    """
+    try:
+        # 1. 查询设备信息，识别厂商
+        db_collect = CollectDB()
+        all_devices = db_collect.getDeviceList({"host": ip})
+
+        device = next((d for d in all_devices or [] if d.get("ip") == ip), None)
+        if not device:
+            return {"success": False, "message": f"未找到设备: {ip}"}
+
+        sysname = device.get("sysname", "")
+        vendor = identify_device_vendor(device.get("sysdesc", ""))
+        if not vendor or vendor == 'unknown' or vendor not in SSHClientFactory.VENDOR_CLASS_MAP:
+            logger.warning(f"设备 {ip}({sysname}) 识别厂商为 {vendor}，不支持备份")
+            return {"success": False, "message": f"无法识别设备厂商或厂商不支持: {vendor}"}
+
+        device_info = {"ip": ip, "name": sysname, "vendor": vendor}
+
+        # 2. 登录设备获取配置
+        config_content = get_device_config(ip, sysname, vendor)
+        if not config_content:
+            return {"success": False, "message": "配置获取失败"}
+
+        # 3. 与最新备份对比，配置无变化只更新时间
+        # ConfigDB 每次操作后会关闭连接，每个操作都需要新建对象
+        latest_config = ConfigDB().get_latest_config(ip)
+        if latest_config and \
+                ConfigDB.calculate_config_hash(config_content) == ConfigDB.calculate_config_hash(latest_config.get("detail", "")):
+            if ConfigDB().update_config_time(latest_config["log_id"]) != "success":
+                logger.error(f"设备 {ip}({sysname}) 更新时间失败")
+                return {"success": False, "message": "更新时间失败"}
+
+            logger.info(f"设备 {ip}({sysname}) 配置无变化")
+            return {
+                "success": True,
+                "message": "配置无变化，已更新时间",
+                "data": {"device_info": device_info, "changed": False}
+            }
+
+        # 4. 配置有变化或首次备份，插入新记录
+        add_result = ConfigDB().add_config({
+            "ip": ip,
+            "sysname": sysname,
+            "dev_type": vendor,
+            "detail": config_content,
+            "change_id": None
+        })
+        if add_result != "success":
+            logger.error(f"设备 {ip}({sysname}) 保存配置失败")
+            return {"success": False, "message": "保存配置失败"}
+
+        message = "配置有变化，已保存新记录" if latest_config else "首次备份成功"
+        logger.info(f"设备 {ip}({sysname}) {message}")
+        return {
+            "success": True,
+            "message": message,
+            "data": {"device_info": device_info, "changed": True}
+        }
+
+    except Exception as err:
+        logger.error(f"备份设备配置失败 [{ip}]: {err}")
+        return {"success": False, "message": f"备份设备配置失败: {str(err)}"}
+
+
 def get_config_list_by_device(data):
     """
     获取设备的配置备份列表

@@ -8,7 +8,8 @@ from function_collector.func_config import (
     delete_config_by_id,
     get_latest_config_by_ip,
     get_device_config_diff,
-    get_changed_devices
+    get_changed_devices,
+    backup_config_by_ip
 )
 
 # 配置日志
@@ -140,6 +141,36 @@ def get_latest_config():
 
     except Exception as e:
         logger.error(f"获取最新配置失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@config_bp.route('/backup', methods=['POST'])
+def backup_config():
+    """
+    手动备份单台设备配置（登录设备采集当前配置，与最新备份对比后保存）
+    请求参数:
+    {
+        "ip": "10.0.0.1"  # 必填，设备IP
+    }
+    """
+    try:
+        data = request.json or {}
+        ip = data.get('ip')
+
+        if not ip:
+            return APIResponse.error(message="缺少参数 ip")
+
+        logger.info(f"{str(g.user)}手动备份设备配置，ip={ip}")
+
+        result = backup_config_by_ip(ip)
+
+        if result.get("success"):
+            return APIResponse.success(data=result.get("data"), message=result.get("message", "备份成功"))
+        else:
+            return APIResponse.error(message=result.get("message", "备份失败"))
+
+    except Exception as e:
+        logger.error(f"备份设备配置失败: {e}")
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
 
 

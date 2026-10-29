@@ -24,10 +24,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from tables.CollectDB import CollectDB
-from tables.ConfigDB import ConfigDB
-from lib_ssh.sshClient import SSHClientFactory
-from lib_snmp.snmp_collector import identify_device_vendor
-from function_collector.func_config import get_device_config
+from function_collector.func_config import backup_config_by_ip
 
 logger = logging.getLogger(__name__)
 
@@ -91,90 +88,27 @@ def backup_device(device):
         device: 设备信息字典
 
     Returns:
-        dict: 备份结果 {"ip": "", "status": "success/failed", "message": ""}
+        dict: 备份结果 {"ip": "", "sysname": "", "status": "success/failed", "message": "", "changed": bool}
     """
     ip = device.get("ip")
     sysname = device.get("sysname", "")
-    sysdesc = device.get("sysdesc", "")
 
     result = {
         "ip": ip,
         "sysname": sysname,
         "status": "failed",
-        "message": ""
+        "message": "",
+        "changed": False
     }
 
     try:
-        # 通过 sysdesc 识别厂商
-        vendor = identify_device_vendor(sysdesc)
+        # 调用通用备份方法
+        backup_result = backup_config_by_ip(ip)
 
-        if not vendor or vendor == 'unknown' or vendor not in SSHClientFactory.VENDOR_CLASS_MAP:
-            result["message"] = f"无法识别设备厂商或厂商不支持: {vendor}"
-            logger.warning(f"设备 {ip}({sysname}) 识别厂商为 {vendor}，不支持备份")
-            return result
-
-        # 获取设备配置
-        config_content = get_device_config(ip, sysname, vendor)
-        if not config_content:
-            result["message"] = "配置获取失败"
-            return result
-
-        # 计算配置哈希值
-        config_hash = ConfigDB.calculate_config_hash(config_content)
-
-        # 查询最新配置记录
-        db_config = ConfigDB()
-        latest_config = db_config.get_latest_config(ip)
-
-        if latest_config:
-            # 计算上次配置的哈希值
-            latest_hash = ConfigDB.calculate_config_hash(latest_config.get("detail", ""))
-
-            if config_hash == latest_hash:
-                # 配置无变化，只更新时间（需要新建数据库对象）
-                db_config_update = ConfigDB()
-                update_result = db_config_update.update_config_time(latest_config["log_id"])
-                if update_result == "success":
-                    result["status"] = "success"
-                    result["message"] = "配置无变化，已更新时间"
-                    logger.info(f"设备 {ip}({sysname}) 配置无变化")
-                else:
-                    result["message"] = "更新时间失败"
-                    logger.error(f"设备 {ip}({sysname}) 更新时间失败")
-            else:
-                # 配置有变化，插入新记录（需要新建数据库对象）
-                db_config_add = ConfigDB()
-                add_result = db_config_add.add_config({
-                    "ip": ip,
-                    "sysname": sysname,
-                    "dev_type": vendor,
-                    "detail": config_content,
-                    "change_id": None
-                })
-                if add_result == "success":
-                    result["status"] = "success"
-                    result["message"] = "配置有变化，已保存新记录"
-                    logger.info(f"设备 {ip}({sysname}) 配置已变化，保存新记录")
-                else:
-                    result["message"] = "保存配置失败"
-                    logger.error(f"设备 {ip}({sysname}) 保存配置失败")
-        else:
-            # 首次备份，插入新记录（需要新建数据库对象）
-            db_config_new = ConfigDB()
-            add_result = db_config_new.add_config({
-                "ip": ip,
-                "sysname": sysname,
-                "dev_type": vendor,
-                "detail": config_content,
-                "change_id": None
-            })
-            if add_result == "success":
-                result["status"] = "success"
-                result["message"] = "首次备份成功"
-                logger.info(f"设备 {ip}({sysname}) 首次备份成功")
-            else:
-                result["message"] = "首次备份失败"
-                logger.error(f"设备 {ip}({sysname}) 首次备份失败")
+        result["message"] = backup_result.get("message", "")
+        if backup_result.get("success"):
+            result["status"] = "success"
+            result["changed"] = backup_result.get("data", {}).get("changed", False)
 
     except Exception as e:
         result["message"] = f"备份异常: {str(e)}"
@@ -229,10 +163,10 @@ def run(filter_ips=None):
                 result = future.result(timeout=TASK_CONFIG["timeout"])
                 if result["status"] == "success":
                     success_count += 1
-                    if "无变化" in result["message"]:
-                        no_change_count += 1
-                    else:
+                    if result["changed"]:
                         changed_count += 1
+                    else:
+                        no_change_count += 1
                 else:
                     failed_count += 1
                     # 记录失败设备的详细信息
