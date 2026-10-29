@@ -92,6 +92,31 @@ def update_issue_status():
         return APIResponse.server_error(message=f"更新失败: {str(e)}")
 
 
+@policy_issue_bp.route('/recollect', methods=['POST'])
+def recollect_device():
+    """
+    基于设备最新备份配置重新解析策略对象并更新记录表
+    请求参数: {"object_type": "prefix_list/acl/addrgroup/portgroup", "device_ip": "10.0.0.1"}
+    """
+    try:
+        data = request.json or {}
+        for key in ("object_type", "device_ip"):
+            if not data.get(key):
+                return APIResponse.param_error(message=f"缺少参数: {key}")
+
+        logger.info(f"{_get_username()}手动重新解析，object_type={data['object_type']}, device_ip={data['device_ip']}")
+
+        result = func_issue.recollect_device(data)
+
+        if result.get("success"):
+            return APIResponse.success(data=result.get("data"), message=result.get("message", "重新解析成功"))
+        return APIResponse.error(message=result.get("message", "重新解析失败"))
+
+    except Exception as e:
+        logger.error(f"重新解析失败: {e}", exc_info=True)
+        return APIResponse.server_error(message=f"重新解析失败: {str(e)}")
+
+
 @policy_issue_bp.route('/compare/text_diff', methods=['POST'])
 def compare_text_diff():
     """配置差异对比，支持 issue_id 或 standard_id + device_ip 或直接传 entries"""

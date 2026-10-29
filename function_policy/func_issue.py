@@ -130,22 +130,38 @@ def delete_issue(data):
 
 def _recollect_by_object_type(object_type, device_ip):
     """
-    标记完成后按对象类型触发设备回采，失败不影响状态更新
+    按对象类型基于设备最新备份配置重新解析并更新记录表
+    标记完成后的回采和前端手动重新解析共用，异常不向外抛，避免影响调用方主流程
+    :return: {success: bool, message: str, data: {...}}
     """
     try:
         if object_type == OBJECT_TYPE_PREFIX_LIST:
             from function_policy.func_prefix import collect_and_update_prefix_lists
             result = collect_and_update_prefix_lists(device_ip)
-            logger.info(f"标记完成后触发前缀列表采集，设备: {device_ip}，结果: {result}")
-        elif object_type == OBJECT_TYPE_ACL:
+        elif object_type in (OBJECT_TYPE_ACL, OBJECT_TYPE_ADDRGROUP, OBJECT_TYPE_PORTGROUP):
+            # 地址组/端口组与 ACL 同一次解析入库，没有独立的采集入口
             from function_policy.func_access_list import collect_and_update_access_lists
             result = collect_and_update_access_lists(device_ip)
-            logger.info(f"标记完成后触发 ACL 采集，设备: {device_ip}，结果: {result}")
         else:
-            # 地址组/端口组随 ACL 采集更新，暂无独立回采入口
-            logger.info(f"{get_object_type_label(object_type)} 暂不支持独立回采，跳过设备 {device_ip}")
+            return {"success": False, "message": f"不支持的对象类型: {object_type}"}
+
+        logger.info(f"触发{get_object_type_label(object_type)}重新解析，设备: {device_ip}，结果: {result}")
+        return result
     except Exception as err:
         logger.error(f"触发设备 {device_ip} 采集失败: {err}")
+        return {"success": False, "message": f"重新解析失败: {str(err)}"}
+
+
+def recollect_device(data):
+    """
+    手动触发设备的策略配置重新解析（记录页面「重新解析」按钮用）
+    :param data: {object_type, device_ip}
+    :return: {success: bool, message: str, data: {...}}
+    """
+    if not data or not data.get("object_type") or not data.get("device_ip"):
+        return {"success": False, "message": "缺少参数: object_type 或 device_ip"}
+
+    return _recollect_by_object_type(data["object_type"], data["device_ip"])
 
 
 def change_issue_status(data):
