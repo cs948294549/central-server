@@ -6,7 +6,7 @@ ACL 管理中间方法
 1. 三类对象（ACL / 地址组 / 端口组）在库表中独立存放，ACL 规则内以组名引用，采集时不展开
 2. 地址组/端口组的设备配置采集到 addrgroup_records / portgroup_records
 """
-from utils.fingerprint import calculate_fingerprint
+from utils.fingerprint import calculate_fingerprint, sort_entries_by_seq
 from tables.AccessListDB import AccessListDB
 from tables.AddrGroupDB import AddrGroupDB
 from tables.PortGroupDB import PortGroupDB
@@ -217,6 +217,8 @@ def create_standard(data, username):
 
         acl_type = data.get("acl_type", "ipv4")
         entries_list = normalize_entries(data["entries"])
+        # 条目先按 seq 排序，保证存储顺序、指纹、后续命令生成口径一致
+        entries_list = sort_entries_by_seq(entries_list)
 
         # 计算指纹
         fingerprint = calculate_access_list_fingerprint(data["name"], acl_type, entries_list)
@@ -271,6 +273,9 @@ def update_standard(data, username):
                 entries_list = normalize_entries(data["entries"])
             else:
                 entries_list = normalize_entries(current["entries"])
+
+            # 条目先按 seq 排序，保证存储顺序、指纹、后续命令生成口径一致
+            entries_list = sort_entries_by_seq(entries_list)
 
             name = data.get("name", current["name"])
             acl_type = data.get("acl_type", current["acl_type"])
@@ -784,6 +789,8 @@ def collect_and_update_access_lists(ip):
             acl_name = acl_config.acl_name
             acl_type = acl_config.acl_type or "ipv4"
             entries = [entry.to_dict() for entry in acl_config.entries]
+            # 设备回显顺序不保证按 seq 递增，统一排一次再算指纹和入库
+            entries = sort_entries_by_seq(entries)
 
             # 计算指纹
             fingerprint = calculate_access_list_fingerprint(acl_name, acl_type, entries)
@@ -807,6 +814,8 @@ def collect_and_update_access_lists(ip):
             group_name = group.name
             acl_type = group.addr_type or "ipv4"
             entries = [entry.to_dict() for entry in group.entries]
+            # 设备回显顺序不保证按 seq 递增，统一排一次再算指纹和入库
+            entries = sort_entries_by_seq(entries)
 
             fingerprint = calculate_group_fingerprint(group_name, acl_type, entries)
             if not fingerprint:
@@ -825,6 +834,8 @@ def collect_and_update_access_lists(ip):
         for group in port_groups:
             group_name = group.name
             entries = [entry.to_dict() for entry in group.entries]
+            # 设备回显顺序不保证按 seq 递增，统一排一次再算指纹和入库
+            entries = sort_entries_by_seq(entries)
 
             fingerprint = calculate_group_fingerprint(group_name, "ipv4", entries)
             if not fingerprint:
@@ -903,8 +914,11 @@ def compare_entries_text_diff(src_entries, target_entries, full_diff=False):
     :return: {"success": bool, "data": {"html": str}, "message": str}
     """
     try:
-        src_text = "\n".join(entry_to_text(e) for e in normalize_entries(src_entries))
-        target_text = "\n".join(entry_to_text(e) for e in normalize_entries(target_entries))
+        # 先按 seq 排序，否则仅顺序不同的两侧会被整段判定为差异
+        src_list = sort_entries_by_seq(normalize_entries(src_entries))
+        target_list = sort_entries_by_seq(normalize_entries(target_entries))
+        src_text = "\n".join(entry_to_text(e) for e in src_list)
+        target_text = "\n".join(entry_to_text(e) for e in target_list)
 
         html_result = check_diff_simple(src_text, target_text, full_diff=full_diff)
 

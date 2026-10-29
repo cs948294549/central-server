@@ -2,7 +2,7 @@
 地址前缀列表管理中间方法
 提供指纹计算、配置对比、统计分析等功能
 """
-from utils.fingerprint import calculate_fingerprint
+from utils.fingerprint import calculate_fingerprint, sort_entries_by_seq
 from tables.PrefixListDB import PrefixListDB
 from tables.PolicyIssueDB import PolicyIssueDB
 from tables.CollectDB import CollectDB
@@ -31,6 +31,7 @@ def calculate_prefix_list_fingerprint(name, entries):
     """
     try:
         # 使用 utils 中的 calculate_fingerprint，包含 name 和 entries
+        # 条目在指纹计算前会按 seq 排序，与数组顺序无关
         fingerprint = calculate_fingerprint({"name": name, "entries": entries})
         return fingerprint
     except Exception as err:
@@ -101,8 +102,9 @@ def create_standard(data, username):
         if "name" not in data or "entries" not in data:
             return {"success": False, "message": "缺少必要参数: name, entries"}
 
-        # 计算指纹
+        # 计算指纹（条目先按 seq 排序，指纹与数组顺序无关）
         entries_list = data["entries"].get("entries", []) if isinstance(data["entries"], dict) else data["entries"]
+        entries_list = sort_entries_by_seq(entries_list)
         fingerprint = calculate_prefix_list_fingerprint(data["name"], entries_list)
 
         if not fingerprint:
@@ -145,6 +147,8 @@ def update_standard(data, username):
         # 如果更新了 entries，需要重新计算指纹
         if "entries" in data:
             entries_list = data["entries"].get("entries", []) if isinstance(data["entries"], dict) else data["entries"]
+            # 条目先按 seq 排序，保证存储顺序、指纹、后续命令生成口径一致
+            entries_list = sort_entries_by_seq(entries_list)
 
             # 获取当前规则信息以得到 name
             db = PrefixListDB()
@@ -660,6 +664,8 @@ def collect_and_update_prefix_lists(ip):
         for pl_config in prefix_lists:
             pl_name = pl_config.name
             entries = [entry.to_dict() for entry in pl_config.entries]
+            # 设备回显顺序不保证按 seq 递增，统一排一次再算指纹和入库
+            entries = sort_entries_by_seq(entries)
 
             # 计算指纹
             fingerprint = calculate_prefix_list_fingerprint(pl_name, entries)
@@ -721,10 +727,10 @@ def compare_entries_text_diff(src_entries, target_entries, full_diff=False):
     :return: {"success": bool, "data": {"html": str}, "message": str}
     """
     try:
-        # 将entries转换为文本格式
+        # 将entries转换为文本格式（先按 seq 排序，否则顺序差异会被整段判定为差异）
         def entries_to_text(entries):
             lines = []
-            for entry in entries:
+            for entry in sort_entries_by_seq(entries):
                 line_parts = [f"seq {entry.get('seq', '')}", entry.get('action', '')]
                 line_parts.append(entry.get('prefix', ''))
                 if entry.get('ge'):

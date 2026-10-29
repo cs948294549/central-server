@@ -8,7 +8,7 @@
 协议信息不属于端口组本身（由引用它的 ACL 规则决定），不参与存储和指纹计算。
 对应表：portgroup_standards，见 tables/PortGroupDB.py
 """
-from utils.fingerprint import calculate_fingerprint
+from utils.fingerprint import calculate_fingerprint, sort_entries_by_seq
 from tables.PortGroupDB import PortGroupDB
 from tables.AccessListDB import AccessListDB
 from function_policy.func_access_list import normalize_entries
@@ -147,7 +147,8 @@ def create_group(data, username):
             return {"success": False, "message": "缺少必要参数: name, entries"}
 
         acl_type = data.get("acl_type", "ipv4")
-        entries = data["entries"]
+        # 条目先按 seq 排序，保证存储顺序、指纹、后续命令生成口径一致
+        entries = sort_entries_by_seq(data["entries"])
 
         fingerprint = calculate_portgroup_fingerprint(data["name"], acl_type, entries)
         if not fingerprint:
@@ -197,6 +198,8 @@ def update_group(data, username):
             entries = data["entries"] if "entries" in data else current["entries"]
             name = data.get("name", current["name"])
             acl_type = data.get("acl_type", current["acl_type"])
+            # 条目先按 seq 排序，保证存储顺序、指纹、后续命令生成口径一致
+            entries = sort_entries_by_seq(entries)
 
             fingerprint = calculate_portgroup_fingerprint(name, acl_type, entries)
             if not fingerprint:
@@ -503,8 +506,9 @@ def compare_group_text_diff(src_entries, target_entries, full_diff=False):
     try:
         from function_tools.text_diff_tool import check_diff_simple
 
-        src_text = "\n".join(group_entry_to_text(e) for e in normalize_entries(src_entries))
-        target_text = "\n".join(group_entry_to_text(e) for e in normalize_entries(target_entries))
+        # 先按 seq 排序，否则仅顺序不同的两侧会被整段判定为差异
+        src_text = "\n".join(group_entry_to_text(e) for e in sort_entries_by_seq(normalize_entries(src_entries)))
+        target_text = "\n".join(group_entry_to_text(e) for e in sort_entries_by_seq(normalize_entries(target_entries)))
 
         html_result = check_diff_simple(src_text, target_text, full_diff=full_diff)
 

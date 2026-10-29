@@ -11,6 +11,7 @@
 """
 from tables.PolicyIssueDB import PolicyIssueDB
 from function_op.order_manage import create_order_with_devices
+from utils.fingerprint import sort_entries_by_seq
 import logging
 
 logger = logging.getLogger(__name__)
@@ -462,7 +463,11 @@ def diff_entries_by_seq(standard_entries, device_entries, entry_signature):
         if seq not in standard_map:
             delete_entries.append(dev_entry)
 
-    return {"add": add_entries, "delete": delete_entries}
+    # 生成的命令按 seq 升序下发，避免增删顺序随数组顺序漂移
+    return {
+        "add": sort_entries_by_seq(add_entries),
+        "delete": sort_entries_by_seq(delete_entries)
+    }
 
 
 def build_device_commands(record, diff, encoder, sections, entry_diff_applier):
