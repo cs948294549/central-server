@@ -760,23 +760,32 @@ def collect_and_update_access_lists(ip):
 
         # 3. 使用parser解析配置
         parser = get_parser(vendor, cfg)
-        result = parser.parse(sections=['access_lists', 'address_groups', 'port_groups'])
+
+        # 该厂商尚未实现的配置项，解析结果为空不代表设备上真没配置，不能拿来清库
+        sections = [s for s in ('access_lists', 'address_groups', 'port_groups')
+                    if s in parser.available_sections]
+        if not sections:
+            return {"success": False, "message": f"设备 {ip} 的厂商 {vendor} 暂不支持ACL/地址组/端口组解析"}
+
+        result = parser.parse(sections=sections)
 
         access_lists = result.access_lists
         address_groups = result.address_groups
         port_groups = result.port_groups
 
-        if not access_lists and not address_groups and not port_groups:
-            return {"success": False, "message": f"设备 {ip} 未解析到ACL/地址组/端口组配置"}
+        # 配置树为空说明配置文本本身不可用（缩进异常等），此时不能拿空结果去清库
+        if not parser.config_tree:
+            return {"success": False, "message": f"设备 {ip} 配置解析失败，保留历史记录"}
 
         # 4. 删除该IP的旧记录
-        if access_lists and AccessListDB().deleteRecordsByIP(ip) == "failed":
+        # 即使本次未解析到对应配置也要删除：设备上已把配置删干净时，库里不能留着历史数据
+        if 'access_lists' in sections and AccessListDB().deleteRecordsByIP(ip) == "failed":
             return {"success": False, "message": f"删除设备 {ip} ACL旧记录失败"}
 
-        if address_groups and AddrGroupDB().deleteRecordsByIP(ip) == "failed":
+        if 'address_groups' in sections and AddrGroupDB().deleteRecordsByIP(ip) == "failed":
             return {"success": False, "message": f"删除设备 {ip} 地址组旧记录失败"}
 
-        if port_groups and PortGroupDB().deleteRecordsByIP(ip) == "failed":
+        if 'port_groups' in sections and PortGroupDB().deleteRecordsByIP(ip) == "failed":
             return {"success": False, "message": f"删除设备 {ip} 端口组旧记录失败"}
 
         # 5. 准备各对象的批量插入数据

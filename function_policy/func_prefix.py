@@ -644,18 +644,37 @@ def collect_and_update_prefix_lists(ip):
 
         # 3. 使用parser解析配置
         parser = get_parser(vendor, cfg)
+
+        # 该厂商尚未实现前缀列表解析时，返回的空结果不代表设备上真没配置，不能拿来清库
+        if 'prefix_lists' not in parser.available_sections:
+            return {"success": False, "message": f"设备 {ip} 的厂商 {vendor} 暂不支持前缀列表解析"}
+
         result = parser.parse(sections=['prefix_lists'])
 
         prefix_lists = result.prefix_lists
-        if not prefix_lists:
-            return {"success": False, "message": f"设备 {ip} 未解析到前缀列表配置"}
+
+        # 配置树为空说明配置文本本身不可用（缩进异常等），此时不能拿空结果去清库
+        if not parser.config_tree:
+            return {"success": False, "message": f"设备 {ip} 配置解析失败，保留历史记录"}
 
         # 4. 删除该IP的旧记录
+        # 即使本次未解析到前缀列表也要删除：设备上已把配置删干净时，库里不能留着历史数据
         db_prefix = PrefixListDB()
         delete_result = db_prefix.deleteRecordsByIP(ip)
 
         if delete_result == "failed":
             return {"success": False, "message": f"删除设备 {ip} 旧记录失败"}
+
+        if not prefix_lists:
+            logger.info(f"设备 {ip} 配置中已无前缀列表，已清理历史记录")
+            return {
+                "success": True,
+                "message": "设备已无前缀列表配置，历史记录已清理",
+                "data": {
+                    "device_info": {"ip": ip, "name": device_name, "vendor": vendor},
+                    "prefix_lists": {"total": 0, "inserted": 0, "failed": 0, "failed_items": []}
+                }
+            }
 
         # 5. 准备批量插入数据
         records_to_insert = []
