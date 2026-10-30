@@ -44,8 +44,8 @@ def save_ac(data):
         }
         if not ac["ac_name"] or not ac["mgmt_ip"]:
             return {"success": False, "data": None, "message": "AC 名称和管理 IP 不能为空", "code": 400}
-        if ac["vendor"] not in ["huawei", "h3c", "ruijie"]:
-            return {"success": False, "data": None, "message": "厂商只支持 huawei / h3c / ruijie", "code": 400}
+        if ac["vendor"] not in ["huawei", "h3c", "ruijie", "fortinet"]:
+            return {"success": False, "data": None, "message": "厂商只支持 huawei / h3c / ruijie / fortinet", "code": 400}
 
         exists = WifiDB().checkAcExists(ac["ac_name"], ac["mgmt_ip"], ac_id)
         if exists == "failed":
