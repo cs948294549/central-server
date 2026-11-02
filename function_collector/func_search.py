@@ -373,6 +373,7 @@ def get_device_summary():
     online = 0
     offline = 0
     vendor_counts = {}
+    offline_devices = []
 
     for device in devices:
         timestamp_str = device.get("timestamp", "")
@@ -394,6 +395,13 @@ def get_device_summary():
             online += 1
         else:
             offline += 1
+            # 记录离线设备信息
+            offline_devices.append({
+                'ip': device.get('ip', ''),
+                'sysname': device.get('sysname', ''),
+                'sys_type': device.get('sys_type', ''),
+                'timestamp': timestamp_str
+            })
 
         # 统计厂商分布（使用 sys_type）
         if sys_type:
@@ -411,7 +419,8 @@ def get_device_summary():
         "total": total,
         "online": online,
         "offline": offline,
-        "vendors": vendors
+        "vendors": vendors,
+        "offline_devices": offline_devices
     }
 
 if __name__ == '__main__':
