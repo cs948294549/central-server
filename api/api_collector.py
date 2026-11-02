@@ -1,7 +1,7 @@
 from flask import Blueprint, request, g
 from api.api_response import APIResponse
 import logging
-from function_collector.func_search import func_fulltext, get_deviceslist, get_ex_portinfo, get_lldp_list
+from function_collector.func_search import func_fulltext, get_deviceslist, get_ex_portinfo, get_lldp_list, get_port_info
 from function_collector.func_search import getfulltextDeviceGates_v4, getfulltextDeviceGates_v6, get_arp_list
 from function_collector.func_search import get_mac_table_by_tor, get_device_sns
 from lib_snmp.snmpAgent import snmpget, snmpwalk
@@ -76,6 +76,15 @@ def getExPortInfo():
         data = request.json
         ip = data.get('ip')
         respond = get_ex_portinfo(ip=ip)
+        return APIResponse.success(data=respond, message="查询成功")
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+@collector_bp.route('/getportinfo',methods=['POST'])
+def getportinfo():
+    try:
+        data = request.json
+        respond = get_port_info(data)
         return APIResponse.success(data=respond, message="查询成功")
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
