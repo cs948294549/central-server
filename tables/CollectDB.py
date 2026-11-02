@@ -792,5 +792,103 @@ class CollectDB(mysqldb_netops):
             self.conn.close()
 
 
+    def get_device_summary(self):
+        """
+        获取设备统计汇总
+        通过 iplist 筛选 admin_status <> '1' 的设备，left join devices 获取采集时间
+        采集时间距当前时间小于 30 分钟认为在线
+
+        Returns:
+            dict: {
+                "total": 总设备数,
+                "online": 在线设备数,
+                "offline": 离线设备数,
+                "vendors": [{"name": "Cisco", "count": 500, "type": "primary"}, ...]
+            }
+        """
+        try:
+            import time
+
+            # 当前时间戳
+            current_time = int(time.time())
+            # 30 分钟 = 1800 秒
+            online_threshold = 1800
+
+            # 查询所有未屏蔽设备及其采集时间
+            sql = """
+                SELECT
+                    i.ip,
+                    d.timestamp,
+                    d.sysdesc
+                FROM iplist i
+                LEFT JOIN devices d ON i.ip = d.ip
+                WHERE i.admin_status <> '1'
+            """
+
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+
+            total = 0
+            online = 0
+            offline = 0
+            vendor_counts = {}
+
+            # 厂商定义（与前端保持一致）
+            vendor_defs = [
+                {'reg': 'H3C', 'name': 'H3C', 'type': ''},
+                {'reg': 'Huawei|Huarong', 'name': 'Huawei', 'type': 'danger'},
+                {'reg': 'Cisco', 'name': 'Cisco', 'type': 'primary'},
+                {'reg': 'Ruijie', 'name': 'Ruijie', 'type': 'warning'},
+                {'reg': 'Arista', 'name': 'Arista', 'type': 'success'},
+                {'reg': 'Juniper', 'name': 'Juniper', 'type': 'info'}
+            ]
+
+            if len(result1) > 0:
+                for row in result1:
+                    ip = row[0] if row[0] else ""
+                    timestamp = int(row[1]) if row[1] else 0
+                    sysdesc = row[2] if row[2] else ""
+
+                    total += 1
+
+                    # 判断在线/离线：采集时间距当前时间小于 30 分钟为在线
+                    if timestamp > 0 and (current_time - timestamp) < online_threshold:
+                        online += 1
+                    else:
+                        offline += 1
+
+                    # 统计厂商分布
+                    vendor_found = False
+                    for vendor in vendor_defs:
+                        if re.search(vendor['reg'], sysdesc, re.IGNORECASE):
+                            vendor_name = vendor['name']
+                            if vendor_name not in vendor_counts:
+                                vendor_counts[vendor_name] = {
+                                    'name': vendor_name,
+                                    'count': 0,
+                                    'type': vendor['type']
+                                }
+                            vendor_counts[vendor_name]['count'] += 1
+                            vendor_found = True
+                            break
+
+            # 厂商列表按数量降序
+            vendors = sorted(vendor_counts.values(), key=lambda x: x['count'], reverse=True)
+
+            return {
+                "total": total,
+                "online": online,
+                "offline": offline,
+                "vendors": vendors
+            }
+
+        except Exception as err:
+            logger.error("======CollectDB get_device_summary error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+
 if __name__ == '__main__':
     pass

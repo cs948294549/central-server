@@ -3,7 +3,7 @@ from api.api_response import APIResponse
 import logging
 from function_collector.func_search import func_fulltext, get_deviceslist, get_ex_portinfo, get_lldp_list, get_port_info
 from function_collector.func_search import getfulltextDeviceGates_v4, getfulltextDeviceGates_v6, get_arp_list
-from function_collector.func_search import get_mac_table_by_tor, get_device_sns
+from function_collector.func_search import get_mac_table_by_tor, get_device_sns, get_device_summary
 from lib_snmp.snmpAgent import snmpget, snmpwalk
 from config.config import Config
 
@@ -147,4 +147,28 @@ def getdevice_sn():
         respond = get_device_sns(data)
         return APIResponse.success(data=respond, message="查询成功")
     except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+
+@collector_bp.route('/device_summary',methods=['POST'])
+def device_summary():
+    """
+    设备统计汇总
+    通过 iplist 筛选 admin_status <> '1' 的设备，left join devices 获取采集时间
+    采集时间距当前时间小于 30 分钟认为在线
+    返回：{
+      "total": 总设备数,
+      "online": 在线设备数,
+      "offline": 离线设备数,
+      "vendors": [{"name": "Cisco", "count": 500, "type": "primary"}, ...]
+    }
+    """
+    try:
+        logger.info(f"{str(g.user)}查询设备统计汇总")
+        respond = get_device_summary()
+        if respond == "failed":
+            return APIResponse.error(message="查询失败")
+        return APIResponse.success(data=respond, message="查询成功")
+    except Exception as e:
+        logger.error(f"设备统计汇总失败: {e}")
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))

@@ -347,3 +347,13 @@ def get_device_sns(search_data):
     db = CollectDB()
     sns_list = db.getDeviceSNS(search_data)
     return sns_list
+
+def get_device_summary():
+    """
+    获取设备统计汇总
+    Returns:
+        dict: 包含 total, online, offline, vendors 的统计信息
+    """
+    db = CollectDB()
+    summary = db.get_device_summary()
+    return summary
