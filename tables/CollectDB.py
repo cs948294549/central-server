@@ -846,13 +846,23 @@ class CollectDB(mysqldb_netops):
             if len(result1) > 0:
                 for row in result1:
                     ip = row[0] if row[0] else ""
-                    timestamp = int(row[1]) if row[1] else 0
+                    timestamp_str = row[1] if row[1] else ""
                     sysdesc = row[2] if row[2] else ""
 
                     total += 1
 
                     # 判断在线/离线：采集时间距当前时间小于 30 分钟为在线
-                    if timestamp > 0 and (current_time - timestamp) < online_threshold:
+                    # timestamp 字段格式: '2026-11-02 17:00:02'
+                    device_timestamp = 0
+                    if timestamp_str:
+                        try:
+                            from datetime import datetime
+                            dt = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                            device_timestamp = int(dt.timestamp())
+                        except:
+                            device_timestamp = 0
+
+                    if device_timestamp > 0 and (current_time - device_timestamp) < online_threshold:
                         online += 1
                     else:
                         offline += 1
