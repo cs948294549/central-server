@@ -1,7 +1,11 @@
 
 import threading
 from tables.CollectDB import CollectDB
+import time
 import re
+from datetime import datetime
+
+
 
 def func_fulltext(searchKeys):
 
@@ -355,5 +359,60 @@ def get_device_summary():
         dict: 包含 total, online, offline, vendors 的统计信息
     """
     db = CollectDB()
-    summary = db.get_device_summary()
-    return summary
+    devices = db.get_device_summary()
+
+    if devices == "failed":
+        return "failed"
+
+    # 当前时间戳
+    current_time = int(time.time())
+    # 30 分钟 = 1800 秒
+    online_threshold = 1800
+
+    total = 0
+    online = 0
+    offline = 0
+    vendor_counts = {}
+
+    for device in devices:
+        timestamp_str = device.get("timestamp", "")
+        sys_type = device.get("sys_type", "")
+
+        total += 1
+
+        # 判断在线/离线：采集时间距当前时间小于 30 分钟为在线
+        # timestamp 字段格式: '2026-11-02 17:00:02'
+        device_timestamp = 0
+        if timestamp_str:
+            try:
+                dt = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                device_timestamp = int(dt.timestamp())
+            except:
+                device_timestamp = 0
+
+        if device_timestamp > 0 and (current_time - device_timestamp) < online_threshold:
+            online += 1
+        else:
+            offline += 1
+
+        # 统计厂商分布（使用 sys_type）
+        if sys_type:
+            if sys_type not in vendor_counts:
+                vendor_counts[sys_type] = {
+                    'name': sys_type,
+                    'count': 0
+                }
+            vendor_counts[sys_type]['count'] += 1
+
+    # 厂商列表按数量降序
+    vendors = sorted(vendor_counts.values(), key=lambda x: x['count'], reverse=True)
+
+    return {
+        "total": total,
+        "online": online,
+        "offline": offline,
+        "vendors": vendors
+    }
+
+if __name__ == '__main__':
+    print(get_device_summary())

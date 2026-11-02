@@ -794,32 +794,26 @@ class CollectDB(mysqldb_netops):
 
     def get_device_summary(self):
         """
-        获取设备统计汇总
-        通过 iplist 筛选 admin_status <> '1' 的设备，left join devices 获取采集时间
-        采集时间距当前时间小于 30 分钟认为在线
+        获取设备统计汇总原始数据
+        通过 iplist 筛选 admin_status <> '1' 的设备，left join devices 获取采集时间和描述
 
         Returns:
-            dict: {
-                "total": 总设备数,
-                "online": 在线设备数,
-                "offline": 离线设备数,
-                "vendors": [{"name": "Cisco", "count": 500, "type": "primary"}, ...]
-            }
+            list: [{"ip": "x.x.x.x", "timestamp": "2026-11-02 17:00:02", "sysdesc": "..."}, ...]
+            或 "failed"
         """
         try:
-            import time
-
-            # 当前时间戳
-            current_time = int(time.time())
-            # 30 分钟 = 1800 秒
-            online_threshold = 1800
-
-            # 查询所有未屏蔽设备及其采集时间
             sql = """
                 SELECT
                     i.ip,
-                    d.timestamp,
-                    d.sysdesc
+                    d.sysname,
+                    d.sysdesc,
+                    d.syscontact,
+                    d.uptime,
+                    d.hardware,
+                    d.features,
+                    d.version,
+                    d.sys_type,
+                    d.timestamp
                 FROM iplist i
                 LEFT JOIN devices d ON i.ip = d.ip
                 WHERE i.admin_status <> '1'
@@ -828,69 +822,18 @@ class CollectDB(mysqldb_netops):
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
 
-            total = 0
-            online = 0
-            offline = 0
-            vendor_counts = {}
+            proper = ["ip", "sysname", "sysdesc", "syscontact", "uptime", "hardware",
+                      "features", "version", "sys_type", "timestamp"]
 
-            # 厂商定义（与前端保持一致）
-            vendor_defs = [
-                {'reg': 'H3C', 'name': 'H3C', 'type': ''},
-                {'reg': 'Huawei|Huarong', 'name': 'Huawei', 'type': 'danger'},
-                {'reg': 'Cisco', 'name': 'Cisco', 'type': 'primary'},
-                {'reg': 'Ruijie', 'name': 'Ruijie', 'type': 'warning'},
-                {'reg': 'Arista', 'name': 'Arista', 'type': 'success'},
-                {'reg': 'Juniper', 'name': 'Juniper', 'type': 'info'}
-            ]
-
+            devices = []
             if len(result1) > 0:
                 for row in result1:
-                    ip = row[0] if row[0] else ""
-                    timestamp_str = row[1] if row[1] else ""
-                    sysdesc = row[2] if row[2] else ""
+                    dev = {}
+                    for i in range(len(proper)):
+                        dev[proper[i]] = row[i] if row[i] else ""
+                    devices.append(dev)
 
-                    total += 1
-
-                    # 判断在线/离线：采集时间距当前时间小于 30 分钟为在线
-                    # timestamp 字段格式: '2026-11-02 17:00:02'
-                    device_timestamp = 0
-                    if timestamp_str:
-                        try:
-                            from datetime import datetime
-                            dt = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
-                            device_timestamp = int(dt.timestamp())
-                        except:
-                            device_timestamp = 0
-
-                    if device_timestamp > 0 and (current_time - device_timestamp) < online_threshold:
-                        online += 1
-                    else:
-                        offline += 1
-
-                    # 统计厂商分布
-                    vendor_found = False
-                    for vendor in vendor_defs:
-                        if re.search(vendor['reg'], sysdesc, re.IGNORECASE):
-                            vendor_name = vendor['name']
-                            if vendor_name not in vendor_counts:
-                                vendor_counts[vendor_name] = {
-                                    'name': vendor_name,
-                                    'count': 0,
-                                    'type': vendor['type']
-                                }
-                            vendor_counts[vendor_name]['count'] += 1
-                            vendor_found = True
-                            break
-
-            # 厂商列表按数量降序
-            vendors = sorted(vendor_counts.values(), key=lambda x: x['count'], reverse=True)
-
-            return {
-                "total": total,
-                "online": online,
-                "offline": offline,
-                "vendors": vendors
-            }
+            return devices
 
         except Exception as err:
             logger.error("======CollectDB get_device_summary error========\n{}".format(str(err)))
