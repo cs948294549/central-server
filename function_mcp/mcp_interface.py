@@ -109,7 +109,7 @@ MCP_TOOLS_prompt = [
     },
     {
         "name": "create_change_order",
-        "description": "创建设备变更工单。用于批量配置网络设备，生成包含执行命令和回滚命令的变更工单。工单创建后所有人可操作（默认assigner为all）。注意：配置命令必须包含进入配置模式的命令（Cisco设备使用'configure terminal'或'conf t'，H3C/华为设备使用'system-view'），然后是具体配置命令。",
+        "description": "创建网络设备变更工单（含执行命令与回滚命令，提交后由平台下发执行,提交前先展示变更内容）。命令编写要点：\n1. 多条命令用换行符 \\n 分隔；\n2.首行必须进入配置模式：Cisco 用configure terminal / conf t，H3C/华为用 system-view；\n3. 末尾退出到用户视图再保存：Cisco 用 end + copy running-config startup-config，H3C/华为用 return + save。save 之后不要再补 y/N，平台会自动应答。",
         "inputSchema": {
             "type": "object",
             "properties": {
