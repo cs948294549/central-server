@@ -19,11 +19,9 @@ VPC 网段同步到 IPAM 定时任务
 2. 单独运行：python3 tasks/sync_vpc_to_ipam.py [--dry-run]
 """
 import argparse
-import hashlib
 import ipaddress
 import logging
 import sys
-import time
 from pathlib import Path
 
 # 将项目根目录添加到 Python 路径
@@ -31,7 +29,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from function_clouds.tencent_vpc import analyze_tencent_vpc
-from tables.AlarmDB import AlarmDB
+from function_queue.message_queue import sendDataToSyslog
 from tables.IpamDB import IpamDB
 from utils.utils import unwaf
 
@@ -47,9 +45,8 @@ TASK_CONFIG = {
     "vpc_role": "vpc",         # VPC 网段在 IPAM 中标记的 role
 }
 
-# 告警配置
+# 告警配置（推送到 syslog 队列，由 SyslogService 做黑名单过滤、聚合后入库）
 ALARM_TYPE = "ipam"
-ALARM_GROUP_NAME = "VPC网段冲突"
 ALARM_KEYWORD = "vpc-conflict"
 
 
@@ -141,7 +138,12 @@ def check_network_exists(cidr_item: dict):
 
 
 def build_alarm_data(cidr_item: dict, exist_item: dict) -> dict:
-    """构建网段冲突告警数据"""
+    """
+    构建网段冲突告警消息（推送到 syslog 队列的格式）
+
+    group_label / group_name 不在这里生成，由 SyslogService 的 MergelistManager
+    按 ip + 时间窗 + keyword(或聚合规则 group_name) + alarm_object + alarm_type 聚合补全
+    """
     exist_desc = exist_item.get("comment") or "-"
     exist_label = exist_item.get("label") or "-"
     msg = (f"VPC网段冲突: {cidr_item['cidr']} ({cidr_item['region']} / "
@@ -149,21 +151,13 @@ def build_alarm_data(cidr_item: dict, exist_item: dict) -> dict:
            f"在IPAM中已存在, role={exist_item.get('role') or '空'}, "
            f"label={exist_label}, comment={exist_desc}")
 
-    timestamp = int(time.time())
-    # 同一网段 + 同一天聚合成一条告警，避免每天重复堆积
-    group_key = f"{ALARM_KEYWORD}.{cidr_item['cidr']}.{timestamp // 86400}"
-    group_label = hashlib.md5(group_key.encode("utf-8")).hexdigest()
-
     return {
         "ip": cidr_item["ip"],
+        "message": msg[:500],
         "hostname": cidr_item["vpc_name"],
         "alarm_type": ALARM_TYPE,
-        "group_label": group_label,
-        "msg": msg[:500],
-        "group_name": ALARM_GROUP_NAME,
         "alarm_object": cidr_item["vpc_id"],
         "keyword": ALARM_KEYWORD,
-        "create_time": timestamp
     }
 
 
@@ -287,9 +281,9 @@ def run(dry_run: bool = False):
                     conflicted += 1
                     logger.warning(f"{cidr}: 已存在但 role={exist_role or '空'}（{cidr_item['vpc_name']}），产生告警")
                     if not dry_run:
-                        ret = AlarmDB().addAlarmList(build_alarm_data(cidr_item, exist_item))
-                        if ret == "failed":
-                            logger.error(f"{cidr}: 告警写入失败")
+                        if not sendDataToSyslog(messages=build_alarm_data(cidr_item, exist_item),
+                                                key=cidr_item["ip"]):
+                            logger.error(f"{cidr}: 告警推送到 syslog 队列失败")
                 continue
 
             # 3. 不存在，写入
