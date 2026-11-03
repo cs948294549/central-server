@@ -259,6 +259,9 @@ class IpamDB(mysqldb_netops):
 
             sql = "DELETE FROM ipam_net WHERE ip = %s AND mask = %s"
             self.cursor.execute(sql, (data["ip"], data["mask"]))
+            # 同步清理文件夹归属
+            sql = "DELETE FROM ipam_tree_folder_member WHERE ip = %s AND mask = %s"
+            self.cursor.execute(sql, (data["ip"], data["mask"]))
             self.conn.commit()
             return "success"
         except Exception as e:
@@ -326,6 +329,140 @@ class IpamDB(mysqldb_netops):
             return results
         except Exception as err:
             logger.error("======IpamDB get_network_list error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    # ==================== 网段树文件夹 ====================
+
+    def get_folder_list(self):
+        """查询文件夹列表"""
+        try:
+            sql = """SELECT id, name, sort, comment, create_time, update_time
+                     FROM ipam_tree_folder ORDER BY sort, id"""
+            proper = ["id", "name", "sort", "comment", "create_time", "update_time"]
+            self.cursor.execute(sql)
+            results = []
+            for i in self.cursor.fetchall():
+                result = {}
+                for num in range(len(proper)):
+                    result[proper[num]] = i[num] if i[num] != None else ""
+                results.append(result)
+            return results
+        except Exception as err:
+            logger.error("======IpamDB get_folder_list error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def add_folder(self, data):
+        """新增文件夹"""
+        try:
+            data = waf(data)
+            timestamp = str(int(time.time()))
+            sql = '''INSERT INTO ipam_tree_folder (name, sort, comment, create_time, update_time)
+                     VALUES (%s, %s, %s, %s, %s)'''
+            self.cursor.execute(sql, (
+                data["name"],
+                int(data.get("sort") or 0),
+                data.get("comment", ""),
+                timestamp,
+                timestamp
+            ))
+            self.conn.commit()
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"新增网段文件夹失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def update_folder(self, data):
+        """修改文件夹（名称/排序/描述）"""
+        try:
+            data = waf(data)
+            fields = ["update_time = %s"]
+            params = [str(int(time.time()))]
+            if "name" in data:
+                fields.append("name = %s")
+                params.append(data["name"])
+            if "sort" in data:
+                fields.append("sort = %s")
+                params.append(int(data["sort"] or 0))
+            if "comment" in data:
+                fields.append("comment = %s")
+                params.append(data["comment"])
+
+            if len(fields) == 1:
+                return "failed"
+
+            params.append(int(data["id"]))
+            sql = f"UPDATE ipam_tree_folder SET {', '.join(fields)} WHERE id = %s"
+            self.cursor.execute(sql, params)
+            self.conn.commit()
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"修改网段文件夹失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def delete_folder(self, data):
+        """删除文件夹及其成员记录，网段本身不动"""
+        try:
+            folder_id = int(data["id"])
+            self.cursor.execute("DELETE FROM ipam_tree_folder_member WHERE folder_id = %s", (folder_id,))
+            self.cursor.execute("DELETE FROM ipam_tree_folder WHERE id = %s", (folder_id,))
+            self.conn.commit()
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"删除网段文件夹失败: {e}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def get_folder_member_list(self):
+        """查询全部文件夹成员"""
+        try:
+            sql = "SELECT ip, mask, folder_id FROM ipam_tree_folder_member"
+            self.cursor.execute(sql)
+            return [{"ip": i[0], "mask": i[1], "folder_id": i[2]} for i in self.cursor.fetchall()]
+        except Exception as err:
+            logger.error("======IpamDB get_folder_member_list error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def move_folder_member(self, folder_id, nets):
+        """批量移入文件夹；folder_id 为空表示移出"""
+        try:
+            if folder_id in (None, ""):
+                sql = "DELETE FROM ipam_tree_folder_member WHERE ip = %s AND mask = %s"
+                params_list = [(n["ip"], str(n["mask"])) for n in nets]
+            else:
+                timestamp = str(int(time.time()))
+                sql = '''INSERT INTO ipam_tree_folder_member (ip, mask, folder_id, update_time)
+                         VALUES (%s, %s, %s, %s)
+                         ON DUPLICATE KEY UPDATE
+                         folder_id = VALUES(folder_id),
+                         update_time = VALUES(update_time)'''
+                params_list = [(n["ip"], str(n["mask"]), int(folder_id), timestamp) for n in nets]
+
+            self.cursor.executemany(sql, params_list)
+            self.conn.commit()
+            return "success"
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"网段移入/移出文件夹失败: {e}")
             return "failed"
         finally:
             self.cursor.close()
