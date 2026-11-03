@@ -13,6 +13,8 @@ API_PORT="${2:-28000}"
 WEBSOCKET_PORT="${3:-28001}"
 CONTAINER_API_PORT="8080"
 CONTAINER_WEBSOCKET_PORT="8081"
+# Docker 自定义网络：与 network_bot 共用，容器间可用容器名互相访问
+DOCKER_NETWORK="${DOCKER_NETWORK:-netops}"
 
 # 数据目录配置
 DATA_BASE_DIR="${CENTRAL_DATA_DIR:-$(pwd)}"
@@ -34,6 +36,7 @@ echo -e "${YELLOW}镜像:${NC} ${IMAGE_NAME}:${IMAGE_TAG}"
 echo -e "${YELLOW}端口映射:${NC}"
 echo -e "  API: ${API_PORT}:${CONTAINER_API_PORT}"
 echo -e "  WebSocket: ${WEBSOCKET_PORT}:${CONTAINER_WEBSOCKET_PORT}"
+echo -e "${YELLOW}Docker 网络:${NC} ${DOCKER_NETWORK}"
 echo ""
 
 # 切换到脚本所在目录的父目录（项目根目录）
@@ -64,6 +67,14 @@ if docker ps -a | grep -q "${CONTAINER_NAME}"; then
     echo ""
 fi
 
+# 检查 Docker 网络，不存在则创建
+if ! docker network inspect "${DOCKER_NETWORK}" >/dev/null 2>&1; then
+    echo -e "${YELLOW}Docker 网络 ${DOCKER_NETWORK} 不存在，正在创建...${NC}"
+    docker network create "${DOCKER_NETWORK}"
+    echo -e "${GREEN}✓${NC} 网络已创建: ${DOCKER_NETWORK}"
+    echo ""
+fi
+
 # 创建必要的目录
 echo -e "${YELLOW}准备数据目录...${NC}"
 mkdir -p "${LOGS_DIR}"
@@ -78,6 +89,7 @@ echo ""
 
 docker run -d \
     --name "${CONTAINER_NAME}" \
+    --network "${DOCKER_NETWORK}" \
     -p ${API_PORT}:${CONTAINER_API_PORT} \
     -p ${WEBSOCKET_PORT}:${CONTAINER_WEBSOCKET_PORT} \
     -e PYTHONUNBUFFERED=1 \
