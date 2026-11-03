@@ -9,7 +9,7 @@ import time
 from typing import Optional, Iterator, Any
 
 from config.config import Config
-from function_messaging.redis_client import get_redis_client
+from function_queue.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 

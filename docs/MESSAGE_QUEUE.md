@@ -76,22 +76,23 @@ class Config:
 
 ### 统一适配器
 
-项目使用 `function_messaging/message_queue.py` 作为统一适配器，自动根据配置加载对应的队列实现。
+项目使用 `../function_queue/message_queue.py` 作为统一适配器，自动根据配置加载对应的队列实现。
 
 **业务代码示例**：
+
 ```python
 # 使用统一接口，无需关心底层实现
-from function_messaging.message_queue import (
-    readDataFromSyslog,
-    readDataFromCollect,
-    sendDataToSyslog,
-    sendDataToCollector
+from function_queue.message_queue import (
+   readDataFromSyslog,
+   readDataFromCollect,
+   sendDataToSyslog,
+   sendDataToCollector
 )
 
 # 读取消息（统一接口）
 for message in readDataFromCollect():
-    data = message.value  # 统一通过 .value 访问消息内容
-    print(data)
+   data = message.value  # 统一通过 .value 访问消息内容
+   print(data)
 
 # 发送消息（统一接口）
 sendDataToCollector({"key": "value"})
@@ -272,9 +273,9 @@ linger_ms = 10
 
 ## 📚 相关文件
 
-- `function_messaging/message_queue.py`: 统一适配器
-- `function_messaging/kafka_client.py`: Kafka 实现
-- `function_messaging/queue_client.py`: Redis 队列实现
+- `../function_queue/message_queue.py`: 统一适配器
+- `../function_queue/kafka_client.py`: Kafka 实现
+- `../function_queue/queue_client.py`: Redis 队列实现
 - `services/syslog_main.py`: Syslog 数据处理服务
 - `services/data_main.py`: 数据处理服务
 

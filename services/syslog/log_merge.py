@@ -5,7 +5,7 @@ import threading
 import json
 import time
 from hashlib import sha1,md5
-from function_messaging.redis_client import get_redis_client
+from function_queue.redis_client import get_redis_client
 from services.syslog import MergeRule, get_mergelisted_entries
 
 logger = logging.getLogger(__name__)

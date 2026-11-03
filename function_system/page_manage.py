@@ -4,7 +4,7 @@ from tables.PagesDB import PagesDB
 from tables.RolesDB import RolesDB
 from utils.utils import decorator_checkparams
 
-from function_messaging.redis_client import get_redis_client
+from function_queue.redis_client import get_redis_client
 
 
 # 配置日志

@@ -106,5 +106,11 @@ class Config:
         "api_token": "xxx"  # API token（必须修改为你自己的）
     }
 
+    # 企业微信智能机器人消息推送（经 network_bot 的 /api/send 转发，复用其长连接）
+    wecom_bot_config = {
+        "api_url": "http://localhost:3000/api/send",
+        "timeout": 10,
+    }
+
 class LocalConfig:
     sign_key = "xx"

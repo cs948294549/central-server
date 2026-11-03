@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # 根据配置选择队列实现
 if Config.queue_type == "kafka":
     logger.info("✓ 使用 Kafka 消息队列")
-    from function_messaging.kafka_client import (
+    from function_queue.kafka_client import (
         readDataFromSyslog,
         readDataFromCollect,
         sendDataToSyslog,
@@ -26,7 +26,7 @@ if Config.queue_type == "kafka":
 
 elif Config.queue_type == "redis":
     logger.info("✓ 使用 Redis 消息队列")
-    from function_messaging.queue_client import (
+    from function_queue.queue_client import (
         readDataFromSyslog,
         readDataFromCollect,
         sendDataToSyslog,

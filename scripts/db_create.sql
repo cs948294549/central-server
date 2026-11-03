@@ -176,6 +176,29 @@ CREATE TABLE ipam_ipaddr(
     update_time varchar(15) COLLATE utf8_bin NULL COMMENT '更新时间',
     primary key(ip_deci)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网段内实际使用地址';
+-- ipam文件夹
+DROP TABLE IF EXISTS ipam_tree_folder;
+CREATE TABLE ipam_tree_folder(
+    id int NOT NULL AUTO_INCREMENT COMMENT '文件夹ID',
+    name varchar(64) COLLATE utf8_bin NOT NULL COMMENT '文件夹名称',
+    sort int NOT NULL DEFAULT 0 COMMENT '排序，越小越靠前',
+    comment varchar(300) COLLATE utf8_bin NOT NULL DEFAULT '' COMMENT '描述',
+    create_time varchar(15) COLLATE utf8_bin NULL COMMENT '创建时间',
+    update_time varchar(15) COLLATE utf8_bin NULL COMMENT '更新时间',
+    primary key(id),
+    unique key uk_name(name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='IP网段树文件夹';
+
+-- 文件夹成员（一个网段只能属于一个文件夹，仅最外层网段生效）
+DROP TABLE IF EXISTS ipam_tree_folder_member;
+CREATE TABLE ipam_tree_folder_member(
+    ip varchar(128) COLLATE utf8_bin NOT NULL COMMENT '网络地址，对应 ipam_net.ip',
+    mask varchar(4) COLLATE utf8_bin NOT NULL COMMENT '掩码，对应 ipam_net.mask',
+    folder_id int NOT NULL COMMENT '文件夹ID',
+    update_time varchar(15) COLLATE utf8_bin NULL COMMENT '更新时间',
+    primary key(ip, mask),
+    key idx_folder(folder_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='IP网段树文件夹成员';
 
 -- ============================================
 -- 拓扑管理表
