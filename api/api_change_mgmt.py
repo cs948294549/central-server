@@ -1117,6 +1117,36 @@ def get_log_list():
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
 
 
+@change_mgmt_bp.route('/log/add', methods=['POST'])
+def add_op_log():
+    """添加工单评论（写入操作记录）"""
+    try:
+        data = request.json or {}
+        op_id = data.get('op_id')
+        msg = (data.get('msg') or '').strip()
+
+        if not op_id:
+            return APIResponse.param_error(message="缺少参数 op_id")
+        if not msg:
+            return APIResponse.param_error(message="评论内容不能为空")
+        if len(msg) > 500:
+            return APIResponse.param_error(message="评论内容不能超过500字")
+
+        username = g.user.get('username', '')
+        logger.info(f"{username}添加工单评论: {op_id}")
+
+        result = log_manage.add_op_log(op_id, '11', username, msg)
+
+        if result != "failed":
+            return APIResponse.success(data={"pid": result}, message="评论成功")
+        else:
+            return APIResponse.error(message="评论失败")
+
+    except Exception as e:
+        logger.error(f"添加评论失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
 @change_mgmt_bp.route('/approval/list', methods=['POST'])
 def get_approval_list():
     """获取审批记录"""
