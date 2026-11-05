@@ -291,6 +291,8 @@ class CollectDB(mysqldb_netops):
             conditions.append("gates_ipv6.gateway regexp '" + searchKeys["gatereg"].replace(".", "[.]") + "'")
         if "port_status" in searchKeys.keys():
             conditions.append("(ports.oper_statu <> 2 or ports.oper_statu is NULL)")
+        if "sysname" in searchKeys.keys():
+            conditions.append("devices.sysname regexp '" + searchKeys["sysname"] + "'")
         sql = 'SELECT gates_ipv6.ip,gates_ipv6.gateway,ports.if_name,gates_ipv6.mask,gates_ipv6.timestamp,' \
               'ports.oper_statu,ports.port_id,devices.sysname,ports.alias ' \
               ' FROM gates_ipv6 ' \
@@ -343,6 +345,10 @@ class CollectDB(mysqldb_netops):
             conditions.append("sn_number regexp '" + searchKeys["sn_number"].replace(".", "[.]") + "'")
         if "sn_type" in searchKeys.keys():
             conditions.append("sn_type = '" + str(searchKeys["sn_type"]) + "'")
+
+        # dev_sn 表没有 sysname，先按设备名筛出 ip 再查原表
+        if "sysname" in searchKeys.keys():
+            conditions.append("ip in (select ip from devices where sysname regexp '" + searchKeys["sysname"] + "')")
 
         sql = 'select t_sn.ip,devices.sysname,sn_id,sn_name,sn_desc,sn_number,t_sn.timestamp,sn_type from ' \
               '(select ip,sn_id,sn_name,sn_desc,sn_number,sn_type,timestamp from dev_sn '
@@ -644,17 +650,18 @@ class CollectDB(mysqldb_netops):
             conditions.append("ip regexp '" + searchKeys["ip"].replace(".", "[.]") + "'")
         if "arp_ip" in searchKeys.keys():
             conditions.append("arp_ip regexp '" + searchKeys["arp_ip"].replace(".", "[.]") + "'")
+        # 先按设备名筛出 ip 再查 arps 原表
+        if "sysname" in searchKeys.keys():
+            conditions.append("ip in (select ip from devices where sysname regexp '" + searchKeys["sysname"] + "')")
 
         conditions1 = []
         if "if_name" in searchKeys.keys():
             conditions1.append("ports.if_name regexp '" + searchKeys["if_name"] + "'")
-        if "sysname" in searchKeys.keys():
-            conditions1.append("devices.sysname regexp '" + searchKeys["sysname"] + "'")
 
 
-        sql = 'select t_arp.ip,devices.sysname,t_arp.arp_ip,t_arp.arp_mac,t_arp.port_id,ports.if_name,t_arp.timestamp from (select ip,arp_ip,arp_mac,port_id,timestamp from arps where '
+        sql = 'select t_arp.ip,devices.sysname,t_arp.arp_ip,t_arp.arp_mac,t_arp.port_id,ports.if_name,t_arp.timestamp from (select ip,arp_ip,arp_mac,port_id,timestamp from arps'
         if len(conditions) > 0:
-            sql += " and ".join(conditions)
+            sql += " where " + " and ".join(conditions)
         else:
             return []
         sql += ') t_arp left join devices on t_arp.ip=devices.ip left join ports on ports.port_id=t_arp.port_id and ports.ip=t_arp.ip '
@@ -692,15 +699,22 @@ class CollectDB(mysqldb_netops):
     def getSwitchArpByDevIP(self, searchKey):
         searchKey = waf(searchKey)
 
+        conditions = []
         if "switch_ip" in searchKey.keys():
-            sql = '''select t_mac.ip,devices.sysname,t_mac.vlan_id,t_mac.mac_address,arps.arp_ip,t_mac.port_id,ports.if_name,t_mac.timestamp from 
-            (select ip,vlan_id,mac_address,port_id,timestamp from macs where ip="{}") t_mac 
-            join arps on arps.arp_mac=t_mac.mac_address 
-            join ports on ports.ip=t_mac.ip and ports.port_id=t_mac.port_id 
-            left join devices on devices.ip=t_mac.ip ;
-            '''.format(searchKey["switch_ip"])
-        else:
+            conditions.append('ip="{}"'.format(searchKey["switch_ip"]))
+        # 先按设备名筛出 ip 再查 macs 原表
+        if "sysname" in searchKey.keys():
+            conditions.append("ip in (select ip from devices where sysname regexp '{}')".format(searchKey["sysname"]))
+
+        if not conditions:
             return "failed"
+
+        sql = '''select t_mac.ip,devices.sysname,t_mac.vlan_id,t_mac.mac_address,arps.arp_ip,t_mac.port_id,ports.if_name,t_mac.timestamp from
+        (select ip,vlan_id,mac_address,port_id,timestamp from macs where {}) t_mac
+        join arps on arps.arp_mac=t_mac.mac_address
+        join ports on ports.ip=t_mac.ip and ports.port_id=t_mac.port_id
+        left join devices on devices.ip=t_mac.ip
+        '''.format(" and ".join(conditions))
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()

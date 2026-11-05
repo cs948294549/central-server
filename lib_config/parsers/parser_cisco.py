@@ -201,7 +201,9 @@ class CiscoParser(BaseParser):
           200 permit tcp any addrgroup og_ip_idcnet portgroup og_port_per
           230 permit tcp any 10.37.0.0/16 eq 2181
           910 deny tcp any addrgroup og_ip_idcnet
-
+        ip access-list standard route-map-ospf
+         permit 9.234.1.0 0.0.0.255
+         permit 9.234.101.0 0.0.0.255
         Returns:
             List[AclConfig]: ACL 配置列表
         """
@@ -536,60 +538,9 @@ if __name__ == "__main__":
     )
 
     cisco_config = '''
-object-group ip address og_ip_idcnet
-  10 10.32.0.0/14 
-  20 10.36.0.0/16 
-  30 10.16.0.0/16 
-  40 10.128.0.0/12 
-object-group ip address og_ip_relay
-  10 host 10.33.144.129
-  20 host 10.32.19.83
-  30 host 10.33.102.136
-  40 host 10.39.128.29
-  50 host 10.39.128.30
-  60 host 10.33.144.157
-object-group ip address og_ip_security_source
-  10 host 172.24.33.97
-  20 host 172.24.33.126
-object-group ip address og_ip_vdds
-  10 host 10.39.160.8
-object-group ip port og_port_bigdata_proxy
-  10 eq 7777
-  20 eq 8042
-  30 eq 8080
-  40 eq 8088
-  50 eq 16010
-  60 eq 16030
-  70 eq 18080
-  80 eq 18088
-  90 eq 19888
-  100 eq 50070
-  110 eq 10002
-object-group ip port og_port_db
-  10 eq 27017
-object-group ip port og_port_deny
-  10 eq 23
-  20 eq 22
-  30 eq 2181
-object-group ip port og_port_oa
-  10 range 8080 8090
-  20 eq domain
-  30 gt 1024
-  40 lt 1024
-  50 neq 80
-ip access-list 2999
-  10 permit ip 10.143.170.0/24 any
-  100 permit ip 10.33.103.136/32 any
-  10000 deny ip any any
-ip access-list acl_office_to_idc
-  statistics per-entry
-  100 permit tcp any any established
-  200 permit tcp any addrgroup og_ip_idcnet portgroup og_port_per
-  210 permit tcp any addrgroup og_ip_relay eq 22
-  340 permit tcp any addrgroup og_ip_bigdata_proxy portgroup og_port_bigdata_proxy
-  900 deny tcp any any portgroup og_port_deny
-  910 deny tcp any addrgroup og_ip_idcnet
-  1000 permit ip any any
+ip access-list standard route-map-ospf
+ permit 9.234.1.0 0.0.0.255
+ permit 9.234.101.0 0.0.0.255
 '''
 
     # 测试解析器

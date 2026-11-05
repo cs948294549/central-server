@@ -130,12 +130,15 @@ def getarp_list():
 def getTorARP_info():
     try:
         data = request.json
-        switch_ip = data.get('switch_ip', None)
-        if switch_ip:
-            respond = get_mac_table_by_tor({"switch_ip": switch_ip})
+        query = {}
+        for k in ("switch_ip", "sysname"):
+            if data.get(k):
+                query[k] = data.get(k)
+        if query:
+            respond = get_mac_table_by_tor(query)
             return APIResponse.success(data=respond, message="查询成功")
         else:
-            return APIResponse.error(data={}, message="缺少接入交换机IP")
+            return APIResponse.error(data={}, message="缺少接入交换机IP或设备名")
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
