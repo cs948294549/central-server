@@ -22,8 +22,25 @@ def get_order_list(filters=None):
         list: 工单列表
     """
     try:
+        filters = dict(filters or {})
+
+        # 复合查询：先按命令/设备查询 op_devs，再用命中的 op_id 查询工单
+        dev_filters = {k: filters.pop(k) for k in ["cmd_reg", "device_reg"] if filters.get(k)}
+        filters.pop("cmd_reg", None)
+        filters.pop("device_reg", None)
+        if dev_filters:
+            dev_db = AlterationManageDB()
+            dev_list = dev_db.get_op_devs_by_reg(dev_filters)
+            if dev_list == "failed":
+                return "failed"
+
+            op_ids = list({item["op_id"] for item in dev_list})
+            if not op_ids:
+                return []
+            filters["op_ids"] = op_ids
+
         db = AlterationManageDB()
-        result = db.get_op_order_list(filters or {})
+        result = db.get_op_order_list(filters)
         return result
     except Exception as e:
         logger.error(f"获取工单列表失败: {e}")

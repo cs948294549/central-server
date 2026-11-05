@@ -552,6 +552,10 @@ class AlterationManageDB(mysqldb_netops):
             if "cur_user" in data:
                 conditions.append("FIND_IN_SET(%s, cur_group) > 0")
                 params.append(data["cur_user"])
+            if "op_ids" in data:
+                placeholders = ','.join(['%s'] * len(data["op_ids"]))
+                conditions.append(f"op_id IN ({placeholders})")
+                params.extend(data["op_ids"])
 
             sql = """SELECT op_id, op_type, title, descrip, status, username, assigner,
                      is_auto, popo, create_time, update_time, begin_time, finish_time,
@@ -717,6 +721,46 @@ class AlterationManageDB(mysqldb_netops):
             return results
         except Exception as err:
             logger.error(f"获取设备列表失败: {err}")
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def get_op_devs_by_reg(self, data):
+        """按命令/设备正则查询设备列表（cmd_reg, device_reg）"""
+        try:
+            data = waf(data)
+            conditions = []
+            params = []
+
+            if "cmd_reg" in data:
+                conditions.append("cmd_exec REGEXP %s")
+                params.append(data["cmd_reg"])
+            if "device_reg" in data:
+                conditions.append("(ip REGEXP %s OR sysname REGEXP %s OR model REGEXP %s OR asset_no REGEXP %s)")
+                params.extend([data["device_reg"]] * 4)
+
+            sql = """SELECT pid, op_id, batch, ip, sysname, model, asset_no, status,
+                     tag, is_auto, timestamp FROM op_devs"""
+            if conditions:
+                sql += " WHERE " + " AND ".join(conditions)
+
+            proper = ["pid", "op_id", "batch", "ip", "sysname", "model", "asset_no", "status",
+                     "tag", "is_auto", "timestamp"]
+            self.cursor.execute(sql, params)
+            result1 = self.cursor.fetchall()
+            results = []
+
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+
+            return results
+        except Exception as err:
+            logger.error(f"按正则查询设备列表失败: {err}")
             return "failed"
         finally:
             self.cursor.close()
