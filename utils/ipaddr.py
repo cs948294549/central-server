@@ -41,6 +41,12 @@ def wildcard2length(wildcard):
     return 32 - netmask2length(wildcard)
 
 
+def length2wildcard(mask_length):
+    """前缀长度转反掩码（Cisco ACL wildcard mask）"""
+    netmask = length2netmask(int(mask_length))
+    return '.'.join(str(255 - int(octet)) for octet in netmask.split('.'))
+
+
 def getstartend(dest, mask):
     gateint = ip2decimalism(dest)
     maskint = ip2decimalism(mask)

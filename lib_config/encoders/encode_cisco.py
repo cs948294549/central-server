@@ -6,6 +6,7 @@ Cisco 配置编码器
 import logging
 from typing import Any, Dict, List, Optional
 from lib_config.encoders.encode_base import BaseEncoder, register_encoder
+from utils.ipaddr import length2wildcard
 from lib_config.models import (
     PrefixListConfig,
     PrefixListEntry,
@@ -136,6 +137,37 @@ class CiscoEncoder(BaseEncoder):
 
         return address
 
+    def _encode_standard_addr(self, spec: Optional[Dict[str, Any]]) -> str:
+        """
+        渲染标准 ACL 的地址为「网络地址 + 反掩码」
+
+        标准 ACL 不认 CIDR 写法, 必须是 9.234.1.0 0.0.0.255
+        """
+        if not spec:
+            return 'any'
+
+        addr_type = spec.get('type')
+
+        if addr_type in ('addrgroup', 'any'):
+            return self._encode_addr(spec)
+
+        address = spec.get('address', '')
+
+        # IPv6 没有反掩码, 保持原样
+        if ':' in address:
+            return address.split('/')[0] if addr_type == 'host' else address
+
+        if addr_type == 'host':
+            return f"host {address.split('/')[0]}"
+
+        if '/' not in address:
+            return address
+
+        network, length = address.split('/', 1)
+        if length == '32':
+            return f"host {network}"
+        return f"{network} {length2wildcard(length)}"
+
     def _encode_port(self, spec: Optional[Dict[str, Any]]) -> str:
         """
         渲染 PortSpec 为 Cisco 端口文本（与 parser._parse_port 互逆）
@@ -179,7 +211,7 @@ class CiscoEncoder(BaseEncoder):
             config_lines.append(self._encode_acl_header(acl))
 
             for entry in sorted(acl.entries, key=lambda e: e.seq):
-                config_lines.extend(self._encode_acl_entry(entry, operation))
+                config_lines.extend(self._encode_acl_entry(entry, operation, acl.acl_kind))
 
             config_lines.append("")
 
@@ -190,21 +222,34 @@ class CiscoEncoder(BaseEncoder):
 
     def _encode_acl_header(self, acl: AclConfig) -> str:
         """编码 ACL 块头"""
-        return f"{'ipv6' if acl.acl_type == 'ipv6' else 'ip'} access-list {acl.acl_name}"
+        # 标准 ACL 必须带 standard 关键字, 否则会被当成 extended 解析
+        kind = ' standard' if acl.acl_kind == 'basic' and acl.acl_type != 'ipv6' else ''
+        return f"{'ipv6' if acl.acl_type == 'ipv6' else 'ip'} access-list{kind} {acl.acl_name}"
 
-    def _encode_acl_entry(self, entry: AclEntry, operation: str = 'add') -> List[str]:
+    def _encode_acl_entry(self, entry: AclEntry, operation: str = 'add',
+                          acl_kind: Optional[str] = None) -> List[str]:
         """
         编码单条 ACL 规则
 
         Args:
             entry: 规则条目
             operation: 操作类型，'add' 或 'delete'
+            acl_kind: ACL 类别，basic 时只写源地址
         """
         if operation == 'delete':
             # 删除操作: 块内 no <seq>, 块上下文由调用方输出
             return [f"  no {entry.seq}"]
 
         action = "permit" if entry.action == Action.PERMIT else "deny"
+
+        # 标准 ACL: <seq> <action> <src>, 网络地址用反掩码
+        if acl_kind == 'basic':
+            line = f"  {entry.seq} {action} {self._encode_standard_addr(entry.src)}"
+            for option, value in (entry.options or {}).items():
+                if value:
+                    line += f" {option}"
+            return [line]
+
         line = (
             f"  {entry.seq} {action} {entry.protocol} "
             f"{self._encode_addr(entry.src)}"

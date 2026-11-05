@@ -202,8 +202,8 @@ class CiscoParser(BaseParser):
           230 permit tcp any 10.37.0.0/16 eq 2181
           910 deny tcp any addrgroup og_ip_idcnet
         ip access-list standard route-map-ospf
-         permit 9.234.1.0 0.0.0.255
-         permit 9.234.101.0 0.0.0.255
+          permit 9.234.1.0 0.0.0.255
+          permit 9.234.101.0 0.0.0.255
         Returns:
             List[AclConfig]: ACL 配置列表
         """
@@ -216,8 +216,9 @@ class CiscoParser(BaseParser):
         )
 
         # 地址: any / host x / addrgroup x / x.x.x.x [反掩码] / x/n / v6字面量
+        # 反掩码必须整体匹配, 不能只吃 0.0.0.255 开头的 0, 否则会被算成 0.0.0.0/0
         addr = (r'(?:any|host\s+\S+|(?:addrgroup|object-group(?:\s+network)?)\s+\S+'
-                r'|[0-9a-fA-F:.]+(?:/\d+)?(?:\s+(?:0|[\d.]+))?)')
+                r'|[0-9a-fA-F:.]+(?:/\d+)?(?:\s+(?:[\d.]+|0))?)')
         # 端口: portgroup x / object-group service x / eq 80 / range 5900 5930
         port = r'(?:(?:portgroup|object-group(?:\s+service)?)\s+\S+|(?:eq|gt|lt|neq|range)\s+\S+(?:\s+\S+)?)'
 
@@ -235,6 +236,15 @@ class CiscoParser(BaseParser):
             r'^(?:(?P<seq>\d+)\s+)?(?P<action>permit|deny)\s+(?P<protocol>\S+)\s+'
             r'(?P<src>' + addr + r')\s+'
             r'(?P<dst>' + addr + r')\s*'
+            r'(?P<options>.*)$',
+            re.IGNORECASE
+        )
+
+        # 标准 ACL 规则: [seq] <action> <src> [options]
+        # 只有源地址, 没有 protocol / 目的地址, 如: permit 9.234.1.0 0.0.0.255
+        rule_standard_pattern = re.compile(
+            r'^(?:(?P<seq>\d+)\s+)?(?P<action>permit|deny)\s+'
+            r'(?P<src>' + addr + r')\s*'
             r'(?P<options>.*)$',
             re.IGNORECASE
         )
@@ -287,8 +297,12 @@ class CiscoParser(BaseParser):
                     ):
                         continue
 
+                    # 标准 ACL 的规则只有源地址, 优先用标准规则匹配
+                    patterns = (rule_standard_pattern,) if acl_kind == 'basic' \
+                        else (rule_port_pattern, rule_pattern)
+
                     rule = None
-                    for pattern in (rule_port_pattern, rule_pattern):
+                    for pattern in patterns:
                         candidate = pattern.match(content)
                         if candidate:
                             # 端口位置解析不出来说明该规则无端口
@@ -305,33 +319,35 @@ class CiscoParser(BaseParser):
                         logger.debug(f"[{self.vendor}] 忽略无法识别的行: {content}")
                         continue
 
-                    src = self._parse_addr(rule.group('src'))
-                    dst = self._parse_addr(rule.group('dst'))
+                    groups = rule.groupdict()
+                    src = self._parse_addr(groups.get('src'))
+                    dst = self._parse_addr(groups.get('dst'))
 
                     # 目的地址省略时补 any
-                    if src is not None and dst is None and not rule.group('dst'):
+                    if src is not None and dst is None and not groups.get('dst'):
                         dst = {'type': 'any'}
                     if src is None or dst is None:
                         logger.debug(f"[{self.vendor}] 忽略地址不全的规则: {content}")
                         continue
 
                     options = {}
-                    if 'established' in (rule.group('options') or '').lower():
+                    if 'established' in (groups.get('options') or '').lower():
                         options['established'] = True
 
-                    seq = int(rule.group('seq')) if rule.group('seq') else None
+                    seq = int(groups.get('seq')) if groups.get('seq') else None
                     if seq is None:
                         existing_seqs = [e.seq for e in access_lists_dict[key]['entries']]
                         seq = max(existing_seqs) + 10 if existing_seqs else 10
 
                     access_lists_dict[key]['entries'].append(AclEntry(
                         seq=seq,
-                        action=Action.PERMIT if rule.group('action').lower() == 'permit' else Action.DENY,
-                        protocol=rule.group('protocol').lower(),
+                        action=Action.PERMIT if groups['action'].lower() == 'permit' else Action.DENY,
+                        # 标准 ACL 不写协议, 语义上等同 ip
+                        protocol=(groups.get('protocol') or 'ip').lower(),
                         src=src,
-                        src_port=self._parse_port(rule.group('src_port')),
+                        src_port=self._parse_port(groups.get('src_port')),
                         dst=dst,
-                        dst_port=self._parse_port(rule.group('dst_port')),
+                        dst_port=self._parse_port(groups.get('dst_port')),
                         options=options
                     ))
 
