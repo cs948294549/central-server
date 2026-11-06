@@ -55,7 +55,7 @@ def get_group_reference_count(name):
     """
     try:
         db = AccessListDB()
-        standards = db.getStandardsList({})
+        standards = db.getStandardsEntries({})
 
         if standards == "failed":
             return 0

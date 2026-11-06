@@ -42,9 +42,10 @@ class AccessListDB(mysqldb_netops):
             if "is_active" in data.keys():
                 conditions.append("is_active=" + str(data["is_active"]))
 
-            # 构建SQL
+            # 构建SQL：列表页不返回 entries 大字段，只给出规则条数
             sql = """SELECT id, name, acl_number, acl_type, acl_kind, fingerprint,
-                     entries, description, is_active, created_at, updated_at, created_by
+                     JSON_LENGTH(entries) AS rule_count,
+                     description, is_active, created_at, updated_at, created_by
                      FROM acl_standards"""
 
             if len(conditions) > 0:
@@ -54,7 +55,57 @@ class AccessListDB(mysqldb_netops):
 
             # 执行查询
             proper = ["id", "name", "acl_number", "acl_type", "acl_kind", "fingerprint",
-                      "entries", "description", "is_active", "created_at", "updated_at", "created_by"]
+                      "rule_count", "description", "is_active", "created_at", "updated_at", "created_by"]
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+            results = []
+
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] is not None else ""
+                    results.append(result)
+
+            return results
+
+        except Exception as err:
+            logger.error("======AccessListDB getStandardsList error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def getStandardsEntries(self, data):
+        """
+        获取标准规则的条目内容（供地址组/端口组统计引用关系使用，不对外提供接口）
+        :param data: 查询条件 {name, acl_type, is_active}
+        :return: 列表数据或"failed"
+        """
+        data = waf(data)
+        try:
+            conditions = []
+
+            # 按名称搜索
+            if "name" in data.keys() and data["name"]:
+                conditions.append("name LIKE '%" + str(data["name"]) + "%'")
+
+            # 按地址族筛选
+            if "acl_type" in data.keys() and data["acl_type"]:
+                conditions.append("acl_type='" + str(data["acl_type"]) + "'")
+
+            # 按状态筛选
+            if "is_active" in data.keys():
+                conditions.append("is_active=" + str(data["is_active"]))
+
+            sql = """SELECT id, name, acl_type, entries
+                     FROM acl_standards"""
+
+            if len(conditions) > 0:
+                sql = sql + " WHERE " + " AND ".join(conditions)
+
+            # 执行查询
+            proper = ["id", "name", "acl_type", "entries"]
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
             results = []
@@ -68,14 +119,12 @@ class AccessListDB(mysqldb_netops):
                             result[proper[num]] = json.loads(i[num]) if i[num] else []
                         else:
                             result[proper[num]] = i[num] if i[num] is not None else ""
-                    # 列表页给出条目数，避免前端解析 entries
-                    result["rule_count"] = len(result["entries"])
                     results.append(result)
 
             return results
 
         except Exception as err:
-            logger.error("======AccessListDB getStandardsList error========\n{}".format(str(err)))
+            logger.error("======AccessListDB getStandardsEntries error========\n{}".format(str(err)))
             return "failed"
         finally:
             self.cursor.close()

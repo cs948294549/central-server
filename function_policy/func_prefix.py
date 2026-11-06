@@ -64,6 +64,26 @@ def get_standard_list(data):
         return {"success": False, "message": f"查询失败: {str(err)}"}
 
 
+def get_standard_detail(standard_id):
+    """
+    获取标准规则详情（列表页不返回 entries，查看/编辑/配置管理时需要单独取）
+    :param standard_id: 规则ID
+    :return: {success: bool, data: {}, message: str}
+    """
+    try:
+        db = PrefixListDB()
+        result = db.getStandardDetail({"id": standard_id})
+
+        if result == "failed":
+            return {"success": False, "message": "标准规则不存在"}
+
+        return {"success": True, "data": result, "message": "查询成功"}
+
+    except Exception as err:
+        logger.error(f"获取标准规则详情失败: {err}")
+        return {"success": False, "message": f"查询失败: {str(err)}"}
+
+
 def get_records_list(data):
     """
     获取设备配置记录列表

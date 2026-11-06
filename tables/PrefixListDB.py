@@ -37,9 +37,11 @@ class PrefixListDB(mysqldb_netops):
             if "is_active" in data.keys():
                 conditions.append("is_active=" + str(data["is_active"]))
 
-            # 构建SQL
-            sql = """SELECT id, name, fingerprint, entries, description,
-                     is_active, created_at, updated_at, created_by
+            # 构建SQL：列表页不返回 entries 大字段，只给出条目数
+            # entries 存的是 {"entries": [...]}，长度要取内层数组
+            sql = """SELECT id, name, fingerprint,
+                     JSON_LENGTH(entries->'$.entries') AS entry_count,
+                     description, is_active, created_at, updated_at, created_by
                      FROM prefix_list_standards"""
 
             if len(conditions) > 0:
@@ -48,8 +50,8 @@ class PrefixListDB(mysqldb_netops):
             sql = sql + " ORDER BY created_at DESC"
 
             # 执行查询
-            proper = ["id", "name", "fingerprint", "entries", "description",
-                     "is_active", "created_at", "updated_at", "created_by"]
+            proper = ["id", "name", "fingerprint", "entry_count", "description",
+                      "is_active", "created_at", "updated_at", "created_by"]
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
             results = []
@@ -58,11 +60,7 @@ class PrefixListDB(mysqldb_netops):
                 for i in result1:
                     result = {}
                     for num in range(len(proper)):
-                        if proper[num] == "entries":
-                            # JSON 字段解析
-                            result[proper[num]] = json.loads(i[num]) if i[num] else {"entries": []}
-                        else:
-                            result[proper[num]] = i[num] if i[num] is not None else ""
+                        result[proper[num]] = i[num] if i[num] is not None else ""
                     results.append(result)
 
             return results

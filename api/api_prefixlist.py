@@ -2,6 +2,7 @@ from flask import Blueprint, request, g
 from api.api_response import APIResponse
 from function_policy.func_prefix import (
     get_standard_list,
+    get_standard_detail,
     get_records_list,
     create_standard,
     update_standard,
@@ -35,6 +36,26 @@ def get_standards_list():
 
     except Exception as e:
         logger.error(f"查询标准规则列表异常: {e}")
+        return APIResponse.server_error(message=f"接口异常: {str(e)}")
+
+
+@prefix_list_bp.route('/standards/detail', methods=['POST'])
+def get_standard_detail_api():
+    """获取标准规则详情"""
+    try:
+        data = request.json
+        if not data or "id" not in data:
+            return APIResponse.param_error(message="缺少参数: id")
+
+        result = get_standard_detail(data["id"])
+
+        if result["success"]:
+            return APIResponse.success(data=result["data"], message=result["message"])
+        else:
+            return APIResponse.error(message=result["message"])
+
+    except Exception as e:
+        logger.error(f"查询标准规则详情异常: {e}")
         return APIResponse.server_error(message=f"接口异常: {str(e)}")
 
 

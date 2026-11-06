@@ -14,32 +14,8 @@ logger = logging.getLogger(__name__)
 问题处理记录已合并到通用的 policy_issue_records 表，见 tables/PolicyIssueDB.py
 '''
 
-# 表字段顺序，与 SELECT 保持一致
-PORTGROUP_COLUMNS = ["id", "name", "acl_type", "fingerprint", "entries",
-                     "description", "is_active", "created_at", "updated_at", "created_by"]
-
-# portgroup_records 字段顺序，与 SELECT 保持一致
-PORTGROUP_RECORD_COLUMNS = ["id", "device_ip", "device_name", "vendor", "group_name",
-                            "fingerprint", "entries", "collected_at"]
-
-
 class PortGroupDB(mysqldb_netops):
     """端口组数据库操作类"""
-
-    def _decode_rows(self, rows):
-        """把结果集解码成字典列表"""
-        results = []
-        for row in rows:
-            result = {}
-            for num in range(len(PORTGROUP_COLUMNS)):
-                if PORTGROUP_COLUMNS[num] == "entries":
-                    result[PORTGROUP_COLUMNS[num]] = json.loads(row[num]) if row[num] else []
-                else:
-                    result[PORTGROUP_COLUMNS[num]] = row[num] if row[num] is not None else ""
-            # 列表页给出条目数，避免前端解析 entries
-            result["entry_count"] = len(result["entries"])
-            results.append(result)
-        return results
 
     def getGroupsList(self, data):
         """
@@ -63,7 +39,8 @@ class PortGroupDB(mysqldb_netops):
             if "is_active" in data.keys():
                 conditions.append("is_active=" + str(data["is_active"]))
 
-            sql = """SELECT id, name, acl_type, fingerprint, entries,
+            # 列表页不返回 entries 大字段，只给出条目数
+            sql = """SELECT id, name, acl_type, fingerprint, JSON_LENGTH(entries) AS entry_count,
                      description, is_active, created_at, updated_at, created_by
                      FROM portgroup_standards"""
 
@@ -72,8 +49,21 @@ class PortGroupDB(mysqldb_netops):
 
             sql = sql + " ORDER BY created_at DESC"
 
+            # 执行查询
+            proper = ["id", "name", "acl_type", "fingerprint", "entry_count",
+                      "description", "is_active", "created_at", "updated_at", "created_by"]
             self.cursor.execute(sql)
-            return self._decode_rows(self.cursor.fetchall())
+            result1 = self.cursor.fetchall()
+            results = []
+
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] is not None else ""
+                    results.append(result)
+
+            return results
 
         except Exception as err:
             logger.error("======PortGroupDB getGroupsList error========\n{}".format(str(err)))
@@ -99,10 +89,19 @@ class PortGroupDB(mysqldb_netops):
                      FROM portgroup_standards WHERE id=%s"""
 
             self.cursor.execute(sql, (data["id"],))
-            row = self.cursor.fetchone()
+            result = self.cursor.fetchone()
 
-            if row:
-                return self._decode_rows([row])[0]
+            if result:
+                proper = ["id", "name", "acl_type", "fingerprint", "entries",
+                          "description", "is_active", "created_at", "updated_at", "created_by"]
+                detail = {}
+                for num in range(len(proper)):
+                    if proper[num] == "entries":
+                        detail[proper[num]] = json.loads(result[num]) if result[num] else []
+                    else:
+                        detail[proper[num]] = result[num] if result[num] is not None else ""
+                detail["entry_count"] = len(detail["entries"])
+                return detail
             else:
                 return "failed"
 
@@ -288,17 +287,19 @@ class PortGroupDB(mysqldb_netops):
             sql = sql + " ORDER BY collected_at DESC"
 
             self.cursor.execute(sql)
-            rows = self.cursor.fetchall()
+            result1 = self.cursor.fetchall()
             results = []
 
-            if len(rows) > 0:
-                for row in rows:
+            if len(result1) > 0:
+                proper = ["id", "device_ip", "device_name", "vendor", "group_name",
+                          "fingerprint", "entries", "collected_at"]
+                for i in result1:
                     result = {}
-                    for num in range(len(PORTGROUP_RECORD_COLUMNS)):
-                        if PORTGROUP_RECORD_COLUMNS[num] == "entries":
-                            result[PORTGROUP_RECORD_COLUMNS[num]] = json.loads(row[num]) if row[num] else []
+                    for num in range(len(proper)):
+                        if proper[num] == "entries":
+                            result[proper[num]] = json.loads(i[num]) if i[num] else []
                         else:
-                            result[PORTGROUP_RECORD_COLUMNS[num]] = row[num] if row[num] is not None else ""
+                            result[proper[num]] = i[num] if i[num] is not None else ""
                     results.append(result)
 
             return results
