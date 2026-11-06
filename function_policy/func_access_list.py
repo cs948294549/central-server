@@ -740,7 +740,12 @@ def collect_and_update_access_lists(ip):
         all_devices = db_collect.getDeviceList({"host": ip})
 
         if not all_devices or len(all_devices) == 0:
-            return {"success": False, "message": f"未找到设备: {ip}"}
+            # 设备已不在设备列表，清掉该IP残留的 ACL / 地址组 / 端口组记录
+            logger.warning(f"未找到设备 {ip}，清理该设备的 ACL/地址组/端口组记录")
+            for db_class, label in ((AccessListDB, "ACL"), (AddrGroupDB, "地址组"), (PortGroupDB, "端口组")):
+                if db_class().deleteRecordsByIP(ip) == "failed":
+                    return {"success": False, "message": f"未找到设备: {ip}，删除{label}旧记录失败"}
+            return {"success": False, "message": f"未找到设备: {ip}，已清理该设备的 ACL/地址组/端口组记录"}
 
         device_info = all_devices[0]
         vendor = device_info.get("vendor")

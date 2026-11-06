@@ -624,7 +624,13 @@ def collect_and_update_prefix_lists(ip):
         all_devices = db_collect.getDeviceList({"host": ip})
 
         if not all_devices or len(all_devices) == 0:
-            return {"success": False, "message": f"未找到设备: {ip}"}
+            # 设备已不在设备列表，清掉该IP残留的前缀列表记录，避免页面留着僵尸数据
+            logger.warning(f"未找到设备 {ip}，清理该设备的前缀列表记录")
+            db_prefix = PrefixListDB()
+            delete_result = db_prefix.deleteRecordsByIP(ip)
+            if delete_result == "failed":
+                return {"success": False, "message": f"未找到设备: {ip}，删除旧记录失败"}
+            return {"success": False, "message": f"未找到设备: {ip}，已清理该设备的前缀列表记录"}
 
         device_info = all_devices[0]
         vendor = device_info.get("vendor")
