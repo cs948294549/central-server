@@ -504,17 +504,17 @@ def get_changed_devices(days=None):
         return "failed"
 
 
-def get_config_backup_status(max_idle_days=1, ignore_keyword="fw"):
+def get_config_backup_status(max_idle_days=1):
     """
     统计设备配置备份情况
 
-    设备清单取 CollectDB 中未屏蔽（admin_status <> '1'）的设备，
+    设备清单取 CollectDB 中未屏蔽（admin_status <> '1'）的设备，全部参与统计
+    （不过滤任何设备类型，保证 正常 + 从未备份 + 备份超时 = 设备总数），
     再关联 dev_config 中每台设备最近一次备份记录：
-    updated_at 距当前时间小于 max_idle_days 天视为正常，其余（含从未备份）视为异常。
-    设备名（sysname）包含 ignore_keyword 的忽略，不计入总数和异常。
+    updated_at 距当前时间小于 max_idle_days 天视为正常，
+    从未有过备份记录的计入 never_backup，有时间但超出的计入 expired。
 
     :param max_idle_days: 备份时间与当前时间相差天数阈值，默认1天
-    :param ignore_keyword: 设备名忽略关键字，默认 ignore_keyword="fw"
     :return: dict 统计结果，失败返回 "failed"
     """
     try:
@@ -530,12 +530,11 @@ def get_config_backup_status(max_idle_days=1, ignore_keyword="fw"):
 
         current_time = int(time.time())
         idle_threshold = int(max_idle_days * 86400)
-        keyword = (ignore_keyword or "").lower()
 
         total = 0
         normal = 0
-        ignored = 0
-        abnormal_devices = []
+        never_backup_devices = []
+        expired_devices = []
 
         for device in devices:
             ip = device.get("ip", "")
@@ -543,37 +542,39 @@ def get_config_backup_status(max_idle_days=1, ignore_keyword="fw"):
             if not ip:
                 continue
 
-            # 设备名包含忽略关键字的跳过（如防火墙不走配置备份）
-            if keyword and keyword in sysname.lower():
-                ignored += 1
-                continue
-
             total += 1
             last_backup = latest_map.get(ip, 0)
 
             if last_backup > 0 and (current_time - last_backup) < idle_threshold:
                 normal += 1
-            else:
-                abnormal_devices.append({
-                    "ip": ip,
-                    "sysname": sysname,
-                    "sys_type": device.get("sys_type", ""),
-                    "last_backup": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_backup)) if last_backup > 0 else "",
-                    "idle_hours": round((current_time - last_backup) / 3600, 1) if last_backup > 0 else None
-                })
+                continue
 
-        # 从未备份的排最前，其余按空闲时间降序
-        abnormal_devices.sort(
-            key=lambda x: (0, 0) if x["idle_hours"] is None else (1, -x["idle_hours"])
-        )
+            item = {
+                "ip": ip,
+                "sysname": sysname,
+                "sys_type": device.get("sys_type", ""),
+                "last_backup": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_backup)) if last_backup > 0 else "",
+                "idle_hours": round((current_time - last_backup) / 3600, 1) if last_backup > 0 else None
+            }
+
+            if last_backup > 0:
+                expired_devices.append(item)
+            else:
+                never_backup_devices.append(item)
+
+        # 超时的按空闲时间降序，从未备份的按设备名排序
+        expired_devices.sort(key=lambda x: -x["idle_hours"])
+        never_backup_devices.sort(key=lambda x: x["sysname"])
 
         return {
             "total": total,
             "normal": normal,
-            "abnormal": len(abnormal_devices),
-            "ignored": ignored,
+            "never_backup": len(never_backup_devices),
+            "expired": len(expired_devices),
+            "abnormal": len(never_backup_devices) + len(expired_devices),
             "max_idle_days": max_idle_days,
-            "abnormal_devices": abnormal_devices
+            "never_backup_devices": never_backup_devices,
+            "expired_devices": expired_devices
         }
     except Exception as e:
         logger.error(f"统计设备配置备份情况失败: {e}")

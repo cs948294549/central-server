@@ -241,22 +241,23 @@ def get_changed_device_list():
 def get_backup_status():
     """
     统计设备配置备份情况
-    设备清单取未屏蔽设备（admin_status <> '1'），关联 dev_config 中每台设备最近一次
-    备份记录的 updated_at，距离当前时间小于 days 天视为正常，其余（含从未备份）视为异常；
-    设备名包含 fw 的忽略。
+    设备清单取未屏蔽设备（admin_status <> '1'）全部参与统计，关联 dev_config 中每台设备
+    最近一次备份记录的 updated_at，距离当前时间小于 days 天视为正常；
+    从未有过备份记录的计入 never_backup，超过天数的计入 expired。
     请求参数:
     {
-        "days": 1,          # 可选，备份时间阈值天数，默认1
-        "ignore_keyword": "fw"  # 可选，设备名忽略关键字，默认fw
+        "days": 1           # 可选，备份时间阈值天数，默认1
     }
     返回:
     {
         "total": 参与统计设备数,
         "normal": 正常数,
-        "abnormal": 异常数,
-        "ignored": 忽略数,
+        "never_backup": 从未备份数,
+        "expired": 备份超时数,
+        "abnormal": 异常数(never_backup + expired),
         "max_idle_days": 阈值天数,
-        "abnormal_devices": [{"ip","sysname","sys_type","last_backup","idle_hours"}, ...]
+        "never_backup_devices": [{"ip","sysname","sys_type","last_backup","idle_hours"}, ...],  # 按设备名排序
+        "expired_devices": [{"ip","sysname","sys_type","last_backup","idle_hours"}, ...]       # 按空闲时间降序
     }
     """
     try:
@@ -270,13 +271,9 @@ def get_backup_status():
         if days <= 0:
             return APIResponse.error(message="参数 days 必须大于0")
 
-        ignore_keyword = data.get('ignore_keyword', 'fw')
-        if ignore_keyword is None:
-            ignore_keyword = ''
+        logger.info(f"{str(g.user)}统计配置备份情况，days={days}")
 
-        logger.info(f"{str(g.user)}统计配置备份情况，days={days}, ignore={ignore_keyword}")
-
-        result = get_config_backup_status(days, ignore_keyword)
+        result = get_config_backup_status(days)
 
         if result == "failed":
             return APIResponse.error(message="查询失败")
