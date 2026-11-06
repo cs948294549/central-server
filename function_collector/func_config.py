@@ -39,6 +39,7 @@ VENDOR_SAVE_COMMANDS = {
 VENDOR_CONFIG_STABLE_START = {
     'cisco_nx': re.compile(r'^version\s'),
     'cisco_ios': re.compile(r'^version\s'),
+    'huawei': re.compile(r'^#'),
 }
 
 
