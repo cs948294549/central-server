@@ -246,6 +246,39 @@ class ConfigDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def get_latest_backup_times(self):
+        """
+        获取所有设备最近一次配置备份时间
+
+        配置无变化时不会新增记录、只刷新 updated_at，所以每台设备取
+        updated_at 的最大值即为最近一次备份时间
+
+        Returns:
+            dict: {ip: 最近备份时间戳(int)}，失败返回 "failed"
+        """
+        try:
+            sql = '''SELECT ip, MAX(CAST(updated_at AS UNSIGNED)) AS last_backup
+                     FROM dev_config
+                     WHERE updated_at IS NOT NULL AND updated_at <> ''
+                     GROUP BY ip'''
+            self.cursor.execute(sql)
+            result1 = self.cursor.fetchall()
+
+            latest_map = {}
+            for row in result1:
+                ip = row[0]
+                last_backup = row[1] if row[1] is not None else 0
+                if ip:
+                    latest_map[ip] = int(last_backup)
+
+            return latest_map
+        except Exception as err:
+            logger.error("======ConfigDB get_latest_backup_times error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     @staticmethod
     def calculate_config_hash(config_content):
         """计算配置内容的MD5哈希值"""

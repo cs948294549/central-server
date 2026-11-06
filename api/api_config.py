@@ -9,6 +9,7 @@ from function_collector.func_config import (
     get_latest_config_by_ip,
     get_device_config_diff,
     get_changed_devices,
+    get_config_backup_status,
     backup_config_by_ip
 )
 
@@ -233,6 +234,57 @@ def get_changed_device_list():
 
     except Exception as e:
         logger.error(f"获取变更设备列表失败: {e}")
+        return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
+
+
+@config_bp.route('/get_backup_status', methods=['POST'])
+def get_backup_status():
+    """
+    统计设备配置备份情况
+    设备清单取未屏蔽设备（admin_status <> '1'），关联 dev_config 中每台设备最近一次
+    备份记录的 updated_at，距离当前时间小于 days 天视为正常，其余（含从未备份）视为异常；
+    设备名包含 fw 的忽略。
+    请求参数:
+    {
+        "days": 1,          # 可选，备份时间阈值天数，默认1
+        "ignore_keyword": "fw"  # 可选，设备名忽略关键字，默认fw
+    }
+    返回:
+    {
+        "total": 参与统计设备数,
+        "normal": 正常数,
+        "abnormal": 异常数,
+        "ignored": 忽略数,
+        "max_idle_days": 阈值天数,
+        "abnormal_devices": [{"ip","sysname","sys_type","last_backup","idle_hours"}, ...]
+    }
+    """
+    try:
+        data = request.json or {}
+
+        days = data.get('days', 1)
+        try:
+            days = float(days)
+        except (TypeError, ValueError):
+            return APIResponse.error(message="参数 days 必须为数字")
+        if days <= 0:
+            return APIResponse.error(message="参数 days 必须大于0")
+
+        ignore_keyword = data.get('ignore_keyword', 'fw')
+        if ignore_keyword is None:
+            ignore_keyword = ''
+
+        logger.info(f"{str(g.user)}统计配置备份情况，days={days}, ignore={ignore_keyword}")
+
+        result = get_config_backup_status(days, ignore_keyword)
+
+        if result == "failed":
+            return APIResponse.error(message="查询失败")
+
+        return APIResponse.success(data=result, message="查询成功")
+
+    except Exception as e:
+        logger.error(f"统计配置备份情况失败: {e}")
         return APIResponse.server_error(message=f"接口异常，异常原因: {str(e)}")
 
 

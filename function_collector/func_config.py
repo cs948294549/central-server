@@ -504,6 +504,82 @@ def get_changed_devices(days=None):
         return "failed"
 
 
+def get_config_backup_status(max_idle_days=1, ignore_keyword="fw"):
+    """
+    统计设备配置备份情况
+
+    设备清单取 CollectDB 中未屏蔽（admin_status <> '1'）的设备，
+    再关联 dev_config 中每台设备最近一次备份记录：
+    updated_at 距当前时间小于 max_idle_days 天视为正常，其余（含从未备份）视为异常。
+    设备名（sysname）包含 ignore_keyword 的忽略，不计入总数和异常。
+
+    :param max_idle_days: 备份时间与当前时间相差天数阈值，默认1天
+    :param ignore_keyword: 设备名忽略关键字，默认 ignore_keyword="fw"
+    :return: dict 统计结果，失败返回 "failed"
+    """
+    try:
+        collect_db = CollectDB()
+        devices = collect_db.get_device_list()
+        if devices == "failed":
+            return "failed"
+
+        config_db = ConfigDB()
+        latest_map = config_db.get_latest_backup_times()
+        if latest_map == "failed":
+            return "failed"
+
+        current_time = int(time.time())
+        idle_threshold = int(max_idle_days * 86400)
+        keyword = (ignore_keyword or "").lower()
+
+        total = 0
+        normal = 0
+        ignored = 0
+        abnormal_devices = []
+
+        for device in devices:
+            ip = device.get("ip", "")
+            sysname = device.get("sysname", "") or ""
+            if not ip:
+                continue
+
+            # 设备名包含忽略关键字的跳过（如防火墙不走配置备份）
+            if keyword and keyword in sysname.lower():
+                ignored += 1
+                continue
+
+            total += 1
+            last_backup = latest_map.get(ip, 0)
+
+            if last_backup > 0 and (current_time - last_backup) < idle_threshold:
+                normal += 1
+            else:
+                abnormal_devices.append({
+                    "ip": ip,
+                    "sysname": sysname,
+                    "sys_type": device.get("sys_type", ""),
+                    "last_backup": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_backup)) if last_backup > 0 else "",
+                    "idle_hours": round((current_time - last_backup) / 3600, 1) if last_backup > 0 else None
+                })
+
+        # 从未备份的排最前，其余按空闲时间降序
+        abnormal_devices.sort(
+            key=lambda x: (0, 0) if x["idle_hours"] is None else (1, -x["idle_hours"])
+        )
+
+        return {
+            "total": total,
+            "normal": normal,
+            "abnormal": len(abnormal_devices),
+            "ignored": ignored,
+            "max_idle_days": max_idle_days,
+            "abnormal_devices": abnormal_devices
+        }
+    except Exception as e:
+        logger.error(f"统计设备配置备份情况失败: {e}")
+        return "failed"
+
+
 def get_device_config_diff(ip, op_id, full_diff=False):
     """
     获取设备在指定工单中的配置前后对比
