@@ -8,6 +8,7 @@ import logging
 import yaml
 from pathlib import Path
 from core.scheduler import scheduler
+from config.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +16,14 @@ logger = logging.getLogger(__name__)
 class TaskManager:
     """任务管理器"""
 
-    def __init__(self, config_file='config/task_config.yaml'):
-        self.config_file = config_file
+    def __init__(self, config_file=None):
+        self.config_file = config_file or getattr(Config, 'task_config_file', 'config/task_config.yaml')
         self.tasks = {}
+
+    @staticmethod
+    def is_enabled():
+        """定时任务功能是否启用（由 config/config.py 的 task_enable 控制）"""
+        return bool(getattr(Config, 'task_enable', True))
 
     def load_task_config(self):
         """加载任务配置"""
@@ -51,6 +57,10 @@ class TaskManager:
                 interval: seconds, minutes, hours, days 等
         """
         try:
+            if not self.is_enabled():
+                logger.warning(f"定时任务功能已禁用(task_enable=False)，跳过注册任务: {task_id}")
+                return False
+
             func_kwargs = func_kwargs or {}
 
             if trigger_type == 'cron':
@@ -93,6 +103,10 @@ class TaskManager:
         """
         从配置文件注册所有任务
         """
+        if not self.is_enabled():
+            logger.warning("定时任务功能已禁用(task_enable=False)，不注册任何任务")
+            return
+
         tasks_config = self.load_task_config()
 
         if not tasks_config:

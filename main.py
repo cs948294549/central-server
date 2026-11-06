@@ -59,21 +59,24 @@ def main():
     logger.info("启动 Central-Server 服务")
     logger.info("=" * 60)
 
-    # 启动调度器
-    scheduler.start()
-    logger.info("✓ 任务调度器已启动")
+    # 启动调度器并注册定时任务（由 config.py 的 task_enable 控制）
+    if Config.task_enable:
+        scheduler.start()
+        logger.info("✓ 任务调度器已启动")
 
-    # 注册所有定时任务
-    task_manager.register_all_tasks()
+        # 注册所有定时任务
+        task_manager.register_all_tasks()
 
-    # 显示已注册的任务
-    tasks = task_manager.get_task_info()
-    if tasks:
-        logger.info(f"✓ 已注册 {len(tasks)} 个定时任务:")
-        for task in tasks:
-            logger.info(f"  - {task['id']} ({task['trigger_type']}) - 下次运行: {task['next_run_time']}")
+        # 显示已注册的任务
+        tasks = task_manager.get_task_info()
+        if tasks:
+            logger.info(f"✓ 已注册 {len(tasks)} 个定时任务:")
+            for task in tasks:
+                logger.info(f"  - {task['id']} ({task['trigger_type']}) - 下次运行: {task['next_run_time']}")
+        else:
+            logger.info("✓ 没有启用的定时任务")
     else:
-        logger.info("✓ 没有启用的定时任务")
+        logger.warning("✗ 定时任务功能已禁用(task_enable=False)，调度器未启动")
 
     # 启动 WebSocket 服务器
     websocket_server = None
@@ -164,9 +167,10 @@ def main():
             collect_service.stop()
             logger.info("✓ 数据采集服务已停止")
 
-        # 关闭调度器
-        scheduler.shutdown()
-        logger.info("✓ 任务调度器已关闭")
+        # 关闭调度器（未启动时 shutdown 会抛 SchedulerNotRunningError）
+        if scheduler.running:
+            scheduler.shutdown()
+            logger.info("✓ 任务调度器已关闭")
 
         logger.info("=" * 60)
         logger.info("Central-Server 服务已完全关闭")

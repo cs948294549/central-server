@@ -41,6 +41,11 @@ class Config:
     # 2. API 调用：直接使用 username 作为 key，md5(identify+timestamp) 作为 secret
     # 详细文档请查看: docs/AUTHENTICATION.md
 
+    # 定时任务配置
+    # 是否启用定时任务功能：False 时调度器不启动，tasks/task_config.yaml 中的任务全部不注册
+    task_enable = True
+    task_config_file = "config/task_config.yaml"
+
     # 数据采集配置
     collect_enable = True
     collect_kafka_topic = "collect_data"
