@@ -22,6 +22,17 @@ VENDOR_CONFIG_COMMANDS = {
     'ruijie': ['show running-config'],
 }
 
+VENDOR_SAVE_COMMANDS = {
+    'h3c': ['save fo'],
+    'huawei': ['save'],
+    'cisco_nx': ['copy run start'],
+    'cisco_ios': ['copy run start'],
+    'cisco_xr': ['copy run start'],
+    'juniper': ['write'],
+    'arista': ['copy run start'],
+    'ruijie': ['copy run start'],
+}
+
 # 部分厂商输出的配置头部包含采集时间等动态内容（例如NX-OS的
 # "!Time: ..."），每次采集都会变化，需要从固定不变的行开始截取，
 # 避免配置实际未变化时被误判为有变更
@@ -53,7 +64,7 @@ def _strip_unstable_header(config_content, vendor):
 
 def get_device_config(ip, sysname, vendor):
     """
-    通过SSH获取设备配置
+    通过SSH获取设备配置，获取完成后下发保存配置命令
 
     Args:
         ip: 设备IP
@@ -82,6 +93,8 @@ def get_device_config(ip, sysname, vendor):
                 # 去除部分厂商配置头部的动态内容（如采集时间戳）
                 config_content = _strip_unstable_header(config_content, vendor)
                 logger.info(f"设备 {ip}({sysname}) 配置获取成功，大小: {len(config_content)} 字节")
+                # 配置已拿到，补一个保存配置，避免设备重启丢失运行配置
+                _save_device_config(ip, sysname, vendor)
                 return config_content
             else:
                 logger.error(f"设备 {ip}({sysname}) 配置获取失败，命令无输出")
@@ -93,6 +106,43 @@ def get_device_config(ip, sysname, vendor):
     except Exception as e:
         logger.error(f"设备 {ip}({sysname}) 配置获取异常: {e}")
         return None
+
+
+def _save_device_config(ip, sysname, vendor):
+    """
+    下发保存配置命令，确认交互（Y/N）由各厂商的SSH实现自动应答
+    保存失败不影响已经采集到的配置，只记录日志
+    :param ip: 设备IP
+    :param sysname: 设备名称
+    :param vendor: 设备厂商
+    :return: {success: bool, message: str}
+    """
+    commands = VENDOR_SAVE_COMMANDS.get(vendor)
+    if not commands:
+        logger.warning(f"设备 {ip}({sysname}) 没有配置保存命令，跳过保存: {vendor}")
+        return {"success": False, "message": f"不支持的厂商: {vendor}"}
+
+    try:
+        logger.info(f"设备 {ip}({sysname}) 下发保存配置命令: {commands}")
+        result = run_ssh_command(host=ip, commands=commands, vendor=vendor)
+
+        if result.get("status") != "success":
+            logger.error(f"设备 {ip}({sysname}) 保存配置失败: {result.get('msg')}")
+            return {"success": False, "message": result.get("msg", "保存配置失败")}
+
+        # 部分设备保存时会回显交互结果，这里只看命令是否执行成功
+        detail = "\n".join((result.get("data") or {}).values())
+        if "failed" in detail:
+            logger.error(f"设备 {ip}({sysname}) 保存配置失败，回显: {detail}")
+            return {"success": False, "message": "保存配置失败"}
+
+        logger.info(f"设备 {ip}({sysname}) 保存配置成功")
+        return {"success": True, "message": "保存配置成功"}
+
+    except Exception as e:
+        logger.error(f"设备 {ip}({sysname}) 保存配置异常: {e}")
+        return {"success": False, "message": f"保存配置异常: {str(e)}"}
+
 
 def save_config_by_opid(ip, op_id):
     """

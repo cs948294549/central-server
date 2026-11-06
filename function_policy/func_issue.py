@@ -12,6 +12,7 @@
 from tables.PolicyIssueDB import PolicyIssueDB
 from function_op.order_manage import create_order_with_devices
 from utils.fingerprint import sort_entries_by_seq
+from utils.threadPool import execAllFunctions
 import logging
 
 logger = logging.getLogger(__name__)
@@ -164,6 +165,41 @@ def recollect_device(data):
     return _recollect_by_object_type(data["object_type"], data["device_ip"])
 
 
+def _batch_recollect(device_pairs):
+    """
+    批量设备重新解析，并发执行
+    地址组/端口组与 ACL 共用同一次解析，按设备去重，避免同一台设备重复采集
+    :param device_pairs: [(object_type, device_ip), ...]
+    :return: {key: result}，key 为 "object_type|device_ip"
+    """
+    tasks = []
+    seen = set()
+
+    for object_type, device_ip in device_pairs:
+        if not device_ip:
+            continue
+        # ACL / 地址组 / 端口组走同一个采集入口，同设备只需跑一次
+        collect_type = object_type if object_type == OBJECT_TYPE_PREFIX_LIST else OBJECT_TYPE_ACL
+        key = (collect_type, device_ip)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        tasks.append({
+            "name": f"{object_type}|{device_ip}",
+            "func": _recollect_by_object_type,
+            "args": (object_type, device_ip)
+        })
+
+    if not tasks:
+        return {}
+
+    logger.info(f"批量回采开始，共 {len(tasks)} 台设备")
+    result = execAllFunctions(tasks, max_workers=8)
+    logger.info(f"批量回采结束，共 {len(result)} 台设备")
+    return result
+
+
 def change_issue_status(data):
     """
     更新问题处理记录状态（统一接口用）
@@ -198,6 +234,60 @@ def change_issue_status(data):
 
     except Exception as err:
         logger.error(f"更新问题处理记录状态失败: {err}")
+        return {"success": False, "message": f"更新失败: {str(err)}"}
+
+
+def batch_change_issue_status(data):
+    """
+    批量更新问题处理记录状态（一条 SQL 更新多条记录）
+    :param data: {ids: [id, ...], status}
+    :return: {success: bool, message: str, data: {updated, not_found}}
+    """
+    try:
+        if not data or "status" not in data:
+            return {"success": False, "message": "缺少参数: status"}
+
+        ids = data.get("ids")
+        if not ids or not isinstance(ids, list):
+            return {"success": False, "message": "缺少参数: ids"}
+
+        status = data["status"]
+        if status not in ('pending', 'processing', 'completed', 'ignored'):
+            return {"success": False, "message": "无效的状态值"}
+
+        # 更新前先取出记录，标记完成时要按记录里的设备信息回采
+        db = PolicyIssueDB()
+        found = db.getIssuesByIds(ids)
+
+        if found == "failed":
+            return {"success": False, "message": "查询记录失败"}
+
+        records = found.get("records", [])
+        not_found = found.get("not_found", [])
+        if not records:
+            return {"success": False, "message": "记录不存在"}
+
+        db = PolicyIssueDB()
+        affected = db.batchUpdateIssueStatus({
+            "ids": [record["id"] for record in records],
+            "status": status
+        })
+
+        if affected == "failed" or affected <= 0:
+            return {"success": False, "message": "更新失败，记录可能不存在"}
+
+        # 标记完成后回采，确认设备配置是否已与标准一致
+        if status == "completed":
+            _batch_recollect([(r.get("object_type"), r.get("device_ip")) for r in records])
+
+        return {
+            "success": True,
+            "message": f"状态更新成功，共 {affected} 条",
+            "data": {"updated": affected, "not_found": not_found}
+        }
+
+    except Exception as err:
+        logger.error(f"批量更新问题处理记录状态失败: {err}")
         return {"success": False, "message": f"更新失败: {str(err)}"}
 
 

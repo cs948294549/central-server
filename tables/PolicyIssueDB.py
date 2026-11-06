@@ -308,6 +308,37 @@ class PolicyIssueDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def batchUpdateIssueStatus(self, data):
+        """
+        批量更新问题处理记录状态（一条 SQL 更新多条）
+        :param data: {ids: [id, ...], status}
+        :return: affected rows或"failed"
+        """
+        try:
+            if "ids" not in data.keys() or "status" not in data.keys():
+                logger.error("参数不足: ids 或 status")
+                return "failed"
+
+            ids = [i for i in data["ids"] if i is not None]
+            if not ids:
+                return 0
+
+            placeholders = ", ".join(["%s"] * len(ids))
+            sql = "UPDATE policy_issue_records SET status=%s, processed_at=%s WHERE id IN ({})".format(placeholders)
+            current_time = int(time.time())
+            self.cursor.execute(sql, tuple([data["status"], current_time] + ids))
+            self.conn.commit()
+
+            return self.cursor.rowcount
+
+        except Exception as err:
+            logger.error("======PolicyIssueDB batchUpdateIssueStatus error========\n{}".format(str(err)))
+            self.conn.rollback()
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def getIssuesByIds(self, issue_ids):
         """
         按ID列表批量获取问题记录，用于创建变更工单

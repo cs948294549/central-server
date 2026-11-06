@@ -92,6 +92,27 @@ def update_issue_status():
         return APIResponse.server_error(message=f"更新失败: {str(e)}")
 
 
+@policy_issue_bp.route('/batch_update_status', methods=['POST'])
+def batch_update_issue_status():
+    """批量更新问题处理记录状态，标记 completed 时并发触发回采"""
+    try:
+        data = request.json or {}
+        if not data.get("ids") or "status" not in data:
+            return APIResponse.param_error(message="缺少参数: ids 或 status")
+
+        logger.info(f"{_get_username()}批量更新状态，ids={data.get('ids')}, status={data.get('status')}")
+
+        result = func_issue.batch_change_issue_status(data)
+
+        if result.get("success"):
+            return APIResponse.success(data=result.get("data"), message=result.get("message", "状态更新成功"))
+        return APIResponse.error(message=result.get("message", "状态更新失败"))
+
+    except Exception as e:
+        logger.error(f"批量更新问题处理记录状态失败: {e}", exc_info=True)
+        return APIResponse.server_error(message=f"更新失败: {str(e)}")
+
+
 @policy_issue_bp.route('/recollect', methods=['POST'])
 def recollect_device():
     """

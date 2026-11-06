@@ -4,6 +4,7 @@
 from tables.AlterationManageDB import AlterationManageDB
 from function_collector.func_config import save_config_by_opid
 from function_op import log_manage
+from utils.threadPool import execAllFunctions
 import json
 import logging
 import time
@@ -692,7 +693,15 @@ def backup_devices_config(op_id):
         devices_to_backup = list(unique_devices.values())
         logger.info(f"工单 {op_id} 共 {len(devices)} 台设备，去重后 {len(devices_to_backup)} 台，准备备份配置")
 
-        # 备份所有设备配置
+        # 并发备份所有设备配置，单台失败不影响其他设备
+        tasks = [{
+            "name": device.get("ip", ""),
+            "func": save_config_by_opid,
+            "args": (device.get("ip", ""), op_id)
+        } for device in devices_to_backup]
+
+        results = execAllFunctions(tasks, max_workers=8)
+
         backup_results = []
         success_count = 0
         failed_count = 0
@@ -700,9 +709,7 @@ def backup_devices_config(op_id):
         for device in devices_to_backup:
             ip = device.get("ip", "")
             sysname = device.get("sysname", "")
-
-            logger.info(f"正在备份设备 {ip}({sysname}) 配置...")
-            result = save_config_by_opid(ip, op_id)
+            result = results.get(ip) or {"status": "failed", "message": "未返回结果"}
 
             backup_result = {
                 "ip": ip,
