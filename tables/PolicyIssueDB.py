@@ -42,6 +42,9 @@ class PolicyIssueDB(mysqldb_netops):
         :param data: 查询条件 {id, object_type, standard_id, device_ip, device_name,
                                 status, issue_type, start_date, end_date}
         :return: 列表数据或"failed"
+
+        列表不返回 standard_entries / device_entries / dangling_refs：
+        这三个 JSON 字段单条就可能几十KB，列表页也用不到，需要时走 getIssueRecordDetail 取。
         """
         data = waf(data)
         try:
@@ -77,8 +80,8 @@ class PolicyIssueDB(mysqldb_netops):
                 conditions.append("created_at<='" + str(data["end_date"]) + "'")
 
             sql = """SELECT id, object_type, standard_id, standard_name, device_ip, device_name,
-                     device_vendor, issue_type, dangling_refs, standard_entries, device_entries,
-                     status, change_ticket_id, created_by, created_at, processed_at, remark
+                     device_vendor, issue_type, status, change_ticket_id, created_by, created_at,
+                     processed_at, remark
                      FROM policy_issue_records"""
 
             if len(conditions) > 0:
@@ -87,8 +90,8 @@ class PolicyIssueDB(mysqldb_netops):
             sql = sql + " ORDER BY created_at DESC"
 
             proper = ["id", "object_type", "standard_id", "standard_name", "device_ip", "device_name",
-                      "device_vendor", "issue_type", "dangling_refs", "standard_entries", "device_entries",
-                      "status", "change_ticket_id", "created_by", "created_at", "processed_at", "remark"]
+                      "device_vendor", "issue_type", "status", "change_ticket_id", "created_by",
+                      "created_at", "processed_at", "remark"]
 
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
