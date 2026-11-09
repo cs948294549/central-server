@@ -4,7 +4,9 @@
 数据源说明：
 - 地域列表走 CVM 的 DescribeRegions（VPC 模块本身未提供 DescribeRegions 接口）。
 - 子网的 Zone 只有 zone_id（如 ap-beijing-7），中文可用区名（如 北京七区）另走 CVM 的
-  DescribeZones 按地域查一次并缓存给该地域所有子网。
+  DescribeZones 按地域查一次并缓存给该地域所有子网。DescribeZones 只返回可售可用区，
+  已下线但仍有存量子网的区（如 ap-beijing-2、ap-shanghai-1）查不到中文名，
+  zone_name 原样退回 zone_id，这类子网在报告和 IPAM 里一眼可辨。
 - 逐地域调用 VPC 的 DescribeVpcs / DescribeSubnets 翻页拉全量，单地域失败（如该地域无
   VPC 产品）只记入 failed_regions，不影响其它地域。
 - 网段口径：VPC 主网段 CidrBlock + 辅助网段 AssistantCidrSet + IPv6 网段，

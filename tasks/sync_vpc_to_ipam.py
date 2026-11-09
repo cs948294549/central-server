@@ -14,6 +14,8 @@ VPC 网段同步到 IPAM 定时任务
 - 腾讯云、火山云都是 VPC 网段（父）与子网网段（子）一起入库，两者都标注 role=vpc，
   通过 label（如 "VPC-火山/Subnet-mpl-A"）和 comment 区分层级；
   子网网段仅在 TASK_CONFIG["sync_subnet"] 为 True 时同步
+- 同一个 CIDR 既是 VPC 网段（常见于辅助网段）又是子网网段时，保留子网那条，
+  因为子网带子网名、可用区、可用 IP 等明细，信息比 VPC 记录更全
 - 子网记录的 location 拼上可用区中文名（如 "华北地区(北京)-北京七区"），便于按区区分；
   VPC 记录的 location 只写地域名
 - 跳过名单 SKIP_CIDRS 中的网段不写入 IPAM、也不参与冲突比对，用于排除账号内
@@ -175,8 +177,7 @@ def collect_cloud_cidrs(vpc_result: dict, cloud: str, assistant_key: str):
     :return: 网段列表，VPC 网段 record_type=vpc，子网网段 record_type=subnet
     """
     cloud_desc = CLOUD_DESC.get(cloud, cloud)
-    cidr_list = []
-    seen = set()
+    collected = {}  # (ip, mask) -> 网段项，保持插入顺序；同一网段子网优先于 VPC
 
     def add(raw, vpc, record_type, ipv6_cidrs, **extra):
         if is_skipped(raw):
@@ -189,10 +190,17 @@ def collect_cloud_cidrs(vpc_result: dict, cloud: str, assistant_key: str):
             return
 
         key = (item["ip"], item["mask"])
-        if key in seen:
+        exist = collected.get(key)
+        if exist is None:
+            collected[key] = item
             return
-        seen.add(key)
-        cidr_list.append(item)
+
+        # 辅助网段与子网网段可能是同一个 CIDR（如 VPC 辅助网段 10.19.128.0/24
+        # 就是其下某个子网的网段），此时保留子网那条，信息更全
+        if record_type == "subnet" and exist["record_type"] != "subnet":
+            logger.info(f"网段 {item['cidr']} 同时是 VPC 网段和子网网段，保留子网信息"
+                        f"（{cloud_desc} / {vpc['vpc_name']} / {item['subnet_name']}）")
+            collected[key] = item
 
     for vpc in vpc_result.get("vpcs", []):
         if vpc["is_default"] and not TASK_CONFIG["include_default"]:
@@ -223,7 +231,7 @@ def collect_cloud_cidrs(vpc_result: dict, cloud: str, assistant_key: str):
             if TASK_CONFIG["sync_ipv6"]:
                 add(subnet["ipv6_cidr_block"], vpc, "subnet", [], **subnet_extra)
 
-    return cidr_list
+    return list(collected.values())
 
 
 def collect_cidrs(vpc_result: dict):
@@ -260,7 +268,7 @@ def collect_all_cidrs():
         ))
 
     cidr_list = []
-    seen = {}
+    seen = {}  # (ip, mask) -> (云平台, 在 cidr_list 中的下标)
     stats = {}
 
     for cloud_desc, analyzer, collector in sources:
@@ -287,11 +295,19 @@ def collect_all_cidrs():
 
         for item in items:
             key = (item["ip"], item["mask"])
-            if key in seen:
-                logger.warning(f"网段 {item['cidr']} 同时出现在{seen[key]}和{cloud_desc}"
+            exist = seen.get(key)
+            if exist is not None:
+                # 跨云撞同一网段时子网优先（信息更全），同一层级保留先采集的一条
+                if item["record_type"] == "subnet" and cidr_list[exist[1]]["record_type"] != "subnet":
+                    logger.info(f"网段 {item['cidr']} 在{exist[0]}中是 VPC 网段、"
+                                f"在{cloud_desc}中是子网网段，保留{cloud_desc}的子网信息")
+                    cidr_list[exist[1]] = item
+                    seen[key] = (cloud_desc, exist[1])
+                    continue
+                logger.warning(f"网段 {item['cidr']} 同时出现在{exist[0]}和{cloud_desc}"
                                f"（{item['vpc_id']} / {item['vpc_name']}），保留先采集的一条")
                 continue
-            seen[key] = cloud_desc
+            seen[key] = (cloud_desc, len(cidr_list))
             cidr_list.append(item)
 
     return cidr_list, stats
