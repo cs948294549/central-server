@@ -169,6 +169,7 @@ VPC 查询返回结构（腾讯云与火山云口径一致）：
                     "cidr_block": "10.0.10.0/24",
                     "ipv6_cidr_block": "-",
                     "zone_id": "ap-guangzhou-3",
+                    "zone_name": "广州三区",
                     "available_ips": 251,
                     "total_ips": 253,
                     "is_default": False,

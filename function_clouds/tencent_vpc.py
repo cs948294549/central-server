@@ -3,6 +3,8 @@
 
 数据源说明：
 - 地域列表走 CVM 的 DescribeRegions（VPC 模块本身未提供 DescribeRegions 接口）。
+- 子网的 Zone 只有 zone_id（如 ap-beijing-7），中文可用区名（如 北京七区）另走 CVM 的
+  DescribeZones 按地域查一次并缓存给该地域所有子网。
 - 逐地域调用 VPC 的 DescribeVpcs / DescribeSubnets 翻页拉全量，单地域失败（如该地域无
   VPC 产品）只记入 failed_regions，不影响其它地域。
 - 网段口径：VPC 主网段 CidrBlock + 辅助网段 AssistantCidrSet + IPv6 网段，
@@ -11,6 +13,7 @@
 API文档:
 - DescribeVpcs: https://cloud.tencent.com/document/api/215/15778
 - DescribeSubnets: https://cloud.tencent.com/document/api/215/15784
+- DescribeZones: https://cloud.tencent.com/document/api/213/15707
 """
 from tencentcloud.common import credential
 from tencentcloud.common.exception.tencent_cloud_sdk_exception import TencentCloudSDKException
@@ -50,6 +53,24 @@ def get_regions():
         }
         for item in (resp.RegionSet or [])
     ]
+
+
+def get_zones_by_region(region: str):
+    """
+    获取单个地域下的可用区列表
+    :param region: 地域标识，如 ap-beijing
+    :return: {可用区ID: 可用区中文名}，如 {"ap-beijing-7": "北京七区"}
+    """
+    cred = credential.Credential(SECRET_ID, SECRET_KEY)
+    client = cvm_client.CvmClient(cred, region)
+
+    req = cvm_models.DescribeZonesRequest()
+    try:
+        resp = client.DescribeZones(req)
+    except TencentCloudSDKException as e:
+        raise Exception(f"腾讯云API异常（{region} 可用区）：{e}")
+
+    return {z.Zone: (z.ZoneName or z.Zone) for z in (resp.ZoneSet or [])}
 
 
 def get_vpcs_by_region(region: str):
@@ -139,8 +160,10 @@ def _normalize_vpc(vpc, region: str, region_name: str) -> dict:
     }
 
 
-def _normalize_subnet(subnet, region: str, region_name: str) -> dict:
+def _normalize_subnet(subnet, region: str, region_name: str, zone_names: dict = None) -> dict:
     """把子网对象统一成内部结构"""
+    zone_names = zone_names or {}
+    zone_id = subnet.Zone or "-"
     return {
         "region": region,
         "region_name": region_name,
@@ -149,7 +172,8 @@ def _normalize_subnet(subnet, region: str, region_name: str) -> dict:
         "subnet_name": subnet.SubnetName or "-",
         "cidr_block": subnet.CidrBlock or "-",
         "ipv6_cidr_block": subnet.Ipv6CidrBlock or "-",
-        "zone_id": subnet.Zone or "-",
+        "zone_id": zone_id,
+        "zone_name": zone_names.get(zone_id) or zone_id,
         "available_ips": subnet.AvailableIpAddressCount or 0,
         "total_ips": subnet.TotalIpAddressCount or 0,
         "is_default": bool(subnet.IsDefault),
@@ -225,6 +249,14 @@ def analyze_tencent_vpc(regions: list = None, include_default: bool = True,
 
         # 子网按地域一次拉全，再按 vpc_id 归到各 VPC 下
         if include_subnets:
+            # 可用区中文名（如 北京七区），子网只带 zone_id，中文名需单独查
+            try:
+                zone_names = get_zones_by_region(region)
+            except Exception as e:
+                failed_regions.append({"region": region, "region_name": region_name,
+                                       "error": f"可用区查询失败：{str(e)}"})
+                zone_names = {}
+
             try:
                 subnet_list = get_subnets_by_region(region)
             except Exception as e:
@@ -232,7 +264,7 @@ def analyze_tencent_vpc(regions: list = None, include_default: bool = True,
                                        "error": f"子网查询失败：{str(e)}"})
                 subnet_list = []
 
-            subnets = [_normalize_subnet(s, region, region_name) for s in subnet_list]
+            subnets = [_normalize_subnet(s, region, region_name, zone_names) for s in subnet_list]
             vpc_index = {v["vpc_id"]: v for v in vpcs}
             for subnet in subnets:
                 owner = vpc_index.get(subnet["vpc_id"])
@@ -323,7 +355,7 @@ def format_tencent_vpc_report(result: dict) -> str:
                 lines.append(f"    IPv6 网段: {item['ipv6_cidr_block']}")
             for subnet in sorted(item["subnets"], key=lambda x: x["cidr_block"]):
                 lines.append(f"    └─ {subnet['cidr_block']:20s} {subnet['subnet_name']:24s} "
-                             f"{subnet['zone_id']:16s} "
+                             f"{subnet['zone_name']:10s} {subnet['zone_id']:16s} "
                              f"可用 {subnet['available_ips']:5d}/{subnet['total_ips']:5d}")
 
     lines.append("=" * 100)

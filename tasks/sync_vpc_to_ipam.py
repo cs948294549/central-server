@@ -210,15 +210,16 @@ def collect_cloud_cidrs(vpc_result: dict, cloud: str, assistant_key: str):
         if not TASK_CONFIG["sync_subnet"]:
             continue
         for subnet in vpc.get("subnets") or []:
+            subnet_extra = {
+                "subnet_id": subnet["subnet_id"],
+                "subnet_name": subnet["subnet_name"],
+                "zone_id": subnet["zone_id"],
+                "zone_name": subnet.get("zone_name") or subnet["zone_id"],
+            }
             add(subnet["cidr_block"], vpc, "subnet", _fold_ipv6(subnet["ipv6_cidr_block"]),
-                subnet_id=subnet["subnet_id"],
-                subnet_name=subnet["subnet_name"],
-                zone_id=subnet["zone_id"])
+                **subnet_extra)
             if TASK_CONFIG["sync_ipv6"]:
-                add(subnet["ipv6_cidr_block"], vpc, "subnet", [],
-                    subnet_id=subnet["subnet_id"],
-                    subnet_name=subnet["subnet_name"],
-                    zone_id=subnet["zone_id"])
+                add(subnet["ipv6_cidr_block"], vpc, "subnet", [], **subnet_extra)
 
     return cidr_list
 
@@ -347,8 +348,11 @@ def build_ipam_data(cidr_item: dict) -> dict:
 
     if cidr_item.get("record_type") == "subnet":
         label = f"{cidr_item['vpc_name']}/{cidr_item['subnet_name']}"
+        zone_name = cidr_item.get("zone_name") or "-"
+        zone_id = cidr_item.get("zone_id") or "-"
+        zone_desc = zone_name if zone_name == zone_id else f"{zone_name} {zone_id}"
         comment = (f"{cloud_desc}子网 {cidr_item['subnet_id']} "
-                   f"({cidr_item['vpc_id']} / {cidr_item.get('zone_id') or '-'})")
+                   f"({cidr_item['vpc_id']} / {zone_desc})")
     else:
         label = cidr_item["vpc_name"]
         comment = f"{cloud_desc}VPC {cidr_item['vpc_id']} {cidr_item['region']}"
