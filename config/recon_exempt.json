@@ -1,0 +1,60 @@
+[
+  {"name": "RT2.net.hb.park04.vdian.net",   "ip": "10.192.48.2",   "reason": "已标记下线"},
+  {"name": "RT1.net.hb.park04.vdian.net",   "ip": "10.192.48.1",   "reason": "无法监控"},
+  {"name": "asw1.net.hb.park04.vdian.net",  "ip": "10.192.48.3",   "reason": "无法监控"},
+  {"name": "asw1.net.gd.park.vdian.net",    "ip": "10.192.16.3",   "reason": "无法监控"},
+  {"name": "wx2540H-park04-AC",             "ip": "10.192.48.100", "reason": "无法监控"},
+
+  {"name": "fw2_corp_sz_m06",               "reason": "主备一体，无额外管理网段，无法监控"},
+  {"name": "fw1_corp_cq_m13",               "ip": "172.26.0.3",    "reason": "已在 CMDB 标记入库"},
+
+  {"name": "rsw1_corp_djd_m01",             "reason": "无法监控"},
+  {"name": "rsw1_corp_dg_m01",              "reason": "FortiLink 管理，无独立管理地址，无法监控"},
+  {"name": "大江东出口路由器",                 "reason": "无法监控"},
+  {"name": "唐山职场UPS",                     "reason": "无法监控"},
+  {"name": "光迅400G 传输",                   "reason": "无法监控"},
+  {"name": "信锐-NAC-6100",                  "ip": "10.192.16.100", "reason": "无法监控"},
+
+  {"name": "FS-124F-POE-1",                 "reason": "无需监控"},
+  {"name": "FS-124F-POE-2",                 "reason": "无需监控"},
+
+  {"name": "100G_dci_dc09_to_dc07_1",       "ip": "10.143.224.120", "reason": "无法监控"},
+  {"name": "100G_dci_dc09_to_dc07_2",       "ip": "10.143.224.122", "reason": "无法监控"},
+  {"name": "100G_dci_dc09_to_dc05-电层ols",  "ip": "10.143.224.125", "reason": "无法监控"},
+  {"name": "100G_dci_dc09_to_dc05-光层osp",  "ip": "10.143.224.124", "reason": "无法监控"},
+  {"name": "100G_dci_dc05_to_dc07",         "ip": "10.16.248.2",    "reason": "无法监控"},
+  {"name": "100G_dci_dc05_to_dc07-电层",     "reason": "无法监控"},
+  {"name": "100G_dci_dc05_to_dc09-电层ols",  "ip": "10.16.248.6",    "reason": "无法监控"},
+  {"name": "100G_dci_dc05_to_dc09-光层osp",  "ip": "10.16.248.5",    "reason": "无法监控"},
+  {"name": "100G_dci_dc07_to_dc05",         "ip": "10.39.224.26",   "reason": "无法监控"},
+  {"name": "100G_dci_dc07_to_dc09_1",       "ip": "10.39.224.28",   "reason": "无法监控"},
+  {"name": "100G_dci_dc07_to_dc09_2",       "ip": "10.39.224.31",   "reason": "无法监控"},
+
+  {"name": "dc03-95th-quota",               "reason": "Zabbix 单独的监控项，不是设备"},
+  {"name": "dc07-95th-quota",               "reason": "Zabbix 单独的监控项，不是设备"},
+  {"name": "dc09-95th-quota",               "reason": "Zabbix 单独的监控项，不是设备"},
+
+  {"name": "hz_corp_CT1",     "ip": "122.224.83.130",  "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CT2",     "ip": "115.236.39.210",  "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CT3",     "ip": "122.224.90.146",  "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CT4",     "ip": "61.130.165.58",   "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CU1",     "ip": "45.250.34.224",   "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CU2",     "ip": "124.160.106.18",  "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CU3",     "ip": "101.71.255.98",   "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CU4",     "ip": "124.160.226.170", "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "hz_corp_CT1-GW",  "ip": "122.224.83.1",    "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+
+  {"name": "cq_corp_CT1",     "ip": "183.66.158.54",   "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "cq_corp_CT2",     "ip": "183.66.158.53",   "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "cq_corp_CT3",     "ip": "183.66.253.78",   "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "cq_corp_CT4",     "ip": "183.66.253.77",   "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "cq_corp_CU1",     "ip": "113.204.65.162",  "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "cq_corp_CU2",     "ip": "113.204.65.161",  "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "cq_corp_CU3",     "ip": "113.204.103.238", "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "cq_corp_CU4",     "ip": "113.204.103.237", "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+
+  {"name": "bj_corp_CT1",     "ip": "1.202.81.217",    "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "bj_corp_CT2",     "ip": "1.202.81.219",    "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "bj_corp_CU1",     "ip": "114.240.55.161",  "reason": "仅 ping 监控，不纳入 CMDB 对账"},
+  {"name": "bj_corp_CU2",     "ip": "114.240.55.163",  "reason": "仅 ping 监控，不纳入 CMDB 对账"}
+]
