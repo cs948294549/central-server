@@ -14,6 +14,8 @@ VPC 网段同步到 IPAM 定时任务
 - 腾讯云、火山云都是 VPC 网段（父）与子网网段（子）一起入库，两者都标注 role=vpc，
   通过 label（如 "VPC-火山/Subnet-mpl-A"）和 comment 区分层级；
   子网网段仅在 TASK_CONFIG["sync_subnet"] 为 True 时同步
+- 子网记录的 location 拼上可用区中文名（如 "华北地区(北京)-北京七区"），便于按区区分；
+  VPC 记录的 location 只写地域名
 - 跳过名单 SKIP_CIDRS 中的网段不写入 IPAM、也不参与冲突比对，用于排除账号内
   未实际使用的网段（如火山云默认 VPC 172.31.0.0/16）；跳过的是某个 VPC 网段时，
   其子网网段一并跳过
@@ -348,14 +350,18 @@ def build_ipam_data(cidr_item: dict) -> dict:
 
     if cidr_item.get("record_type") == "subnet":
         label = f"{cidr_item['vpc_name']}/{cidr_item['subnet_name']}"
+        # 子网归属到可用区，location 拼上中文区名，如 华北地区(北京)-北京七区
         zone_name = cidr_item.get("zone_name") or "-"
         zone_id = cidr_item.get("zone_id") or "-"
         zone_desc = zone_name if zone_name == zone_id else f"{zone_name} {zone_id}"
         comment = (f"{cloud_desc}子网 {cidr_item['subnet_id']} "
                    f"({cidr_item['vpc_id']} / {zone_desc})")
+        location = (f"{cidr_item['region_name']}-{zone_name}"
+                    if zone_name not in ("-", "") else cidr_item["region_name"])
     else:
         label = cidr_item["vpc_name"]
         comment = f"{cloud_desc}VPC {cidr_item['vpc_id']} {cidr_item['region']}"
+        location = cidr_item["region_name"]
 
     if cidr_item.get("ipv6_cidrs"):
         comment += " IPv6:" + ",".join(cidr_item["ipv6_cidrs"])
@@ -364,7 +370,7 @@ def build_ipam_data(cidr_item: dict) -> dict:
         "ip": cidr_item["ip"],
         "mask": cidr_item["mask"],
         "status": "1",
-        "location": cidr_item["region_name"],
+        "location": location,
         "isp": "",
         "role": TASK_CONFIG["vpc_role"],
         "label": label,
