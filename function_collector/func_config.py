@@ -91,6 +91,10 @@ def get_device_config(ip, sysname, vendor):
             if data and len(data) > 0:
                 # 合并多个命令的输出
                 config_content = '\n'.join(data.values())
+                # 采集失败时命令回显是 failed / failed: 原因，不能当作配置内容入库
+                if config_content.strip().startswith("failed"):
+                    logger.error(f"设备 {ip}({sysname}) 配置获取失败，回显: {config_content.strip()}")
+                    return None
                 # 去除部分厂商配置头部的动态内容（如采集时间戳）
                 config_content = _strip_unstable_header(config_content, vendor)
                 logger.info(f"设备 {ip}({sysname}) 配置获取成功，大小: {len(config_content)} 字节")
