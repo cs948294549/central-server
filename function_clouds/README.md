@@ -8,7 +8,7 @@
 function_clouds/
 ├── __init__.py           # 模块入口
 ├── tencent_bill.py       # 腾讯云账单查询
-├── tencent_vpc.py        # 腾讯云 VPC 资产查询
+├── tencent_vpc.py        # 腾讯云 VPC 网段采集
 ├── volcano_bill.py       # 火山云账单查询
 └── volcano_vpc.py        # 火山云 VPC 网段采集
 ```
@@ -37,7 +37,7 @@ if result['success']:
     print(f"共享带宽: {result['summary']['bandwidth_cost']} 元")
 ```
 
-查询腾讯云 VPC 资产（遍历账号下所有可用地域）：
+查询腾讯云 VPC 网段（遍历账号下所有可用地域，含子网）：
 
 ```python
 from function_clouds import analyze_tencent_vpc, format_tencent_vpc_report
@@ -45,6 +45,7 @@ from function_clouds import analyze_tencent_vpc, format_tencent_vpc_report
 result = analyze_tencent_vpc(
     regions=None,            # 指定地域列表如 ["ap-guangzhou"]，留空表示全部可用地域
     include_default=True,    # 是否包含默认 VPC
+    include_subnets=True,    # 是否同时采集子网网段
     include_details=False    # 是否返回明细 VPC 列表
 )
 
@@ -81,6 +82,10 @@ python tasks/tencent_api.py 2026-08 --details
 
 # 火山云账单
 python function_clouds/volcano_bill.py 2026-08
+
+# 腾讯云 VPC 网段（全地域，含子网明细）
+python function_clouds/tencent_vpc.py
+python function_clouds/tencent_vpc.py --region=ap-guangzhou --no-subnet
 
 # 火山云 VPC 网段（全地域，含子网明细）
 python function_clouds/volcano_vpc.py
@@ -119,7 +124,7 @@ python function_clouds/volcano_vpc.py --region=cn-beijing --no-default
 }
 ```
 
-VPC 查询返回结构：
+VPC 查询返回结构（腾讯云与火山云口径一致）：
 
 ```python
 {
@@ -128,6 +133,10 @@ VPC 查询返回结构：
     "regions_with_vpc": 8,      # 存在 VPC 的地域数
     "total_vpcs": 34,
     "default_vpcs": 6,
+    "total_subnets": 52,        # 子网数
+    "total_cidrs": 34,          # VPC 网段数（主网段 + 辅助网段 + IPv6 网段）
+    "available_ips": 12000,     # 子网可用 IP 合计
+    "total_ips": 13056,         # 子网 IP 容量合计
     "failed_regions": [         # 单地域失败不影响整体结果
         {"region": "ap-xxx", "region_name": "...", "error": "..."}
     ],
@@ -135,7 +144,9 @@ VPC 查询返回结构：
         "ap-guangzhou": {
             "region_name": "华南地区(广州)",
             "count": 12,
-            "vpcs": ["prod-vpc", "..."]
+            "vpcs": ["prod-vpc", "..."],
+            "cidrs": ["10.0.0.0/16", "..."],
+            "subnet_count": 20
         }
     },
     "vpcs": [                   # 仅当 include_details=True 时包含
@@ -151,13 +162,30 @@ VPC 查询返回结构：
             "assistant_cidrs": [],
             "dns_servers": [],
             "domain_name": "-",
+            "subnets": [            # 所属 VPC 被过滤时子网不在此列出
+                {
+                    "subnet_id": "subnet-xxxx",
+                    "subnet_name": "prod-subnet-a",
+                    "cidr_block": "10.0.10.0/24",
+                    "ipv6_cidr_block": "-",
+                    "zone_id": "ap-guangzhou-3",
+                    "available_ips": 251,
+                    "total_ips": 253,
+                    "is_default": False,
+                    "route_table_id": "rtb-xxxx",
+                    "created_time": "2024-01-01 10:00:00",
+                    "tags": []
+                }
+            ],
             "tags": [{"key": "env", "value": "prod"}]
         }
     ]
 }
 ```
 
-火山云 VPC 网段查询返回结构（比腾讯云多了子网与 IP 容量口径）：
+火山云 VPC 网段查询返回结构参照上例，差异仅在字段来源：辅助网段字段名为 `secondary_cidrs`
+（腾讯云为 `assistant_cidrs`），VPC 另有 `user_cidrs` / `status` / `project_name` / `subnet_count`，
+子网另有 `status` / `description`（腾讯云子网无这两个字段）：
 
 ```python
 {

@@ -11,8 +11,8 @@ VPC 网段同步到 IPAM 定时任务
   成网络地址，避免 10.18.0.5/18 与 10.18.0.0/18 被当成两个网段
 - IPv4 默认同步；IPv6 由于 IPAM 树形展示依赖 IPv4 整型换算，默认不同步，而是把
   IPv6 网段追加到所属网段的 comment 中，如 "IPv6:240d:c000:2022:4e00::/56"
-- 火山云字段比腾讯云丰富，VPC 网段（父）与子网网段（子）一起入库，两者都标注
-  role=vpc，通过 label（如 "VPC-火山/Subnet-mpl-A"）和 comment 区分层级；
+- 腾讯云、火山云都是 VPC 网段（父）与子网网段（子）一起入库，两者都标注 role=vpc，
+  通过 label（如 "VPC-火山/Subnet-mpl-A"）和 comment 区分层级；
   子网网段仅在 TASK_CONFIG["sync_subnet"] 为 True 时同步
 - 跳过名单 SKIP_CIDRS 中的网段不写入 IPAM、也不参与冲突比对，用于排除账号内
   未实际使用的网段（如火山云默认 VPC 172.31.0.0/16）；跳过的是某个 VPC 网段时，
@@ -50,13 +50,14 @@ TASK_CONFIG = {
     "include_default": True,   # 是否包含默认 VPC（默认 VPC 是否真正使用由跳过名单决定）
     "sync_ipv6": False,        # 是否同步 IPv6 网段
     "sync_assistant": True,    # 是否同步辅助 CIDR（腾讯云助理 CIDR / 火山云辅助网段）
-    "sync_subnet": True,       # 火山云子网网段是否一起入库（父子网段）
+    "sync_subnet": True,       # 子网网段是否一起入库（腾讯云、火山云均适用，父子网段）
     "vpc_role": "vpc",         # 云上 VPC/子网网段在 IPAM 中标记的 role
 }
 
 # 跳过名单：按网段跳过，网段被名单网段包含即跳过（含其子网网段）
 SKIP_CIDRS = [
     "172.31.0.0/16",  # 火山云默认 VPC 网段，账号内未实际使用
+    "172.21.0.0/20",  # 腾讯云默认 VPC 网段，账号内未实际使用
 ]
 
 # 告警配置（推送到 syslog 队列，由 SyslogService 做黑名单过滤、聚合后入库）
@@ -163,61 +164,24 @@ def _build_cidr_item(raw: str, vpc: dict, record_type: str, cloud: str,
     return item
 
 
-def collect_cidrs(vpc_result: dict):
+def collect_cloud_cidrs(vpc_result: dict, cloud: str, assistant_key: str):
     """
-    从腾讯云 VPC 查询结果中提取待同步的网段
-    :param vpc_result: analyze_tencent_vpc 返回的结果字典
-    :return: 网段列表 [{"cidr", "ip", "mask", "is_ipv6", "vpc_id", "vpc_name", "region", "region_name"}]
-    """
-    cidr_list = []
-    seen = set()
-
-    for vpc in vpc_result.get("vpcs", []):
-        if vpc["is_default"] and not TASK_CONFIG["include_default"]:
-            continue
-
-        raw_cidrs = [vpc["cidr_block"]]
-        if TASK_CONFIG["sync_ipv6"] and vpc["ipv6_cidr_block"] != "-":
-            raw_cidrs.append(vpc["ipv6_cidr_block"])
-        if TASK_CONFIG["sync_assistant"]:
-            raw_cidrs.extend(vpc["assistant_cidrs"])
-
-        # IPv6 网段不单独入库，直接写进对应 IPv4 网段的 comment
-        ipv6_cidrs = _fold_ipv6(vpc["ipv6_cidr_block"])
-
-        for raw in raw_cidrs:
-            if is_skipped(raw):
-                logger.info(f"跳过名单命中，忽略网段 {raw}（腾讯云 / {vpc['vpc_name']}）")
-                continue
-
-            item = _build_cidr_item(raw, vpc, "vpc", "tencent", ipv6_cidrs=ipv6_cidrs)
-            if not item:
-                continue
-
-            key = (item["ip"], item["mask"])
-            if key in seen:
-                continue
-            seen.add(key)
-            cidr_list.append(item)
-
-    return cidr_list
-
-
-def collect_volcano_cidrs(vpc_result: dict):
-    """
-    从火山云 VPC 查询结果中提取待同步的网段（父：VPC 网段；子：子网网段）
-    :param vpc_result: analyze_volcano_vpc 返回的结果字典
+    从云平台 VPC 查询结果中提取待同步的网段（父：VPC 网段；子：子网网段）
+    :param vpc_result: analyze_tencent_vpc / analyze_volcano_vpc 返回的结果字典
+    :param cloud: 云平台标识，tencent / volcano
+    :param assistant_key: 辅助网段字段名（腾讯云 assistant_cidrs / 火山云 secondary_cidrs）
     :return: 网段列表，VPC 网段 record_type=vpc，子网网段 record_type=subnet
     """
+    cloud_desc = CLOUD_DESC.get(cloud, cloud)
     cidr_list = []
     seen = set()
 
     def add(raw, vpc, record_type, ipv6_cidrs, **extra):
         if is_skipped(raw):
-            logger.info(f"跳过名单命中，忽略网段 {raw}（火山云 / {vpc['vpc_name']} / {record_type}）")
+            logger.info(f"跳过名单命中，忽略网段 {raw}（{cloud_desc} / {vpc['vpc_name']} / {record_type}）")
             return
 
-        item = _build_cidr_item(raw, vpc, record_type, "volcano",
+        item = _build_cidr_item(raw, vpc, record_type, cloud,
                                 ipv6_cidrs=ipv6_cidrs, **extra)
         if not item:
             return
@@ -233,10 +197,11 @@ def collect_volcano_cidrs(vpc_result: dict):
             continue
 
         # 父：VPC 主网段 + 辅助网段
+        # IPv6 网段不单独入库时，折叠进对应 IPv4 主网段的 comment
         vpc_ipv6 = _fold_ipv6(vpc["ipv6_cidr_block"])
         add(vpc["cidr_block"], vpc, "vpc", vpc_ipv6)
         if TASK_CONFIG["sync_assistant"]:
-            for raw in vpc["secondary_cidrs"]:
+            for raw in vpc.get(assistant_key) or []:
                 add(raw, vpc, "vpc", [])
         if TASK_CONFIG["sync_ipv6"]:
             add(vpc["ipv6_cidr_block"], vpc, "vpc", [])
@@ -249,8 +214,23 @@ def collect_volcano_cidrs(vpc_result: dict):
                 subnet_id=subnet["subnet_id"],
                 subnet_name=subnet["subnet_name"],
                 zone_id=subnet["zone_id"])
+            if TASK_CONFIG["sync_ipv6"]:
+                add(subnet["ipv6_cidr_block"], vpc, "subnet", [],
+                    subnet_id=subnet["subnet_id"],
+                    subnet_name=subnet["subnet_name"],
+                    zone_id=subnet["zone_id"])
 
     return cidr_list
+
+
+def collect_cidrs(vpc_result: dict):
+    """从腾讯云 VPC 查询结果中提取待同步的网段"""
+    return collect_cloud_cidrs(vpc_result, "tencent", "assistant_cidrs")
+
+
+def collect_volcano_cidrs(vpc_result: dict):
+    """从火山云 VPC 查询结果中提取待同步的网段"""
+    return collect_cloud_cidrs(vpc_result, "volcano", "secondary_cidrs")
 
 
 def collect_all_cidrs():
@@ -262,7 +242,9 @@ def collect_all_cidrs():
     if TASK_CONFIG["tencent_enabled"]:
         sources.append((
             "腾讯云",
-            lambda: analyze_tencent_vpc(include_default=True, include_details=True),
+            lambda: analyze_tencent_vpc(include_default=True,
+                                        include_subnets=TASK_CONFIG["sync_subnet"],
+                                        include_details=True),
             collect_cidrs,
         ))
     if TASK_CONFIG["volcano_enabled"]:
@@ -412,7 +394,7 @@ def run(dry_run: bool = False):
     主执行函数 - 同步 VPC 网段到 IPAM
 
     执行流程：
-    1. 拉取各云平台所有地域的 VPC 网段（火山云含子网网段）
+    1. 拉取各云平台所有地域的 VPC 网段（腾讯云、火山云均含子网网段）
     2. 逐个查询 IPAM 中是否已存在
     3. 存在且 role=vpc 刷新可变字段；存在且 role 非 vpc 告警；不存在则写入
     """
