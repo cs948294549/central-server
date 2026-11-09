@@ -4,6 +4,7 @@ import logging
 from function_collector.func_search import func_fulltext, get_deviceslist, get_ex_portinfo, get_lldp_list, get_port_info
 from function_collector.func_search import getfulltextDeviceGates_v4, getfulltextDeviceGates_v6, get_arp_list
 from function_collector.func_search import get_mac_table_by_tor, get_device_sns, get_device_summary
+from function_collector.func_zabbix import query_port_traffic
 from lib_snmp.snmpAgent import snmpget, snmpwalk
 from config.config import Config
 
@@ -150,6 +151,35 @@ def getdevice_sn():
         respond = get_device_sns(data)
         return APIResponse.success(data=respond, message="查询成功")
     except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+
+@collector_bp.route('/port_traffic',methods=['POST'])
+def port_traffic():
+    """
+    查询设备端口某个时间段的流量（数据来自 Zabbix）
+    请求体：
+    {
+      "host": "pcs1_dc07_m01.vdian.net",   # 设备名，必填
+      "port_id": "436207616",              # Zabbix 监控项里的接口索引，必填
+      "start_time": 1794195800,           # 开始时间戳（秒），默认结束时间往前 1 小时
+      "end_time": 1794199400              # 结束时间戳（秒），默认当前
+    }
+    """
+    try:
+        data = request.json or {}
+        logger.info(f"{str(g.user)}查询端口流量，条件{data}")
+        respond = query_port_traffic(
+            host=data.get("host"),
+            port_id=data.get("port_id"),
+            start_time=data.get("start_time"),
+            end_time=data.get("end_time"),
+        )
+        return APIResponse.success(data=respond, message="查询成功")
+    except ValueError as e:
+        return APIResponse.param_error(message=str(e))
+    except Exception as e:
+        logger.error(f"查询端口流量失败: {e}")
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
 
 
