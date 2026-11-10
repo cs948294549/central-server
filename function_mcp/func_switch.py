@@ -18,10 +18,10 @@ def run_cmd(ip, cmds, vendor=None):
     # 安全策略：只允许执行 display 或 show 开头的命令
     filtered_cmds = []
     for cmd in cmds:
-        if cmd.lower().strip().startswith('dis') or cmd.lower().strip().startswith('show'):
+        if cmd.lower().strip().startswith('dis') or cmd.lower().strip().startswith('show') or cmd.lower().strip().startswith('ping'):
             filtered_cmds.append(cmd)
         else:
-            return f"安全策略限制：只允许执行 display/show 开头的命令，当前命令 '{cmd}' 被拒绝"
+            return f"安全策略限制：只允许执行 display/show/ping 开头的命令，当前命令 '{cmd}' 被拒绝"
 
     try:
         if vendor is not None:
