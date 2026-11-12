@@ -7,156 +7,88 @@ import logging
 # 配置日志
 logger = logging.getLogger(__name__)
 '''
-drop table IF EXISTS alarm_list;
-create table alarm_list(
-alarm_id bigint COLLATE utf8_bin NOT NULL AUTO_INCREMENT COMMENT '告警ID',
-ip varchar(300) COLLATE utf8_bin NOT NULL COMMENT '设备IP',
-hostname varchar(300) COLLATE utf8_bin NOT NULL COMMENT '设备名称',
-alarm_type varchar(40) COLLATE utf8_bin NOT NULL COMMENT '告警分类，日志、指标、其他',
-group_label varchar(100) COLLATE utf8_bin NOT NULL COMMENT '分组标签 hash',
-msg varchar(500) COLLATE utf8_bin NOT NULL COMMENT '原始信息',
-group_name varchar(100) COLLATE utf8_bin NOT NULL COMMENT '分组名称',
-alarm_object varchar(100) COLLATE utf8_bin NOT NULL COMMENT '告警对象',
-keyword varchar(100) COLLATE utf8_bin NOT NULL COMMENT '关键字',
-status varchar(1) COLLATE utf8_bin NOT NULL COMMENT '状态0=待处理 1=已确认 2=已处理 3=忽略 4=屏蔽',
-create_time varchar(10) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '创建时间',
-primary key(alarm_id)
-);
+alarm_list / alarm_log 由 switchlog 管线写入，表结构见
+projects/switchlog/sql/schema.sql，这里只读、只改人工处理状态，不建表。
 
+alarm_list 一行是一个已经聚合好的告警（一个指纹一行）：
+    severity   1=P1 2=P2 3=P3
+    state      open=告警中 clear=已恢复，由L7状态机维护
+    status     人工处理状态 0待处理1已确认2已处理3忽略4屏蔽，只有人点才变
+    muted      1=被静默规则压住，不发通知，窗口过了自动恢复
+    counter/first_seen/last_seen/clear_time  聚合窗口内的统计
 
-drop table IF EXISTS alarm_log;
-create table alarm_log(
-log_id bigint COLLATE utf8_bin NOT NULL AUTO_INCREMENT COMMENT '记录ID',
-group_label varchar(100) COLLATE utf8_bin NOT NULL COMMENT '分组标签 hash',
-handler varchar(100) COLLATE utf8_bin NOT NULL COMMENT '处理人',
-msg  varchar(300) COLLATE utf8_bin NOT NULL COMMENT '处理内容',
-create_time varchar(10) COLLATE utf8_bin NOT NULL  DEFAULT '' COMMENT '创建时间',
-primary key(log_id)
-);
+alarm_log 一行是一条原子日志（L6写，只留7天），靠 fingerprint 关联
+alarm_list，下钻用 getAlarmLogsByAlarm(alarm_id)。
 
+alarm_handle_log 是人工处理历史，central-server 自建，不属于 switchlog：
+
+CREATE TABLE IF NOT EXISTS alarm_handle_log(
+    log_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+    alarm_id BIGINT NOT NULL DEFAULT 0 COMMENT '对应alarm_list.alarm_id',
+    handler VARCHAR(100) NOT NULL DEFAULT '' COMMENT '处理人',
+    status VARCHAR(1) NOT NULL DEFAULT '0' COMMENT '处理后的状态，同alarm_list.status',
+    msg VARCHAR(300) NOT NULL DEFAULT '' COMMENT '处理说明',
+    create_time VARCHAR(10) NOT NULL DEFAULT '' COMMENT '创建时间(epoch秒)',
+    PRIMARY KEY(log_id),
+    INDEX idx_alarm_id (alarm_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警人工处理历史';
 '''
 
 class AlarmDB(mysqldb_netops):
-    def addAlarmList(self, data):
-        try:
-            check_params = ["ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
-                            "alarm_object", "keyword"]
-            for i in check_params:
-                if i not in data.keys():
-                    logger.error("======AlarmDB addAlarmList error  参数不足========\n{}".format(str(i)))
-                    return "failed"
+    # ---------------- alarm_list（读 + 改人工处理状态） ----------------
 
-            timestamp = data.get("create_time", int(time.time()))
-            sqlParam = []
-            data = waf(data)
-            sqlParam.append((data["ip"], data["hostname"], data["alarm_type"], data["group_label"], data["msg"],
-                             data["group_name"],data["alarm_object"],data["keyword"],"0", str(timestamp)))
-            sql = '''
-            insert into alarm_list(ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,status,create_time)
-            values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);
-            '''
-            self.cursor.executemany(sql, sqlParam)
+    def updateAlarmStatus(self, data):
+        '''
+        只改一条告警的人工处理状态。只有人点才会变，不碰 state/muted 等
+        由管线维护的字段
+        :param data: {"alarm_id":.., "status":..}
+        '''
+        data = waf(data)
+        if "alarm_id" not in data or "status" not in data:
+            return "failed"
+        sql = "update alarm_list set status=%s where alarm_id=%s"
+        try:
+            self.cursor.execute(sql, (data["status"], int(data["alarm_id"])))
             self.conn.commit()
-            return self.cursor.lastrowid
+            return "success"
         except Exception as err:
             self.conn.rollback()
-            logger.error("======AlarmDB addAlarmList error========\n{}".format(str(err)))
+            logger.error("======AlarmDB updateAlarmStatus error========\n{}".format(str(err)))
             return "failed"
         finally:
             self.cursor.close()
             self.conn.close()
 
-
-    def delAlarmList(self, data):
+    def updateAlarmStatusByIds(self, data):
+        '''
+        批量改人工处理状态
+        :param data: {"alarm_ids":[1,2,3], "status":".."}
+        '''
         data = waf(data)
-        if "alarm_id" in data.keys():
-            sql = "delete from alarm_list where alarm_id='{}'".format(int(data["alarm_id"]))
-            try:
-                self.cursor.execute(sql)
-                self.conn.commit()
-                return "success"
-            except Exception as err:
-                self.conn.rollback()
-                logger.error("======AlarmDB delAlarmList error========\n{}".format(str(err)))
-                return "failed"
-            finally:
-                self.cursor.close()
-                self.conn.close()
-        else:
+        if "alarm_ids" not in data or "status" not in data or len(data["alarm_ids"]) <= 0:
             return "failed"
-
-
-    def updateAlarmList(self, data):
-        data = waf(data)
-        # ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,status,create_time
-        if "alarm_id" in data.keys():
-            conditions = []
-            params = []
-
-            update_key = ["status"]
-            for key in update_key:
-                if key in data.keys():
-                    conditions.append(key + " = %s")
-                    params.append(data[key])
-
-            if len(conditions) > 0:
-                sql = "update alarm_list set " + ",".join(conditions) + " where alarm_id='{}'".format(int(data["alarm_id"]))
-                try:
-                    self.cursor.execute(sql, params)
-                    self.conn.commit()
-                    return "success"
-                except Exception as err:
-                    self.conn.rollback()
-                    logger.error("======AlarmDB updateAlarmList error========\n{}".format(str(err)))
-                    return "failed"
-                finally:
-                    self.cursor.close()
-                    self.conn.close()
-            else:
-                return "failed"
-        else:
+        id_list_str = ",".join([str(int(i)) for i in data["alarm_ids"]])
+        sql = "update alarm_list set status=%s where alarm_id in ({})".format(id_list_str)
+        try:
+            self.cursor.execute(sql, (data["status"],))
+            self.conn.commit()
+            return "success"
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======AlarmDB updateAlarmStatusByIds error========\n{}".format(str(err)))
             return "failed"
-
-    def updateAlarmListByGroup(self, data):
-        data = waf(data)
-        # ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,status,create_time
-        if "group_labels" in data.keys():
-            conditions = []
-            params = []
-
-            group_list_str = ",".join([f"'{label}'" for label in data["group_labels"]])
-
-            update_key = ["status"]
-            for key in update_key:
-                if key in data.keys():
-                    conditions.append(key + " = %s")
-                    params.append(data[key])
-
-            if len(conditions) > 0:
-                sql = "update alarm_list set " + ",".join(conditions) + " where group_label in ({})".format(str(group_list_str))
-
-                try:
-                    self.cursor.execute(sql, params)
-                    self.conn.commit()
-                    return "success"
-                except Exception as err:
-                    self.conn.rollback()
-                    logger.error("======AlarmDB updateAlarmListByGroup error========\n{}".format(str(err)))
-                    return "failed"
-                finally:
-                    self.cursor.close()
-                    self.conn.close()
-            else:
-                return "failed"
-        else:
-            return "failed"
-
+        finally:
+            self.cursor.close()
+            self.conn.close()
 
     def getAlarmList(self, data):
+        '''
+        通用查询，走各种正则/等值筛选
+        '''
         data = waf(data)
         conditions = []
         serach_reg_key = [
-            {"key": "ip_reg", "value":"ip"},
+            {"key": "ip_reg", "value": "ip"},
             {"key": "msg_reg", "value": "msg"},
             {"key": "hostname_reg", "value": "hostname"},
             {"key": "group_name_reg", "value": "group_name"},
@@ -167,20 +99,23 @@ class AlarmDB(mysqldb_netops):
             if key_item["key"] in data.keys():
                 conditions.append("{}".format(key_item["value"]) + " regexp '" + str(data[key_item["key"]]) + "'")
 
-        serach_eq_key = ["alarm_type", "alarm_id", "status", "group_label"]
+        serach_eq_key = ["alarm_type", "alarm_id", "status", "state", "fingerprint", "severity"]
         for key in serach_eq_key:
             if key in data.keys():
                 conditions.append("{}".format(key) + "='" + str(data[key]) + "'")
 
         sql = '''
                 select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
-                status,create_time from alarm_list '''
+                fingerprint,severity,state,status,muted,mute_rule_id,counter,
+                first_seen,last_seen,clear_time,create_time from alarm_list '''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
-
+        sql = sql + " order by create_time desc"
 
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
-                  "alarm_object", "keyword", "status", "create_time"]
+                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
+                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
+                  "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -201,145 +136,23 @@ class AlarmDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
-
-    def addAlarmLog(self, data):
-        try:
-            check_params = ["group_label", "handler", "msg"]
-            for i in check_params:
-                if i not in data.keys():
-                    logger.error("======AlarmDB addAlarmLog error 参数不足========\n{}".format(str(i)))
-                    return "failed"
-            timestamp = int(time.time())
-            sqlParam = []
-            data = waf(data)
-            sqlParam.append((data["group_label"], data["handler"], data["msg"], str(timestamp)))
-            sql = '''
-            insert into alarm_log(group_label,handler,msg,create_time)
-            values(%s,%s,%s,%s);
-            '''
-            self.cursor.executemany(sql, sqlParam)
-            self.conn.commit()
-            return self.cursor.lastrowid
-        except Exception as err:
-            self.conn.rollback()
-            logger.error("======AlarmDB addAlarmLog error========\n{}".format(str(err)))
-            return "failed"
-        finally:
-            self.cursor.close()
-            self.conn.close()
-
-    def delAlarmLog(self, data):
-        data = waf(data)
-        if "log_id" in data.keys():
-            sql = "delete from alarm_log where log_id='{}'".format(int(data["log_id"]))
-            try:
-                self.cursor.execute(sql)
-                self.conn.commit()
-                return "success"
-            except Exception as err:
-                self.conn.rollback()
-                logger.error("======AlarmDB delAlarmLog error========\n{}".format(str(err)))
-                return "failed"
-            finally:
-                self.cursor.close()
-                self.conn.close()
-        else:
-            return "failed"
-
-    def getAlarmLog(self, data):
-        data = waf(data)
-        conditions = []
-        serach_reg_key = [
-            {"key": "msg_reg", "value": "msg"},
-        ]
-        for key_item in serach_reg_key:
-            if key_item["key"] in data.keys():
-                conditions.append("{}".format(key_item["value"]) + " regexp '" + str(data[key_item["key"]]) + "'")
-
-        serach_eq_key = ["group_label"]
-        for key in serach_eq_key:
-            if key in data.keys():
-                conditions.append("{}".format(key) + "='" + str(data[key]) + "'")
-
-        sql = '''
-                select log_id,group_label,handler,msg,create_time from alarm_log '''
-        if len(conditions) > 0:
-            sql = sql + " where " + " and ".join(conditions)
-        proper = ["log_id", "group_label", "handler", "msg", "create_time"]
-        try:
-            self.cursor.execute(sql)
-            result1 = self.cursor.fetchall()
-            results = []
-            if len(result1) > 0:
-                for i in result1:
-                    result = {}
-                    for num in range(len(proper)):
-                        result[proper[num]] = i[num] if i[num] != None else ""
-                    results.append(result)
-                return results
-            else:
-                return []
-        except Exception as err:
-            logger.error("======AlarmDB getAlarmLog error========\n{}".format(str(err)))
-            return "failed"
-        finally:
-            self.cursor.close()
-            self.conn.close()
-
-    def addAlarmLogByGroup(self, data):
-        try:
-            check_params = ["group_labels", "handler", "msg"]
-            for i in check_params:
-                if i not in data.keys():
-                    logger.error("======AlarmDB addAlarmLog many error 参数不足========\n{}".format(str(i)))
-                    return "failed"
-
-            timestamp = int(time.time())
-            sqlParam = []
-            for g_label in data["group_labels"]:
-                sqlParam.append((g_label, data["handler"], data["msg"], str(timestamp)))
-            sql = '''
-            insert into alarm_log(group_label,handler,msg,create_time)
-            values(%s,%s,%s,%s);
-            '''
-            self.cursor.executemany(sql, sqlParam)
-            self.conn.commit()
-            return self.cursor.lastrowid
-        except Exception as err:
-            self.conn.rollback()
-            logger.error("======AlarmDB addAlarmLog many error========\n{}".format(str(err)))
-            return "failed"
-        finally:
-            self.cursor.close()
-            self.conn.close()
-
-
     def getAlarmListCurrent(self):
+        '''
+        当前告警：state=open 的聚合告警，一行就是一条，不再需要按 group_label
+        聚合多条日志——那是旧模型。muted 排在前面方便看板优先展示没被压住的
+        '''
         sql = '''
-        SELECT 
-            a.group_label,a.ip,a.hostname,a.alarm_type,a.group_name,a.alarm_object,a.keyword,
-            b.group_label_count,b.start_time,b.end_time
-        FROM (
-            SELECT
-                group_label,MAX(ip) AS ip,
-                MAX(hostname) AS hostname,
-                MAX(alarm_type) AS alarm_type,
-                MAX(group_name) AS group_name,
-                MAX(alarm_object) AS alarm_object,
-                MAX(keyword) AS keyword
-	        FROM  alarm_list
-	            where status='0'
-	        GROUP BY group_label
-            ) a
-        LEFT JOIN (
-            SELECT 
-                group_label, COUNT(1) AS group_label_count,
-                min(create_time) AS start_time,
-                max(create_time) AS end_time
-            FROM alarm_list
-            GROUP BY group_label
-            ) b ON a.group_label = b.group_label;'''
-        proper = ["group_label", "ip", "hostname", "alarm_type", "group_name","alarm_object","keyword", "counter", "start_time", "end_time"]
+        select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
+        fingerprint,severity,state,status,muted,mute_rule_id,counter,
+        first_seen,last_seen,clear_time,create_time
+        from alarm_list
+        where state='open'
+        order by muted asc, severity asc, last_seen desc
+        '''
+        proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
+                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
+                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
+                  "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -361,8 +174,10 @@ class AlarmDB(mysqldb_netops):
             self.conn.close()
 
     def getAlarmListHistory(self, data):
-        # 必须圈定时间
-        if "start_time" not in data.keys() and "end_time" not in data.keys():
+        '''
+        历史告警：按 create_time 圈时间范围，不限 state（open/clear都要看）
+        '''
+        if "start_time" not in data.keys() or "end_time" not in data.keys():
             logger.warning("======AlarmDB getAlarmListHistory waning========\n{}".format("查询缺少时间范围"))
             return "failed"
         time_range = int(data["end_time"]) - int(data["start_time"])
@@ -370,6 +185,7 @@ class AlarmDB(mysqldb_netops):
             logger.warning("======AlarmDB getAlarmListHistory waning========\n{}".format("告警时间跨度过大"))
             return "failed"
 
+        data = waf(data)
         conditions = []
         serach_reg_key = [
             {"key": "ip_reg", "value": "ip"},
@@ -381,42 +197,24 @@ class AlarmDB(mysqldb_netops):
             if key_item["key"] in data.keys():
                 conditions.append("{}".format(key_item["value"]) + " regexp '" + str(data[key_item["key"]]) + "'")
 
-        serach_eq_key = ["group_label", "alarm_type"]
+        serach_eq_key = ["fingerprint", "alarm_type", "severity", "state", "status"]
         for key in serach_eq_key:
             if key in data.keys():
                 conditions.append("{}".format(key) + "='" + str(data[key]) + "'")
 
-        if "start_time" in data.keys():
-            conditions.append("create_time>='" + str(data["start_time"]) + "'")
-        if "end_time" in data.keys():
-            conditions.append("create_time<='" + str(data["end_time"]) + "'")
+        conditions.append("create_time>='" + str(data["start_time"]) + "'")
+        conditions.append("create_time<='" + str(data["end_time"]) + "'")
 
         sql = '''
-        SELECT 
-            a.group_label,a.ip,a.hostname,a.alarm_type,a.group_name,a.alarm_object,a.keyword,
-            b.group_label_count,b.start_time,b.end_time
-        FROM (
-            SELECT
-                group_label,MAX(ip) AS ip,
-                MAX(hostname) AS hostname,
-                MAX(alarm_type) AS alarm_type,
-                MAX(group_name) AS group_name,
-                MAX(alarm_object) AS alarm_object,
-                MAX(keyword) AS keyword
-            FROM  alarm_list
-                where {}
-            GROUP BY group_label
-            ) a
-        LEFT JOIN (
-            SELECT 
-                group_label, COUNT(1) AS group_label_count,
-                min(create_time) AS start_time,
-                max(create_time) AS end_time
-            FROM alarm_list
-            GROUP BY group_label
-            ) b ON a.group_label = b.group_label;'''.format(" and ".join(conditions))
-        proper = ["group_label", "ip", "hostname", "alarm_type", "group_name", "alarm_object", "keyword", "counter",
-                  "start_time", "end_time"]
+        select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
+        fingerprint,severity,state,status,muted,mute_rule_id,counter,
+        first_seen,last_seen,clear_time,create_time
+        from alarm_list where {} order by create_time desc
+        '''.format(" and ".join(conditions))
+        proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
+                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
+                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
+                  "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -437,22 +235,24 @@ class AlarmDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
-    def getAlarmListByGroup(self, data):
+    def getAlarmListByIds(self, data):
+        '''
+        按 alarm_id 批量取，处理告警提交前的二次确认、导出等场景用
+        '''
         data = waf(data)
-
-        if "group_labels" not in data.keys():
+        if "alarm_ids" not in data.keys() or len(data["alarm_ids"]) <= 0:
             return "failed"
-        conditions = []
-        group_list_str = ",".join([f"'{label}'" for label in data["group_labels"]])
-        conditions.append("group_label in (" + str(group_list_str) + ")")
+        id_list_str = ",".join([str(int(i)) for i in data["alarm_ids"]])
         sql = '''
         select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
-                        status,create_time from alarm_list '''
-        if len(conditions) > 0:
-            sql = sql + " where " + " and ".join(conditions)
-        sql = sql + " order by create_time;"
+        fingerprint,severity,state,status,muted,mute_rule_id,counter,
+        first_seen,last_seen,clear_time,create_time
+        from alarm_list where alarm_id in ({}) order by create_time
+        '''.format(id_list_str)
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
-                  "alarm_object", "keyword", "status", "create_time"]
+                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
+                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
+                  "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -467,37 +267,213 @@ class AlarmDB(mysqldb_netops):
             else:
                 return []
         except Exception as err:
-            logger.error("======AlarmDB getAlarmListByGroup error========\n{}".format(str(err)))
+            logger.error("======AlarmDB getAlarmListByIds error========\n{}".format(str(err)))
             return "failed"
         finally:
             self.cursor.close()
             self.conn.close()
 
-if __name__ == '__main__':
-    aa = AlarmDB()
+    # ---------------- alarm_log（原子日志，只读下钻） ----------------
 
-    # li = aa.getAlarmList({})
-    # group_dict = {}
-    # for item in li:
-    #     if item["group_label"] not in group_dict.keys():
-    #         group_dict[item["group_label"]] = []
-    #     group_dict[item["group_label"]].append(item)
-    #
-    # for group_label in group_dict.keys():
-    #     print(group_label)
-    #     print(group_dict[group_label][0]["group_name"], group_dict[group_label][0]["alarm_object"], group_dict[group_label][0]["keyword"])
-    #     for item in group_dict[group_label]:
-    #         print(item["msg"].strip(), item["create_time"])
-    import json
-    li = aa.getAlarmListHistory({"start_time": int(time.time())-86400, "end_time": int(time.time())})
-    group_dict = {}
-    for item in li:
-        if item["ip"] not in group_dict.keys():
-            group_dict[item["ip"]] = {
-                "ip": item["ip"],
-                "hostname": item["hostname"],
-                "alarm_dict": []
-            }
-        group_dict[item["ip"]]["alarm_dict"].append(item)
+    def getAlarmLogsByAlarm(self, data):
+        '''
+        按 alarm_id 下钻到支撑它的原子日志，带 pad_seconds 的时间范围自动从
+        alarm_list 取（first_seen ~ clear_time或last_seen），不用调用方自己拼。
+        expired=True 表示告警结束时间已经超过 alarm_log 的7天保留期，
+        查不到日志是正常现象，不是查询失败。
+        :param data: {"alarm_id":.., "limit":200(可选)}
+        '''
+        data = waf(data)
+        if "alarm_id" not in data.keys():
+            return "failed"
+        limit = int(data.get("limit", 200))
+        pad = 2
+        retention_days = 7
 
-    print(json.dumps(group_dict, indent=4, ensure_ascii=False))
+        head_sql = '''
+        select fingerprint, first_seen, last_seen, clear_time
+        from alarm_list where alarm_id=%s
+        '''
+        try:
+            self.cursor.execute(head_sql, (int(data["alarm_id"]),))
+            head = self.cursor.fetchone()
+        except Exception as err:
+            logger.error("======AlarmDB getAlarmLogsByAlarm error========\n{}".format(str(err)))
+            self.cursor.close()
+            self.conn.close()
+            return "failed"
+
+        if not head:
+            self.cursor.close()
+            self.conn.close()
+            return None
+
+        fingerprint, first_seen, last_seen, clear_time = head
+        start = self._safeInt(first_seen) - pad
+        upper = clear_time if clear_time else last_seen
+        end = self._safeInt(upper) + pad
+        expired = bool(end) and end < int(time.time()) - retention_days * 86400
+
+        if start <= 0 or end <= 0:
+            self.cursor.close()
+            self.conn.close()
+            return {"logs": [], "truncated": False, "expired": False}
+
+        log_sql = '''
+        select log_id, fingerprint, ip, hostname, event_code, alarm_object, severity,
+        mnemonic, msg, is_read, ingest_ts
+        from alarm_log
+        where fingerprint=%s and ingest_ts >= %s and ingest_ts <= %s
+        order by ingest_ts limit %s
+        '''
+        proper = ["log_id", "fingerprint", "ip", "hostname", "event_code", "alarm_object",
+                  "severity", "mnemonic", "msg", "is_read", "ingest_ts"]
+        try:
+            self.cursor.execute(log_sql, (fingerprint, str(start), str(end), limit + 1))
+            result1 = self.cursor.fetchall()
+            results = []
+            for i in result1:
+                result = {}
+                for num in range(len(proper)):
+                    result[proper[num]] = i[num] if i[num] != None else ""
+                results.append(result)
+            truncated = len(results) > limit
+            return {"logs": results[:limit], "truncated": truncated, "expired": expired,
+                    "start_ts": start, "end_ts": end, "fingerprint": fingerprint}
+        except Exception as err:
+            logger.error("======AlarmDB getAlarmLogsByAlarm error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def markAlarmLogsRead(self, data):
+        '''
+        :param data: {"log_ids":[1,2,3]} 或 {"fingerprint":.., "start_ts":.., "end_ts":..}
+        '''
+        data = waf(data)
+        if "log_ids" in data.keys() and len(data["log_ids"]) > 0:
+            marks = ",".join([str(int(i)) for i in data["log_ids"]])
+            sql = "update alarm_log set is_read=1 where log_id in ({})".format(marks)
+            params = ()
+        elif "fingerprint" in data.keys() and "start_ts" in data.keys() and "end_ts" in data.keys():
+            sql = ("update alarm_log set is_read=1 "
+                   "where fingerprint=%s and ingest_ts >= %s and ingest_ts <= %s")
+            params = (data["fingerprint"], str(data["start_ts"]), str(data["end_ts"]))
+        else:
+            return "failed"
+
+        try:
+            self.cursor.execute(sql, params)
+            self.conn.commit()
+            return "success"
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======AlarmDB markAlarmLogsRead error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    @staticmethod
+    def _safeInt(value):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    # ---------------- alarm_handle_log（人工处理历史，central-server自建） ----------------
+
+    def addHandleLog(self, data):
+        '''
+        :param data: {"alarm_id":.., "handler":.., "status":.., "msg":"" (可选)}
+        '''
+        check_params = ["alarm_id", "handler", "status"]
+        for i in check_params:
+            if i not in data.keys():
+                logger.error("======AlarmDB addHandleLog error 参数不足========\n{}".format(str(i)))
+                return "failed"
+        try:
+            data = waf(data)
+            timestamp = str(int(time.time()))
+            sql = '''
+            insert into alarm_handle_log(alarm_id,handler,status,msg,create_time)
+            values(%s,%s,%s,%s,%s)
+            '''
+            self.cursor.execute(sql, (int(data["alarm_id"]), data["handler"], data["status"],
+                                      data.get("msg", ""), timestamp))
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======AlarmDB addHandleLog error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def addHandleLogByIds(self, data):
+        '''
+        批量写处理历史，和 updateAlarmStatusByIds 配套使用
+        :param data: {"alarm_ids":[1,2,3], "handler":.., "status":.., "msg":"" (可选)}
+        '''
+        check_params = ["alarm_ids", "handler", "status"]
+        for i in check_params:
+            if i not in data.keys():
+                logger.error("======AlarmDB addHandleLogByIds error 参数不足========\n{}".format(str(i)))
+                return "failed"
+        if len(data["alarm_ids"]) <= 0:
+            return "failed"
+        try:
+            data = waf(data)
+            timestamp = str(int(time.time()))
+            sqlParam = []
+            for alarm_id in data["alarm_ids"]:
+                sqlParam.append((int(alarm_id), data["handler"], data["status"],
+                                 data.get("msg", ""), timestamp))
+            sql = '''
+            insert into alarm_handle_log(alarm_id,handler,status,msg,create_time)
+            values(%s,%s,%s,%s,%s)
+            '''
+            self.cursor.executemany(sql, sqlParam)
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======AlarmDB addHandleLogByIds error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def getHandleLog(self, data):
+        '''
+        :param data: {"alarm_id":..}
+        '''
+        data = waf(data)
+        if "alarm_id" not in data.keys():
+            return "failed"
+        sql = '''
+        select log_id,alarm_id,handler,status,msg,create_time
+        from alarm_handle_log where alarm_id=%s order by create_time
+        '''
+        proper = ["log_id", "alarm_id", "handler", "status", "msg", "create_time"]
+        try:
+            self.cursor.execute(sql, (int(data["alarm_id"]),))
+            result1 = self.cursor.fetchall()
+            results = []
+            if len(result1) > 0:
+                for i in result1:
+                    result = {}
+                    for num in range(len(proper)):
+                        result[proper[num]] = i[num] if i[num] != None else ""
+                    results.append(result)
+                return results
+            else:
+                return []
+        except Exception as err:
+            logger.error("======AlarmDB getHandleLog error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()

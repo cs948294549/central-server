@@ -51,7 +51,8 @@ class Config:
     collect_kafka_topic = "collect_data"
 
     # Syslog服务器配置
-    syslog_enable = True
+    # 旧管线已废弃，syslog 采集/解析/告警由 switchlog 独立进程负责
+    syslog_enable = False
     syslog_kafka_topic = "syslog_data"
 
     # 消息队列配置

@@ -1,39 +1,14 @@
-from services.syslog import get_blacklisted_entries,get_mergelisted_entries
 from tables.AlarmDB import AlarmDB
-from tables.SyslogDB import SyslogDB
+from tables.SyslogRuleDB import SyslogRuleDB
 import json
 from utils.utils import decorator_checkparams
 
-@decorator_checkparams(key_array=["message", "ip"])
-def check_blacklist(message):
-    '''
-    :param message: {"message":"", "ip":""}
-    :return:
-    '''
-    blacklisted_entries = get_blacklisted_entries()
-    for entry in blacklisted_entries:
-        if entry.matches(str(message["message"])):
-            return {"status": "matched", "entry": entry.to_dict()}
-    return {"status": "unmatched", "entry": {}}
-
-@decorator_checkparams(key_array=["message", "ip"])
-def check_mergelist(message):
-    '''
-    :param message: {"message":"", "ip":""}
-    :return:
-    '''
-    mergelisted_entries = get_mergelisted_entries()
-    for entry in mergelisted_entries:
-        if entry.matches(str(message["message"])):
-            return {"status": "matched", "entry": entry.to_dict()}
-    return {"status": "unmatched", "entry": {}}
-
-# 日志黑名单操作
+# ============== syslog_black_list（L2黑名单） ==============
 @decorator_checkparams(key_array=["pattern", "descr"])
 def add_blacklist(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.addBlackList({"pattern": data["pattern"], "descr": data["descr"]})
+        db = SyslogRuleDB()
+        ret = db.addBlackList(data)
         if ret != "failed":
             return {"status":"success","message": "添加成功", "data": ret}
         else:
@@ -44,8 +19,8 @@ def add_blacklist(data):
 @decorator_checkparams(key_array=["rule_id"])
 def del_blacklist(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.delBlackList({"rule_id": data["rule_id"]})
+        db = SyslogRuleDB()
+        ret = db.delBlackList({"rule_id": data["rule_id"]})
         if ret != "failed":
             return {"status":"success","message": "删除成功", "data": ret}
         else:
@@ -56,8 +31,8 @@ def del_blacklist(data):
 @decorator_checkparams(key_array=["rule_id"])
 def update_blacklist(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.updateBlackList(data)
+        db = SyslogRuleDB()
+        ret = db.updateBlackList(data)
         if ret != "failed":
             return {"status":"success","message": "修改成功", "data": ret}
         else:
@@ -68,8 +43,8 @@ def update_blacklist(data):
 @decorator_checkparams(key_array=[])
 def get_blacklist(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.getBlackList(data)
+        db = SyslogRuleDB()
+        ret = db.getBlackList(data)
         if ret != "failed":
             return {"status":"success","message": "查询成功", "data": ret}
         else:
@@ -77,12 +52,13 @@ def get_blacklist(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
-# 日志聚合规则操作
-@decorator_checkparams(key_array=["group_name", "pattern", "descr"])
-def add_mergelist(data):
+
+# ============== syslog_rule（L3解析规则） ==============
+@decorator_checkparams(key_array=["mnemonic", "match_type", "event_code", "descr"])
+def add_rule(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.addMergeList(data)
+        db = SyslogRuleDB()
+        ret = db.addRule(data)
         if ret != "failed":
             return {"status":"success","message": "添加成功", "data": ret}
         else:
@@ -91,10 +67,10 @@ def add_mergelist(data):
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
 @decorator_checkparams(key_array=["rule_id"])
-def del_mergelist(data):
+def del_rule(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.delMergeList({"rule_id": data["rule_id"]})
+        db = SyslogRuleDB()
+        ret = db.delRule({"rule_id": data["rule_id"]})
         if ret != "failed":
             return {"status":"success","message": "删除成功", "data": ret}
         else:
@@ -103,10 +79,10 @@ def del_mergelist(data):
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
 @decorator_checkparams(key_array=["rule_id"])
-def update_mergelist(data):
+def update_rule(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.updateMergeList(data)
+        db = SyslogRuleDB()
+        ret = db.updateRule(data)
         if ret != "failed":
             return {"status":"success","message": "修改成功", "data": ret}
         else:
@@ -115,10 +91,160 @@ def update_mergelist(data):
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
 @decorator_checkparams(key_array=[])
-def get_mergelist(data):
+def get_rule(data):
     try:
-        syslog_db = SyslogDB()
-        ret = syslog_db.getMergeList(data)
+        db = SyslogRuleDB()
+        ret = db.getRule(data)
+        if ret != "failed":
+            return {"status":"success","message": "查询成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "查询失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+
+# ============== syslog_event（L5事件属性） ==============
+@decorator_checkparams(key_array=["event_code", "descr"])
+def add_event(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.addEvent(data)
+        if ret != "failed":
+            return {"status":"success","message": "添加成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "添加失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=["event_code"])
+def del_event(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.delEvent({"event_code": data["event_code"]})
+        if ret != "failed":
+            return {"status":"success","message": "删除成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "删除失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=["event_code"])
+def update_event(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.updateEvent(data)
+        if ret != "failed":
+            return {"status":"success","message": "修改成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "修改失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=[])
+def get_event(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.getEvent(data)
+        if ret != "failed":
+            return {"status":"success","message": "查询成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "查询失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+
+# ============== syslog_severity_rule（L5事件定级） ==============
+@decorator_checkparams(key_array=["descr"])
+def add_severity_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.addSeverityRule(data)
+        if ret != "failed":
+            return {"status":"success","message": "添加成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "添加失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=["rule_id"])
+def del_severity_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.delSeverityRule({"rule_id": data["rule_id"]})
+        if ret != "failed":
+            return {"status":"success","message": "删除成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "删除失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=["rule_id"])
+def update_severity_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.updateSeverityRule(data)
+        if ret != "failed":
+            return {"status":"success","message": "修改成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "修改失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=[])
+def get_severity_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.getSeverityRule(data)
+        if ret != "failed":
+            return {"status":"success","message": "查询成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "查询失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+
+# ============== syslog_mute_rule（L8告警静默） ==============
+@decorator_checkparams(key_array=["descr"])
+def add_mute_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.addMuteRule(data)
+        if ret != "failed":
+            return {"status":"success","message": "添加成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "添加失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=["rule_id"])
+def del_mute_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.delMuteRule({"rule_id": data["rule_id"]})
+        if ret != "failed":
+            return {"status":"success","message": "删除成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "删除失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=["rule_id"])
+def update_mute_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.updateMuteRule(data)
+        if ret != "failed":
+            return {"status":"success","message": "修改成功", "data": ret}
+        else:
+            return {"status": "failed", "message": "修改失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=[])
+def get_mute_rule(data):
+    try:
+        db = SyslogRuleDB()
+        ret = db.getMuteRule(data)
         if ret != "failed":
             return {"status":"success","message": "查询成功", "data": ret}
         else:
@@ -128,6 +254,10 @@ def get_mergelist(data):
 
 @decorator_checkparams(key_array=[])
 def get_current_alarm(data):
+    '''
+    当前告警：alarm_list 一行已经是一个聚合好的告警，这里只按 (ip, hostname)
+    分组给前端做两层折叠展示，不再是"多条日志合成一组"的旧模型
+    '''
     try:
         alarm_db = AlarmDB()
         li = alarm_db.getAlarmListCurrent()
@@ -148,7 +278,7 @@ def get_current_alarm(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
-@decorator_checkparams(key_array=[])
+@decorator_checkparams(key_array=["start_time", "end_time"])
 def get_history_alarm(data):
     try:
         alarm_db = AlarmDB()
@@ -170,53 +300,50 @@ def get_history_alarm(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
-@decorator_checkparams(key_array=["group_label"])
-def get_alarm_by_group(data):
+@decorator_checkparams(key_array=["alarm_id"])
+def get_alarm_log_detail(data):
+    '''
+    下钻：取支撑某条聚合告警的原子日志（alarm_log，只留7天）
+    '''
     try:
         alarm_db = AlarmDB()
-        li = alarm_db.getAlarmList({"group_label": data["group_label"]})
-        if li != "failed":
-            return {"status":"success","message": "查询成功", "data": li}
-        else:
+        ret = alarm_db.getAlarmLogsByAlarm({"alarm_id": data["alarm_id"]})
+        if ret == "failed":
             return {"status": "failed", "message": "查询失败", "data": None}
+        if ret is None:
+            return {"status": "failed", "message": "告警不存在", "data": None}
+        return {"status": "success", "message": "查询成功", "data": ret}
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
 
-@decorator_checkparams(key_array=["group_labels", "status", "handler"])
-def handle_alarm_by_group(data):
+@decorator_checkparams(key_array=["alarm_ids", "status", "handler"])
+def handle_alarm_by_ids(data):
     '''
+    人工处理：只改 alarm_list.status（人工处理到哪一步），处理历史另写
+    alarm_handle_log（央端自建表，不是 switchlog 的 alarm_log）
     :param data: {
-        group_labels:["328078962c656cdcfd724235828e9f54","328078962c656cdcfd724235828e9f54"],
-        status:"success",
-        handler:"success"
+        alarm_ids:[12345,12346],
+        status:"1",
+        handler:"chensong",
+        descr:"" (可选)
     }
-    :return:
     '''
     try:
-        if len(data["group_labels"])<=0:
+        if len(data["alarm_ids"]) <= 0:
             return {"status": "failed", "message": "待处理数据条目为空", "data": None}
-        # 添加日志
-        handle_msg = "状态修改成{}".format(data["status"])
-        if "descr" in data.keys():
-            handle_msg += "\n{}".format(data["descr"])
 
         alarm_db = AlarmDB()
-        ret1 = alarm_db.addAlarmLogByGroup({
-            "group_labels": data["group_labels"],
-            "msg": handle_msg,
-            "handler": data["handler"]
+        ret1 = alarm_db.addHandleLogByIds({
+            "alarm_ids": data["alarm_ids"],
+            "handler": data["handler"],
+            "status": data["status"],
+            "msg": data.get("descr", "")
         })
+        if ret1 == "failed":
+            return {"status": "failed", "message": "处理失败,写入处理记录出错", "data": None}
 
-        # 更新记录
-        alarm_db = AlarmDB()
-        group_label_str = ",".join(data["group_labels"])
-        if '"' in group_label_str or "'" in group_label_str:
-            return {"status": "failed", "message": "处理失败,数据存在问题", "data": None}
-        ret = alarm_db.updateAlarmListByGroup({"group_labels": data["group_labels"], "status": data["status"]})
-
-
-
+        ret = alarm_db.updateAlarmStatusByIds({"alarm_ids": data["alarm_ids"], "status": data["status"]})
         if ret != "failed":
             return {"status": "success", "message": "处理成功", "data": ret}
         else:
@@ -224,11 +351,11 @@ def handle_alarm_by_group(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
-@decorator_checkparams(key_array=["group_label"])
-def get_alarm_log(data):
+@decorator_checkparams(key_array=["alarm_id"])
+def get_handle_log(data):
     try:
         alarm_db = AlarmDB()
-        li = alarm_db.getAlarmLog(data)
+        li = alarm_db.getHandleLog(data)
         if li != "failed":
             return {"status":"success","message": "查询成功", "data": li}
         else:
@@ -236,11 +363,14 @@ def get_alarm_log(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
-@decorator_checkparams(key_array=["group_labels"])
-def get_log_by_group(data):
+@decorator_checkparams(key_array=["alarm_ids"])
+def get_alarm_by_ids(data):
+    '''
+    导出等场景：按 alarm_id 批量取聚合告警行本身
+    '''
     try:
         alarm_db = AlarmDB()
-        li = alarm_db.getAlarmListByGroup(data)
+        li = alarm_db.getAlarmListByIds(data)
         if li != "failed":
             return {"status": "success", "message": "查询成功", "data": li}
         else:
@@ -251,26 +381,11 @@ def get_log_by_group(data):
 
 
 if __name__ == '__main__':
-    # ret11 = check_mergelist({"message": "%Jan  1 08:46:32:471 2011 vrrp-test-2 %%IFNET/3/PHY_UPDO1WN: Vlan-interface162 link status is up.","ip":"1.1.1.1"})
-    # print(ret11)
-    #
     data1 = get_current_alarm({})
-    for key, value in data1["data"].items():
-        print(value['ip'], value['hostname'])
-        for alarm in value['alarm_list']:
+    for group in data1["data"]:
+        print(group['ip'], group['hostname'])
+        for alarm in group['children']:
             print(alarm)
-
-    # aa = handle_alarm_by_group({"group_labels":["328078962c656cdcfd724235828e9f54"], "status": "3", "handler":"chensong1"})
-    # print(aa)
-    #
-    #
-    #
-    # bb = get_alarm_by_group({"group_label": "328078962c656cdcfd724235828e9f54"})
-    # for item in bb["data"]:
-    #     print(item)
-    #
-    # cc = get_alarm_log({"alarm_id": 27300})
-    # print(cc)
 
 
 
