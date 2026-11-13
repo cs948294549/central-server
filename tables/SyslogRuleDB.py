@@ -112,11 +112,13 @@ class SyslogRuleDB(mysqldb_netops):
             if key in data.keys():
                 conditions.append(key + "='" + str(data[key]) + "'")
 
-        sql = "select rule_id,pattern,scope,ip,ignore_case,enabled,descr,update_time from syslog_black_list"
+        sql = ("select rule_id,pattern,scope,ip,ignore_case,enabled,descr,"
+               "hit_count,last_hit_time,update_time from syslog_black_list")
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
         sql = sql + " order by rule_id"
-        proper = ["rule_id", "pattern", "scope", "ip", "ignore_case", "enabled", "descr", "update_time"]
+        proper = ["rule_id", "pattern", "scope", "ip", "ignore_case", "enabled", "descr",
+                  "hit_count", "last_hit_time", "update_time"]
         return self._fetchAll(sql, proper, ["pattern", "descr"])
 
     # ================= syslog_rule =================
@@ -541,12 +543,12 @@ class SyslogRuleDB(mysqldb_netops):
                 conditions.append(key + "='" + str(data[key]) + "'")
 
         sql = '''select rule_id,ip_reg,event_code_reg,object_reg,start_time,end_time,
-        enabled,descr,update_time from syslog_mute_rule'''
+        enabled,descr,hit_count,last_hit_time,update_time from syslog_mute_rule'''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
         sql = sql + " order by rule_id"
         proper = ["rule_id", "ip_reg", "event_code_reg", "object_reg", "start_time", "end_time",
-                  "enabled", "descr", "update_time"]
+                  "enabled", "descr", "hit_count", "last_hit_time", "update_time"]
         return self._fetchAll(sql, proper, ["ip_reg", "event_code_reg", "object_reg", "descr"])
 
     # ================= 公共 =================
