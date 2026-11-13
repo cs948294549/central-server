@@ -215,34 +215,13 @@ def test_ipam_tree(data_ips):
     return tree
 
 if __name__ == '__main__':
-    import json
-    # testV4check()
-    # testV6check()
-
-    # it = getStartEnd(net="2409:2000::1000:1A:0:2/96")
-    #
-    # print(it)
-    #
-    # print(getIPaddressStrV6(ipv6_byte=bytes.fromhex(it["start"])))
-    # print(getIPaddressStrV6(ipv6_byte=bytes.fromhex(it["end"])))
-
-    # ret = [
-    #     {"ip": "192.168.1.0", "mask": "24"},
-    #     {"ip": "192.168.4.0", "mask": "22"},
-    #     {"ip": "192.168.2.0", "mask": "24"},
-    #     {"ip": "192.168.3.0", "mask": "24"},
-    #     {"ip": "192.168.4.0", "mask": "24"},
-    #     {"ip": "192.168.5.0", "mask": "24"},
-    #     {"ip": "192.168.6.0", "mask": "24"},
-    #     {"ip": "192.168.0.0", "mask": "22"},
-    #     {"ip": "192.168.7.0", "mask": "24"},
-    #     {"ip": "192.168.0.0", "mask": "16"},
-    # ]
-    # tree = test_ipam_tree(ret)
-    # print(json.dumps(tree, indent=4, ensure_ascii=False))
-    aa = wildcard2length("0.0.3.255")
+    aa = decimalism2ip(2887318040)
     print(aa)
 
+    "10.39.192.0-10.39.223.255"
+    bb = ip2decimalism("10.39.192.0")
+    print(bb)
 
-
+    bb1 = ip2decimalism("10.39.223.255")
+    print(bb1)
 

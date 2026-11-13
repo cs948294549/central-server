@@ -351,6 +351,71 @@ class AlarmDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def getAlarmLogsByDevice(self, data):
+        '''
+        按设备取一段时间内的全部原子日志，不限指纹
+
+        和 getAlarmLogsByAlarm 的区别：那个按指纹查，只能看到某一条告警
+        自己的日志；这个按 ip 查，这段时间里这台设备所有进了管线的日志
+        都在，包括没产生告警的（没到阈值的、被定级规则 ignore 的、噪声
+        事件码）。排查"这个口为什么抖"时要看的恰恰是这些上下文 ——
+        单条告警的下钻只有 IF_DOWN/IF_UP 两行，看不出中间还夹着速率协商、
+        双工变化这些伴生日志。
+
+        时间跨度限 1 天：alarm_log 留 7 天，一台刷日志的设备 7 天能有
+        几十万行，不设上限一次查询能把看板拖死。
+
+        :param data: {"ip":.., "start_ts":.., "end_ts":.., "limit":500(可选)}
+        :return: {"logs":[...], "truncated":bool, "start_ts":.., "end_ts":..}
+                 失败返回 "failed"
+        '''
+        if "ip" not in data.keys() or "start_ts" not in data.keys() \
+                or "end_ts" not in data.keys():
+            logger.warning("======AlarmDB getAlarmLogsByDevice warning========\n{}".format(
+                "缺少 ip 或时间范围"))
+            return "failed"
+
+        start = self._safeInt(data["start_ts"])
+        end = self._safeInt(data["end_ts"])
+        if start <= 0 or end <= 0 or end < start:
+            logger.warning("======AlarmDB getAlarmLogsByDevice warning========\n{}".format(
+                "时间范围不合法"))
+            return "failed"
+        if end - start > 86400:
+            logger.warning("======AlarmDB getAlarmLogsByDevice warning========\n{}".format(
+                "时间跨度过大"))
+            return "failed"
+
+        data = waf(data)
+        limit = int(data.get("limit", 500))
+        sql = '''
+        select log_id, fingerprint, ip, hostname, event_code, alarm_object, severity,
+        mnemonic, msg, is_read, ingest_ts
+        from alarm_log
+        where ip=%s and ingest_ts >= %s and ingest_ts <= %s
+        order by ingest_ts, log_id limit %s
+        '''
+        proper = ["log_id", "fingerprint", "ip", "hostname", "event_code", "alarm_object",
+                  "severity", "mnemonic", "msg", "is_read", "ingest_ts"]
+        try:
+            self.cursor.execute(sql, (str(data["ip"]), str(start), str(end), limit + 1))
+            result1 = self.cursor.fetchall()
+            results = []
+            for i in result1:
+                result = {}
+                for num in range(len(proper)):
+                    result[proper[num]] = i[num] if i[num] != None else ""
+                results.append(result)
+            truncated = len(results) > limit
+            return {"logs": results[:limit], "truncated": truncated,
+                    "start_ts": start, "end_ts": end}
+        except Exception as err:
+            logger.error("======AlarmDB getAlarmLogsByDevice error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def markAlarmLogsRead(self, data):
         '''
         :param data: {"log_ids":[1,2,3]} 或 {"fingerprint":.., "start_ts":.., "end_ts":..}

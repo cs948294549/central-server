@@ -125,6 +125,15 @@ def getAlarmLogDetail():
     '''
     return _dispatch(syslog_manage.get_alarm_log_detail, request.json)
 
+@alarm_bp.route('/get_device_log_detail', methods=['POST'])
+def getDeviceLogDetail():
+    '''
+    ip + start_ts + end_ts 按设备查这段时间内的全部原子日志，按时间排序。
+    不限指纹，含没产生告警的日志
+    :return:
+    '''
+    return _dispatch(syslog_manage.get_device_log_detail, request.json)
+
 @alarm_bp.route('/handle_alarm_by_ids', methods=['POST'])
 def handleAlarmByIds():
     return _dispatch(syslog_manage.handle_alarm_by_ids, request.json)

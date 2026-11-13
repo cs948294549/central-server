@@ -308,6 +308,30 @@ def get_history_alarm(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
+@decorator_checkparams(key_array=["ip", "start_ts", "end_ts"])
+def get_device_log_detail(data):
+    '''
+    按设备看一段时间内的全部原子日志，不限指纹
+
+    看板上设备分组那一行的"查看日志"按钮调这个。和 get_alarm_log_detail
+    的区别：那个只给某一条告警的日志，这个把这段时间里这台设备所有进了
+    管线的日志都拉出来（含没产生告警的、被 ignore 的、噪声码），按时间
+    排序 —— 排查一个口为什么抖，要看的就是夹在 down/up 中间的那些
+    速率协商、双工变化。
+    '''
+    try:
+        ret = AlarmDB().getAlarmLogsByDevice({
+            "ip": data["ip"],
+            "start_ts": data["start_ts"],
+            "end_ts": data["end_ts"],
+            "limit": data.get("limit", 500),
+        })
+        if ret == "failed":
+            return {"status": "failed", "message": "查询失败", "data": None}
+        return {"status": "success", "message": "查询成功", "data": ret}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
 @decorator_checkparams(key_array=["alarm_id"])
 def get_alarm_log_detail(data):
     '''
