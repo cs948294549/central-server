@@ -266,9 +266,13 @@ def get_current_alarm(data):
             for item in li:
                 label = "{}_{}".format(item["ip"], item["hostname"])
                 if label not in group_alarm.keys():
+                    # vendor/hardware 是设备级信息，同一设备下所有告警都一样，
+                    # 放外层分组头只展示一次，不用塞进每条 children
                     group_alarm[label] = {
                         "ip": item["ip"],
                         "hostname": item["hostname"],
+                        "vendor": item.get("vendor", ""),
+                        "hardware": item.get("hardware", ""),
                         "children": []
                     }
                 group_alarm[label]["children"].append(item)
@@ -288,9 +292,13 @@ def get_history_alarm(data):
             for item in li:
                 label = "{}_{}".format(item["ip"], item["hostname"])
                 if label not in group_alarm.keys():
+                    # vendor/hardware 是设备级信息，同一设备下所有告警都一样，
+                    # 放外层分组头只展示一次，不用塞进每条 children
                     group_alarm[label] = {
                         "ip": item["ip"],
                         "hostname": item["hostname"],
+                        "vendor": item.get("vendor", ""),
+                        "hardware": item.get("hardware", ""),
                         "children": []
                     }
                 group_alarm[label]["children"].append(item)
@@ -333,8 +341,7 @@ def handle_alarm_by_ids(data):
         if len(data["alarm_ids"]) <= 0:
             return {"status": "failed", "message": "待处理数据条目为空", "data": None}
 
-        alarm_db = AlarmDB()
-        ret1 = alarm_db.addHandleLogByIds({
+        ret1 = AlarmDB().addHandleLogByIds({
             "alarm_ids": data["alarm_ids"],
             "handler": data["handler"],
             "status": data["status"],
@@ -343,7 +350,11 @@ def handle_alarm_by_ids(data):
         if ret1 == "failed":
             return {"status": "failed", "message": "处理失败,写入处理记录出错", "data": None}
 
-        ret = alarm_db.updateAlarmStatusByIds({"alarm_ids": data["alarm_ids"], "status": data["status"]})
+        # 每个 AlarmDB 方法用完都会在 finally 里自己关连接（self.conn.close()），
+        # 一个实例只能安全调一次方法 —— 复用上面那个 alarm_db 调第二个方法，
+        # 连接已经被第一次调用关掉了，会报 pymysql "Already closed"。
+        # 这里必须用新实例
+        ret = AlarmDB().updateAlarmStatusByIds({"alarm_ids": data["alarm_ids"], "status": data["status"]})
         if ret != "failed":
             return {"status": "success", "message": "处理成功", "data": ret}
         else:

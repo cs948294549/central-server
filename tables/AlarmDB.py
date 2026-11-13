@@ -106,16 +106,17 @@ class AlarmDB(mysqldb_netops):
 
         sql = '''
                 select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
-                fingerprint,severity,state,status,muted,mute_rule_id,counter,
+                fingerprint,vendor,hardware,object_name,object_alias,severity,state,status,
+                muted,mute_rule_id,counter,
                 first_seen,last_seen,clear_time,create_time from alarm_list '''
         if len(conditions) > 0:
             sql = sql + " where " + " and ".join(conditions)
         sql = sql + " order by create_time desc"
 
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
-                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
-                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
-                  "create_time"]
+                  "alarm_object", "keyword", "fingerprint", "vendor", "hardware", "object_name",
+                  "object_alias", "severity", "state", "status", "muted", "mute_rule_id",
+                  "counter", "first_seen", "last_seen", "clear_time", "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -143,16 +144,17 @@ class AlarmDB(mysqldb_netops):
         '''
         sql = '''
         select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
-        fingerprint,severity,state,status,muted,mute_rule_id,counter,
+        fingerprint,vendor,hardware,object_name,object_alias,severity,state,status,
+        muted,mute_rule_id,counter,
         first_seen,last_seen,clear_time,create_time
         from alarm_list
         where state='open'
         order by muted asc, severity asc, last_seen desc
         '''
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
-                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
-                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
-                  "create_time"]
+                  "alarm_object", "keyword", "fingerprint", "vendor", "hardware", "object_name",
+                  "object_alias", "severity", "state", "status", "muted", "mute_rule_id",
+                  "counter", "first_seen", "last_seen", "clear_time", "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -207,14 +209,15 @@ class AlarmDB(mysqldb_netops):
 
         sql = '''
         select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
-        fingerprint,severity,state,status,muted,mute_rule_id,counter,
+        fingerprint,vendor,hardware,object_name,object_alias,severity,state,status,
+        muted,mute_rule_id,counter,
         first_seen,last_seen,clear_time,create_time
         from alarm_list where {} order by create_time desc
         '''.format(" and ".join(conditions))
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
-                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
-                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
-                  "create_time"]
+                  "alarm_object", "keyword", "fingerprint", "vendor", "hardware", "object_name",
+                  "object_alias", "severity", "state", "status", "muted", "mute_rule_id",
+                  "counter", "first_seen", "last_seen", "clear_time", "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
@@ -245,14 +248,15 @@ class AlarmDB(mysqldb_netops):
         id_list_str = ",".join([str(int(i)) for i in data["alarm_ids"]])
         sql = '''
         select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
-        fingerprint,severity,state,status,muted,mute_rule_id,counter,
+        fingerprint,vendor,hardware,object_name,object_alias,severity,state,status,
+        muted,mute_rule_id,counter,
         first_seen,last_seen,clear_time,create_time
         from alarm_list where alarm_id in ({}) order by create_time
         '''.format(id_list_str)
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
-                  "alarm_object", "keyword", "fingerprint", "severity", "state", "status",
-                  "muted", "mute_rule_id", "counter", "first_seen", "last_seen", "clear_time",
-                  "create_time"]
+                  "alarm_object", "keyword", "fingerprint", "vendor", "hardware", "object_name",
+                  "object_alias", "severity", "state", "status", "muted", "mute_rule_id",
+                  "counter", "first_seen", "last_seen", "clear_time", "create_time"]
         try:
             self.cursor.execute(sql)
             result1 = self.cursor.fetchall()
