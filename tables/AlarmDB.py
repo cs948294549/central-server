@@ -139,8 +139,22 @@ class AlarmDB(mysqldb_netops):
 
     def getAlarmListCurrent(self):
         '''
-        当前告警：state=open 的聚合告警，一行就是一条，不再需要按 group_label
-        聚合多条日志——那是旧模型。muted 排在前面方便看板优先展示没被压住的
+        当前告警：待处理（status=0）的聚合告警，一行就是一条
+
+        按 status 过滤，不按 state —— 这一页是值班的待办队列，不是
+        "当前还断着的东西"的快照：
+
+          * 一个口掉了又自己恢复了（state=clear），但没人看过
+            （status=0），照样要留在页面上。按 state='open' 过滤的话
+            这种告警会凭空消失，只能去历史页翻 —— 等于漏掉了
+          * 反过来，还断着但已经有人处理了（state=open, status=2）的，
+            不该再占着待办列表
+
+        state 字段仍然返回，前端用它显示"告警"/"恢复"标签。
+
+        status=5 是 L5 定级规则判定不告警的（系统自动打的，不是人工
+        操作），这类压根不该进待办，所以条件写 status='0' 而不是
+        status<>'0' 取反。muted 排在前面方便优先看没被压住的
         '''
         sql = '''
         select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
@@ -148,7 +162,7 @@ class AlarmDB(mysqldb_netops):
         muted,mute_rule_id,counter,
         first_seen,last_seen,clear_time,create_time
         from alarm_list
-        where state='open'
+        where status='0'
         order by muted asc, severity asc, last_seen desc
         '''
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
