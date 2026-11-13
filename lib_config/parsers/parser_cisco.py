@@ -49,7 +49,12 @@ class CiscoParser(BaseParser):
     # ==================== 地址 / 端口文本归一化 ====================
 
     def _parse_addr(self, text: Optional[str]) -> Optional[Dict[str, Any]]:
-        """地址文本归一化为 AddressSpec"""
+        """
+        地址文本归一化为 AddressSpec
+
+        单主机不单设 type: 设备回显里 `permit ip any host 10.18.71.16` 最终就是
+        `permit ip any 10.18.71.16/32`, host 只是输入写法, 一律归一为 network + /32。
+        """
         if not text:
             return None
 
@@ -60,7 +65,8 @@ class CiscoParser(BaseParser):
             return {'type': 'any'}
 
         if lowered == 'host':
-            return {'type': 'host', 'address': f'{tokens[1]}/{"128" if ":" in tokens[1] else "32"}'}
+            return {'type': 'network',
+                    'address': f'{tokens[1]}/{"128" if ":" in tokens[1] else "32"}'}
 
         if lowered in ('addrgroup', 'object-group'):
             return {'type': 'addrgroup', 'name': tokens[-1]}
@@ -71,19 +77,15 @@ class CiscoParser(BaseParser):
                 logger.debug(f"[{self.vendor}] 无法识别的地址掩码长度: {text}")
                 return None
             if ':' in address:
-                return {'type': 'host' if length == '128' else 'network', 'address': tokens[0]}
-            if length == '32':
-                return {'type': 'host', 'address': tokens[0]}
+                return {'type': 'network', 'address': tokens[0]}
             return {'type': 'network',
                     'address': f'{getNet(address, length2netmask(int(length)))}/{length}'}
 
         # 点分十进制, 可能跟反掩码
         if len(tokens) == 1:
-            return {'type': 'host', 'address': f'{tokens[0]}/32'}
+            return {'type': 'network', 'address': f'{tokens[0]}/32'}
 
         length = wildcard2length(tokens[1])
-        if length == 32:
-            return {'type': 'host', 'address': f'{tokens[0]}/32'}
         return {'type': 'network',
                 'address': f'{getNet(tokens[0], length2netmask(length))}/{length}'}
 
