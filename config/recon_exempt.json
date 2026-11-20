@@ -29,6 +29,8 @@
   {"name": "100G_dci_dc07_to_dc05",         "ip": "10.39.224.26",   "reason": "无法监控"},
   {"name": "100G_dci_dc07_to_dc09_1",       "ip": "10.39.224.28",   "reason": "无法监控"},
   {"name": "100G_dci_dc07_to_dc09_2",       "ip": "10.39.224.31",   "reason": "无法监控"},
+  {"name": "dci_dc05_to_dc07-4*100G（）",       "ip": "-",   "reason": "无法监控"},
+  {"name": "dci_dc07_to_dc05-4*100G（）",       "ip": "-",   "reason": "无法监控"},
 
   {"name": "dc03-95th-quota",               "reason": "Zabbix 单独的监控项，不是设备"},
   {"name": "dc07-95th-quota",               "reason": "Zabbix 单独的监控项，不是设备"},

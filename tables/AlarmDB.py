@@ -458,6 +458,74 @@ class AlarmDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def markAlarmLogsReadByAlarmIds(self, data):
+        '''
+        把这批告警对应指纹的原子日志标成已读
+
+        人工处理告警（status 从待处理改成已确认/已处理/忽略/屏蔽）时跟着调。
+
+        **按指纹整批标，不卡时间范围。** 指纹不含时间，所以这会把同一个口
+        同一类故障的历史日志一起标掉（alarm_log 只留 7 天，范围就是这 7 天
+        以内）。这是有意的：is_read 只是看板上的颜色标记（LogDisplay.vue
+        里未读是黄色左标、已读是灰色），不参与任何判断，也没有"只看未读"
+        的筛选。按指纹一条 UPDATE 比一个 alarm_id 一条 UPDATE 简单得多，
+        走 idx_fingerprint_ts 索引。
+
+        副作用：同一指纹下还有一条没处理的告警时，它的日志也会变灰。
+        只是颜色不准，不影响告警本身。
+
+        :param data: {"alarm_ids":[1,2,3]}
+        :return: {"fingerprints":涉及几个指纹, "logs":标掉的日志行数}；
+                 失败返回 "failed"
+        '''
+        data = waf(data)
+        if "alarm_ids" not in data.keys() or len(data["alarm_ids"]) <= 0:
+            logger.warning("======AlarmDB markAlarmLogsReadByAlarmIds warning========\n{}".format(
+                "alarm_ids 为空"))
+            return "failed"
+
+        id_list_str = ",".join([str(int(i)) for i in data["alarm_ids"]])
+        head_sql = '''
+        select distinct fingerprint from alarm_list
+        where alarm_id in ({}) and fingerprint<>''
+        '''.format(id_list_str)
+        try:
+            self.cursor.execute(head_sql)
+            # SQL 里已经 distinct 了，这里再去一遍重：返回的 fingerprints
+            # 条数是给调用方看的，不该依赖"数据库一定去过重"这个前提。
+            # 顺便挡住 NULL（distinct 不会把 NULL 和 '' 合成一个）
+            seen = set()
+            fingerprints = []
+            for row in (self.cursor.fetchall() or []):
+                value = row[0]
+                if not value or value in seen:
+                    continue
+                seen.add(value)
+                fingerprints.append(value)
+            if not fingerprints:
+                # 选中的告警都没有指纹（历史脏数据），没有日志可标
+                logger.warning("======AlarmDB markAlarmLogsReadByAlarmIds warning========\n"
+                               "alarm_ids={} 取不到指纹".format(data["alarm_ids"]))
+                return {"fingerprints": 0, "logs": 0}
+
+            # 一条 UPDATE 批量标。指纹是从库里查出来的 md5，不是用户输入，
+            # 但仍然走占位符 —— 不给以后改这段的人留下拼串的样板
+            marks = ",".join(["%s"] * len(fingerprints))
+            log_sql = ("update alarm_log set is_read=1 "
+                       "where fingerprint in ({}) and is_read=0".format(marks))
+            self.cursor.execute(log_sql, tuple(fingerprints))
+            marked = self.cursor.rowcount
+            self.conn.commit()
+            return {"fingerprints": len(fingerprints), "logs": marked}
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======AlarmDB markAlarmLogsReadByAlarmIds error========\n{}".format(
+                str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     @staticmethod
     def _safeInt(value):
         try:

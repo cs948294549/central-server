@@ -1,7 +1,10 @@
 from tables.AlarmDB import AlarmDB
 from tables.SyslogRuleDB import SyslogRuleDB
 import json
+import logging
 from utils.utils import decorator_checkparams
+
+logger = logging.getLogger(__name__)
 
 # ============== syslog_black_list（L2黑名单） ==============
 @decorator_checkparams(key_array=["pattern", "descr"])
@@ -352,11 +355,19 @@ def get_alarm_log_detail(data):
 @decorator_checkparams(key_array=["alarm_ids", "status", "handler"])
 def handle_alarm_by_ids(data):
     '''
-    人工处理：只改 alarm_list.status（人工处理到哪一步），处理历史另写
-    alarm_handle_log（央端自建表，不是 switchlog 的 alarm_log）
+    人工处理告警，三件事：
+
+        1. 写处理历史 alarm_handle_log（央端自建表，不是 switchlog 的 alarm_log）
+        2. 改 alarm_list.status（人工处理到哪一步）
+        3. 离开"待处理"时，把这些告警对应指纹的 alarm_log 标成 is_read=1
+
+    第 3 件只在 status != '0' 时做：退回待处理说明这条还得再看，日志不能
+    标掉。按指纹整批标、不卡时间范围，所以同指纹的历史日志会一起变灰 ——
+    is_read 只是看板上的颜色标记，标失败也不影响前两件。
+
     :param data: {
         alarm_ids:[12345,12346],
-        status:"1",
+        status:"1",   0待处理 1已确认 2已处理 3忽略 4屏蔽（5是系统判定，人工选不到）
         handler:"chensong",
         descr:"" (可选)
     }
@@ -379,10 +390,35 @@ def handle_alarm_by_ids(data):
         # 连接已经被第一次调用关掉了，会报 pymysql "Already closed"。
         # 这里必须用新实例
         ret = AlarmDB().updateAlarmStatusByIds({"alarm_ids": data["alarm_ids"], "status": data["status"]})
-        if ret != "failed":
-            return {"status": "success", "message": "处理成功", "data": ret}
-        else:
+        if ret == "failed":
             return {"status": "failed", "message": "处理失败", "data": None}
+
+        # 处理过的告警，对应指纹的原子日志跟着标已读 —— 看板上那批日志
+        # 从黄色（未读）变灰（已读）。
+        #
+        # 只在离开"待处理"时标：status='0' 是退回待处理（故障还在持续，或者
+        # 之前标错了），那种情况下日志还得再看一遍，不能标掉。
+        #
+        # 标失败不影响处理结果：status 已经改完了，is_read 只是颜色标记，
+        # 丢了不影响告警本身。所以这里只记日志、不回滚、不报错
+        # 单独 try：这一步抛异常不能让外层 except 把整个请求报成"处理失败" ——
+        # status 和处理记录都已经写成功了，报失败会让人以为没生效、再点一次
+        marked = None
+        if str(data["status"]) != "0":
+            try:
+                marked = AlarmDB().markAlarmLogsReadByAlarmIds(
+                    {"alarm_ids": data["alarm_ids"]})
+            except Exception as err:
+                marked = "failed"
+                logger.error("======handle_alarm_by_ids mark read error========\n{}".format(
+                    str(err)))
+            if marked == "failed":
+                logger.warning("======handle_alarm_by_ids warning========\n{}".format(
+                    "状态已改，但 alarm_log 标已读失败：alarm_ids={}".format(data["alarm_ids"])))
+                marked = None
+
+        return {"status": "success", "message": "处理成功",
+                "data": {"updated": ret, "marked_read": marked}}
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
