@@ -184,9 +184,9 @@ class SSHDeviceBase(ABC):
         统一方法，执行命令列表返回结果
         Args:
             commands: 命令列表
-            
         Returns:
-            dict: 命令执行结果字典
+            dict: 命令执行结果字典，单条命令被设备拒绝时对应 value 为 "failed: 原因"
+            None: 连接已失效（命令下发后读不到回显），上层需要销毁连接重建
         """
         if not isinstance(commands, list):
             return "failed"
@@ -198,7 +198,7 @@ class SSHDeviceBase(ABC):
                 i = i.strip()
                 if error_flag:
                     result["[{}]{}".format(idx, i)] = "failed"
-                    break
+                    continue
 
                 respond = self._send_command(i)
                 # time.sleep(10)
@@ -207,13 +207,15 @@ class SSHDeviceBase(ABC):
                     if prompt is False:
                         result["[{}]{}".format(idx, i)] = "failed: {}".format(_remove_control_characters(detail.strip()))
                         error_flag = True
-                        break
+                        continue
                     else:
                         result["[{}]{}".format(idx, i)] = _remove_control_characters(detail.strip())
                 else:
-                    result["[{}]{}".format(idx, i)] = "failed"
-                    error_flag = True
-                    break
+                    # result["[{}]{}".format(idx, i)] = "failed"
+                    # error_flag = True
+                    # continue
+                    logger.warning("设备{} 执行命令{}读不到回显，连接已失效，已采集回显{}".format(self.host, i, str(result)))
+                    return None
             return result
         except Exception as e:
             logger.error("设备{} 执行命令{}失败,失败原因{}".format(self.host, str(commands), str(e)))
