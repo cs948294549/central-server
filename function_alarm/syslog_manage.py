@@ -1,4 +1,5 @@
-from tables.AlarmDB import AlarmDB, DEVICE_LOG_DEFAULT_LIMIT
+from tables.AlarmDB import (AlarmDB, DEVICE_LOG_DEFAULT_LIMIT,
+                            ALARM_LOG_DEFAULT_LIMIT)
 from tables.SyslogRuleDB import SyslogRuleDB
 import json
 import logging
@@ -372,10 +373,20 @@ def get_device_log_detail(data):
 def get_alarm_log_detail(data):
     '''
     下钻：取支撑某条聚合告警的原子日志（alarm_log，只留7天）
+
+    默认返回最近 1000 条（原来写死 200）。一条告警底下的日志条数就是
+    alarm_list.counter，窗口长的事件码加上设备重复发包，几千条是常事。
+    超了返回 truncated=True，前端据此提示并给"加载全部"的入口。
+
+    :param data: {"alarm_id":.., "limit":1000(可选), "no_limit":False(可选)}
     '''
     try:
         alarm_db = AlarmDB()
-        ret = alarm_db.getAlarmLogsByAlarm({"alarm_id": data["alarm_id"]})
+        ret = alarm_db.getAlarmLogsByAlarm({
+            "alarm_id": data["alarm_id"],
+            "limit": data.get("limit", ALARM_LOG_DEFAULT_LIMIT),
+            "no_limit": data.get("no_limit", False),
+        })
         if ret == "failed":
             return {"status": "failed", "message": "查询失败", "data": None}
         if ret is None:

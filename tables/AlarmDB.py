@@ -49,6 +49,12 @@ DEVICE_LOG_DEFAULT_LIMIT = 1000
 # 数量级，2000 条够翻一周了。同样支持 no_limit
 HISTORY_ALARM_DEFAULT_LIMIT = 2000
 
+# 单条告警下钻的默认返回上限。一条告警底下的日志条数就是 alarm_list.counter
+# ——一个窗口段内的全部日志。窗口长的事件码（PSU_FAIL 7 天、CERT_EXPIRED
+# 1 天）加上设备重复发包，一条告警几千条日志是常事，原来写死 200 条不够看。
+# 和设备日志那个对齐，同样支持 no_limit
+ALARM_LOG_DEFAULT_LIMIT = 1000
+
 class AlarmDB(mysqldb_netops):
     # ---------------- alarm_list（读 + 改人工处理状态） ----------------
 
@@ -341,12 +347,27 @@ class AlarmDB(mysqldb_netops):
         alarm_list 取（first_seen ~ clear_time或last_seen），不用调用方自己拼。
         expired=True 表示告警结束时间已经超过 alarm_log 的7天保留期，
         查不到日志是正常现象，不是查询失败。
-        :param data: {"alarm_id":.., "limit":200(可选)}
+
+        默认返回 ALARM_LOG_DEFAULT_LIMIT 条（原来写死 200）。一条告警底下
+        的日志条数就是 alarm_list.counter，窗口长的事件码加上设备重复发包，
+        几千条是常事。超了标 truncated=True 并带上 limit，由调用方提示；
+        带 no_limit=True 时全量返回。
+
+        **截断留最近的那批**：SQL 倒序取、取完翻回正序。返回的 logs 仍然
+        是按时间从早到晚排的，只是起点落在"最近 N 条"那个点上
+
+        :param data: {"alarm_id":.., "limit":1000(可选), "no_limit":False(可选)}
+        :return: {"logs":[...], "truncated":bool, "limit":实际上限(0=不限),
+                  "expired":bool, "start_ts":.., "end_ts":.., "fingerprint":..}
+                 告警不存在返回 None，失败返回 "failed"
         '''
         data = waf(data)
         if "alarm_id" not in data.keys():
             return "failed"
-        limit = int(data.get("limit", 200))
+        no_limit = bool(data.get("no_limit"))
+        limit = 0 if no_limit else int(data.get("limit", ALARM_LOG_DEFAULT_LIMIT))
+        if limit < 0:
+            limit = ALARM_LOG_DEFAULT_LIMIT
         pad = 2
 
         head_sql = '''
@@ -376,19 +397,25 @@ class AlarmDB(mysqldb_netops):
         if start <= 0 or end <= 0:
             self.cursor.close()
             self.conn.close()
-            return {"logs": [], "truncated": False, "expired": False}
+            return {"logs": [], "truncated": False, "limit": limit, "expired": False}
 
+        # 倒序取，截断时留下的是最近那批。取完翻回正序，见方法注释
         log_sql = '''
         select log_id, fingerprint, ip, hostname, event_code, alarm_object, severity,
         mnemonic, msg, is_read, ingest_ts
         from alarm_log
         where fingerprint=%s and ingest_ts >= %s and ingest_ts <= %s
-        order by ingest_ts limit %s
+        order by ingest_ts desc, log_id desc
         '''
+        params = [fingerprint, str(start), str(end)]
+        if limit > 0:
+            # 多取一条用来判断有没有被截断，返回时再切掉
+            log_sql += " limit %s"
+            params.append(limit + 1)
         proper = ["log_id", "fingerprint", "ip", "hostname", "event_code", "alarm_object",
                   "severity", "mnemonic", "msg", "is_read", "ingest_ts"]
         try:
-            self.cursor.execute(log_sql, (fingerprint, str(start), str(end), limit + 1))
+            self.cursor.execute(log_sql, tuple(params))
             result1 = self.cursor.fetchall()
             results = []
             for i in result1:
@@ -396,9 +423,16 @@ class AlarmDB(mysqldb_netops):
                 for num in range(len(proper)):
                     result[proper[num]] = i[num] if i[num] != None else ""
                 results.append(result)
-            truncated = len(results) > limit
-            return {"logs": results[:limit], "truncated": truncated, "expired": expired,
-                    "start_ts": start, "end_ts": end, "fingerprint": fingerprint}
+            truncated = limit > 0 and len(results) > limit
+            if truncated:
+                logger.warning("======AlarmDB getAlarmLogsByAlarm waning========\n"
+                               "alarm_id={} 的日志超过 {} 条，只返回最近的".format(
+                                   data["alarm_id"], limit))
+            logs = results[:limit] if limit > 0 else results
+            logs.reverse()
+            return {"logs": logs, "truncated": truncated, "limit": limit,
+                    "expired": expired, "start_ts": start, "end_ts": end,
+                    "fingerprint": fingerprint}
         except Exception as err:
             logger.error("======AlarmDB getAlarmLogsByAlarm error========\n{}".format(str(err)))
             return "failed"
