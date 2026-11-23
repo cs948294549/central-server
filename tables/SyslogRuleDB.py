@@ -95,6 +95,40 @@ class SyslogRuleDB(mysqldb_netops):
             self.cursor.close()
             self.conn.close()
 
+    def resetBlackListHits(self, data):
+        '''
+        清命中计数：hit_count 归 0，last_hit_time 清空
+
+        **不用重启 switchlog。** 那边内存里记的是 hits 和 persisted_hits
+        两个值，persist() 只把差值 UPDATE 成 `hit_count = hit_count + 增量`
+        （见 switchlog/pipeline/l2_blacklist.py 的 persist）。所以这里把
+        列归 0 之后，管线不会把历史累计值重新加回来，计数从 0 接着涨。
+
+        last_hit_time 跟着清：它描述的是被清掉的那批命中，留着会出现
+        "0 次命中但有最近命中时间"。
+
+        :param data: {"rule_id":..} 清一条；不给 rule_id 清全部
+        :return: 影响行数；失败返回 "failed"
+        '''
+        data = waf(data)
+        sql = "update syslog_black_list set hit_count=0, last_hit_time=''"
+        params = ()
+        if "rule_id" in data.keys():
+            sql += " where rule_id=%s"
+            params = (int(data["rule_id"]),)
+        try:
+            self.cursor.execute(sql, params)
+            self.conn.commit()
+            return self.cursor.rowcount
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======SyslogRuleDB resetBlackListHits error========\n{}".format(
+                str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
     def getBlackList(self, data):
         data = waf(data)
         conditions = []
@@ -520,6 +554,35 @@ class SyslogRuleDB(mysqldb_netops):
         except Exception as err:
             self.conn.rollback()
             logger.error("======SyslogRuleDB updateMuteRule error========\n{}".format(str(err)))
+            return "failed"
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def resetMuteRuleHits(self, data):
+        '''
+        清命中计数：hit_count 归 0，last_hit_time 清空
+
+        和 resetBlackListHits 同一个道理，不用重启 switchlog —— L8 的
+        persist() 也是只刷增量（switchlog/pipeline/l8_suppress.py）。
+
+        :param data: {"rule_id":..} 清一条；不给 rule_id 清全部
+        :return: 影响行数；失败返回 "failed"
+        '''
+        data = waf(data)
+        sql = "update syslog_mute_rule set hit_count=0, last_hit_time=''"
+        params = ()
+        if "rule_id" in data.keys():
+            sql += " where rule_id=%s"
+            params = (int(data["rule_id"]),)
+        try:
+            self.cursor.execute(sql, params)
+            self.conn.commit()
+            return self.cursor.rowcount
+        except Exception as err:
+            self.conn.rollback()
+            logger.error("======SyslogRuleDB resetMuteRuleHits error========\n{}".format(
+                str(err)))
             return "failed"
         finally:
             self.cursor.close()

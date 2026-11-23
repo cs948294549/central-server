@@ -56,6 +56,26 @@ def get_blacklist(data):
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
+@decorator_checkparams(key_array=[])
+def reset_blacklist_hits(data):
+    '''
+    清黑名单的命中计数，从 0 重新算
+
+    不用重启 switchlog：管线只把增量 UPDATE 进去，不会把历史累计值
+    重新加回来（见 tables/SyslogRuleDB.resetBlackListHits 的说明）。
+
+    :param data: {"rule_id":..} 清一条；不给 rule_id 清全部
+    '''
+    try:
+        db = SyslogRuleDB()
+        ret = db.resetBlackListHits(data)
+        if ret == "failed":
+            return {"status": "failed", "message": "清除失败", "data": None}
+        return {"status": "success",
+                "message": "已清除 {} 条规则的命中计数".format(ret), "data": ret}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
 
 # ============== syslog_rule（L3解析规则） ==============
 @decorator_checkparams(key_array=["mnemonic", "match_type", "event_code", "descr"])
@@ -253,6 +273,25 @@ def get_mute_rule(data):
             return {"status":"success","message": "查询成功", "data": ret}
         else:
             return {"status": "failed", "message": "查询失败", "data": None}
+    except Exception as e:
+        return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
+
+@decorator_checkparams(key_array=[])
+def reset_mute_rule_hits(data):
+    '''
+    清静默规则的命中计数，从 0 重新算
+
+    和黑名单那个一样不用重启 switchlog，L8 的 persist() 也只刷增量。
+
+    :param data: {"rule_id":..} 清一条；不给 rule_id 清全部
+    '''
+    try:
+        db = SyslogRuleDB()
+        ret = db.resetMuteRuleHits(data)
+        if ret == "failed":
+            return {"status": "failed", "message": "清除失败", "data": None}
+        return {"status": "success",
+                "message": "已清除 {} 条规则的命中计数".format(ret), "data": ret}
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 

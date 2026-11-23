@@ -32,6 +32,14 @@ def delBlacklist():
 def updateBlacklist():
     return _dispatch(syslog_manage.update_blacklist, request.json)
 
+@alarm_bp.route('/reset_blacklist_hits', methods=['POST'])
+def resetBlacklistHits():
+    '''
+    清黑名单的命中计数（hit_count 归 0、last_hit_time 清空），从 0 重新算
+    rule_id 可选，不给就清全部。不用重启 switchlog
+    '''
+    return _dispatch(syslog_manage.reset_blacklist_hits, request.json)
+
 @alarm_bp.route('/get_blacklist', methods=['POST'])
 def getBlacklist():
     return _dispatch(syslog_manage.get_blacklist, request.json)
@@ -103,6 +111,14 @@ def delMuteRule():
 @alarm_bp.route('/update_mute_rule', methods=['POST'])
 def updateMuteRule():
     return _dispatch(syslog_manage.update_mute_rule, request.json)
+
+@alarm_bp.route('/reset_mute_rule_hits', methods=['POST'])
+def resetMuteRuleHits():
+    '''
+    清静默规则的命中计数，从 0 重新算
+    rule_id 可选，不给就清全部。不用重启 switchlog
+    '''
+    return _dispatch(syslog_manage.reset_mute_rule_hits, request.json)
 
 @alarm_bp.route('/get_mute_rule', methods=['POST'])
 def getMuteRule():
