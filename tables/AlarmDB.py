@@ -44,6 +44,11 @@ LOG_RETENTION_DAYS = 7
 # 带 no_limit=True 时不设上限，全量返回
 DEVICE_LOG_DEFAULT_LIMIT = 1000
 
+# 历史告警的默认返回上限。比日志那个大一截：alarm_list 一行是一条聚合
+# 告警（一个窗口段一行），同样一段时间里它的量比 alarm_log 小一两个
+# 数量级，2000 条够翻一周了。同样支持 no_limit
+HISTORY_ALARM_DEFAULT_LIMIT = 2000
+
 class AlarmDB(mysqldb_netops):
     # ---------------- alarm_list（读 + 改人工处理状态） ----------------
 
@@ -202,16 +207,31 @@ class AlarmDB(mysqldb_netops):
     def getAlarmListHistory(self, data):
         '''
         历史告警：按 create_time 圈时间范围，不限 state（open/clear都要看）
+
+        **不限时间跨度**，量靠条数兜。原来限 1 天，但历史页本来就是用来
+        翻一段时间的，"这周这个口报过几次"这种问题 1 天的窗口答不了。
+
+        默认返回 HISTORY_ALARM_DEFAULT_LIMIT 条，超了在返回里标
+        truncated=True，由调用方提示。带 no_limit=True 时不设上限。
+
+        **截断留最近的**：order by create_time desc + limit，取完翻回正序
+        （前端按设备分组展示，组内还是按时间从早到晚看着顺）。
+
+        :param data: {"start_time":.., "end_time":..,
+                      各种 *_reg / 等值筛选(可选),
+                      "limit":2000(可选), "no_limit":False(可选)}
+        :return: {"alarms":[...], "truncated":bool, "limit":实际上限(0=不限)}
+                 失败返回 "failed"
         '''
         if "start_time" not in data.keys() or "end_time" not in data.keys():
             logger.warning("======AlarmDB getAlarmListHistory waning========\n{}".format("查询缺少时间范围"))
             return "failed"
-        time_range = int(data["end_time"]) - int(data["start_time"])
-        if time_range >= 86401:
-            logger.warning("======AlarmDB getAlarmListHistory waning========\n{}".format("告警时间跨度过大"))
-            return "failed"
 
         data = waf(data)
+        no_limit = bool(data.get("no_limit"))
+        limit = 0 if no_limit else int(data.get("limit", HISTORY_ALARM_DEFAULT_LIMIT))
+        if limit < 0:
+            limit = HISTORY_ALARM_DEFAULT_LIMIT
         conditions = []
         serach_reg_key = [
             {"key": "ip_reg", "value": "ip"},
@@ -231,30 +251,42 @@ class AlarmDB(mysqldb_netops):
         conditions.append("create_time>='" + str(data["start_time"]) + "'")
         conditions.append("create_time<='" + str(data["end_time"]) + "'")
 
+        # 倒序取，截断时留下的是**最近**那批。升序 + limit 留下的是时间
+        # 范围里最早那批 —— 翻历史是从近往远看，不是从头看
         sql = '''
         select alarm_id,ip,hostname,alarm_type,group_label,msg,group_name,alarm_object,keyword,
         fingerprint,vendor,hardware,object_name,object_alias,severity,state,status,
         muted,mute_rule_id,counter,
         first_seen,last_seen,clear_time,create_time
-        from alarm_list where {} order by create_time desc
+        from alarm_list where {} order by create_time desc, alarm_id desc
         '''.format(" and ".join(conditions))
+        params = ()
+        if limit > 0:
+            # 多取一条用来判断有没有被截断，返回时再切掉
+            sql += " limit %s"
+            params = (limit + 1,)
         proper = ["alarm_id", "ip", "hostname", "alarm_type", "group_label", "msg", "group_name",
                   "alarm_object", "keyword", "fingerprint", "vendor", "hardware", "object_name",
                   "object_alias", "severity", "state", "status", "muted", "mute_rule_id",
                   "counter", "first_seen", "last_seen", "clear_time", "create_time"]
         try:
-            self.cursor.execute(sql)
+            self.cursor.execute(sql, params)
             result1 = self.cursor.fetchall()
             results = []
-            if len(result1) > 0:
-                for i in result1:
-                    result = {}
-                    for num in range(len(proper)):
-                        result[proper[num]] = i[num] if i[num] != None else ""
-                    results.append(result)
-                return results
-            else:
-                return []
+            for i in result1:
+                result = {}
+                for num in range(len(proper)):
+                    result[proper[num]] = i[num] if i[num] != None else ""
+                results.append(result)
+            truncated = limit > 0 and len(results) > limit
+            if truncated:
+                logger.warning("======AlarmDB getAlarmListHistory waning========\n"
+                               "查出的告警超过 {} 条，只返回最近的（跨度 {} 秒）".format(
+                                   limit, int(data["end_time"]) - int(data["start_time"])))
+            # 先切掉多取的那一条（它是更早的，倒序排在末尾），再翻回正序
+            alarms = results[:limit] if limit > 0 else results
+            alarms.reverse()
+            return {"alarms": alarms, "truncated": truncated, "limit": limit}
         except Exception as err:
             logger.error("======AlarmDB getAlarmListHistory error========\n{}".format(str(err)))
             return "failed"

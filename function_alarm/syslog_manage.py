@@ -287,27 +287,50 @@ def get_current_alarm(data):
 
 @decorator_checkparams(key_array=["start_time", "end_time"])
 def get_history_alarm(data):
+    '''
+    历史告警：按 (ip, hostname) 分组给前端做两层折叠展示
+
+    不限时间跨度，量靠条数兜：默认 2000 条，超了在返回的同级字段里带
+    truncated=True 和实际用的 limit，前端据此提示并给"加载全部"的入口。
+    no_limit=True 时全量返回。
+
+    返回的 data 从"设备分组数组"改成了对象：
+
+        {"devices":[分组...], "truncated":bool, "limit":N, "total":N}
+
+    不把 truncated 放在 data 外面是因为 api_alarm._dispatch 只透传
+    data 和 message，同级字段到不了前端；也不能插进分组数组里 ——
+    那会被当成一个设备。前端取 data.devices
+
+    :param data: {"start_time":.., "end_time":..,
+                  各种 *_reg / 等值筛选(可选),
+                  "limit":2000(可选), "no_limit":False(可选)}
+    '''
     try:
         alarm_db = AlarmDB()
-        li = alarm_db.getAlarmListHistory(data)
-        if li != "failed":
-            group_alarm = {}
-            for item in li:
-                label = "{}_{}".format(item["ip"], item["hostname"])
-                if label not in group_alarm.keys():
-                    # vendor/hardware 是设备级信息，同一设备下所有告警都一样，
-                    # 放外层分组头只展示一次，不用塞进每条 children
-                    group_alarm[label] = {
-                        "ip": item["ip"],
-                        "hostname": item["hostname"],
-                        "vendor": item.get("vendor", ""),
-                        "hardware": item.get("hardware", ""),
-                        "children": []
-                    }
-                group_alarm[label]["children"].append(item)
-            return {"status":"success","message": "查询成功", "data": list(group_alarm.values())}
-        else:
+        ret = alarm_db.getAlarmListHistory(data)
+        if ret == "failed":
             return {"status": "failed", "message": "查询失败", "data": None}
+
+        group_alarm = {}
+        for item in ret["alarms"]:
+            label = "{}_{}".format(item["ip"], item["hostname"])
+            if label not in group_alarm.keys():
+                # vendor/hardware 是设备级信息，同一设备下所有告警都一样，
+                # 放外层分组头只展示一次，不用塞进每条 children
+                group_alarm[label] = {
+                    "ip": item["ip"],
+                    "hostname": item["hostname"],
+                    "vendor": item.get("vendor", ""),
+                    "hardware": item.get("hardware", ""),
+                    "children": []
+                }
+            group_alarm[label]["children"].append(item)
+        return {"status": "success", "message": "查询成功",
+                "data": {"devices": list(group_alarm.values()),
+                         "truncated": ret["truncated"],
+                         "limit": ret["limit"],
+                         "total": len(ret["alarms"])}}
     except Exception as e:
         return {"status": "failed", "message": "内部错误{}".format(str(e)), "data": None}
 
