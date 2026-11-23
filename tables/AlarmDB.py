@@ -34,6 +34,16 @@ CREATE TABLE IF NOT EXISTS alarm_handle_log(
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警人工处理历史';
 '''
 
+# alarm_log 的保留天数，和 switchlog 那边的 DEFAULT_LOG_RETENTION_DAYS
+# 对齐（projects/switchlog/pipeline/l6_aggregate.py）。
+# "日志已过期"的判断按它算
+LOG_RETENTION_DAYS = 7
+
+# 按设备查日志的默认返回上限。超了在返回里标 truncated，由调用方提示，
+# 不是静默截断 —— 看到 500 条就以为只有 500 条是最糟的情况。
+# 带 no_limit=True 时不设上限，全量返回
+DEVICE_LOG_DEFAULT_LIMIT = 1000
+
 class AlarmDB(mysqldb_netops):
     # ---------------- alarm_list（读 + 改人工处理状态） ----------------
 
@@ -306,7 +316,6 @@ class AlarmDB(mysqldb_netops):
             return "failed"
         limit = int(data.get("limit", 200))
         pad = 2
-        retention_days = 7
 
         head_sql = '''
         select fingerprint, first_seen, last_seen, clear_time
@@ -330,7 +339,7 @@ class AlarmDB(mysqldb_netops):
         start = self._safeInt(first_seen) - pad
         upper = clear_time if clear_time else last_seen
         end = self._safeInt(upper) + pad
-        expired = bool(end) and end < int(time.time()) - retention_days * 86400
+        expired = bool(end) and end < int(time.time()) - LOG_RETENTION_DAYS * 86400
 
         if start <= 0 or end <= 0:
             self.cursor.close()
@@ -376,12 +385,23 @@ class AlarmDB(mysqldb_netops):
         单条告警的下钻只有 IF_DOWN/IF_UP 两行，看不出中间还夹着速率协商、
         双工变化这些伴生日志。
 
-        时间跨度限 1 天：alarm_log 留 7 天，一台刷日志的设备 7 天能有
-        几十万行，不设上限一次查询能把看板拖死。
+        **不限时间跨度。** 原来限 1 天，但看板算窗口用的是"这台设备最早
+        first_seen ~ 最晚 last_seen"，只要有一条还没恢复的老告警挂着
+        （一个口 down 了三天没人管），窗口就超 1 天，点"全部日志"直接被拒。
+        真实边界本来就是保留期 —— 再往前查 alarm_log 已经删了。
 
-        :param data: {"ip":.., "start_ts":.., "end_ts":.., "limit":500(可选)}
-        :return: {"logs":[...], "truncated":bool, "start_ts":.., "end_ts":..}
-                 失败返回 "failed"
+        量靠条数兜：默认返回 DEVICE_LOG_DEFAULT_LIMIT 条，超了在返回里
+        标 truncated=True 并带上 limit，由调用方提示用户。带
+        no_limit=True 时不设上限，全量返回。
+
+        **截断时留最近的那批**，不是最早的：排查一个口为什么抖，要看的是
+        刚才发生了什么。所以 SQL 倒序取，取完翻回正序 —— 返回给前端的
+        logs 仍然是按时间从早到晚排的，只是起点落在"最近 N 条"的那个点上。
+
+        :param data: {"ip":.., "start_ts":.., "end_ts":..,
+                      "limit":1000(可选), "no_limit":False(可选)}
+        :return: {"logs":[...], "truncated":bool, "limit":实际用的上限(0=不限),
+                  "start_ts":.., "end_ts":..}；失败返回 "failed"
         '''
         if "ip" not in data.keys() or "start_ts" not in data.keys() \
                 or "end_ts" not in data.keys():
@@ -395,24 +415,32 @@ class AlarmDB(mysqldb_netops):
             logger.warning("======AlarmDB getAlarmLogsByDevice warning========\n{}".format(
                 "时间范围不合法"))
             return "failed"
-        if end - start > 86400:
-            logger.warning("======AlarmDB getAlarmLogsByDevice warning========\n{}".format(
-                "时间跨度过大"))
-            return "failed"
-
         data = waf(data)
-        limit = int(data.get("limit", 500))
-        sql = '''
+        no_limit = bool(data.get("no_limit"))
+        limit = 0 if no_limit else int(data.get("limit", DEVICE_LOG_DEFAULT_LIMIT))
+        if limit < 0:
+            limit = DEVICE_LOG_DEFAULT_LIMIT
+
+        # 倒序取，截断时留下的是**最近**那批。升序 + limit 留下的是最早
+        # 那批 —— 排查一个口为什么抖，要看的是刚才发生了什么，不是一周前
+        # 那几条。取完在 Python 里翻回正序，展示仍然是按时间从早到晚
+        base_sql = '''
         select log_id, fingerprint, ip, hostname, event_code, alarm_object, severity,
         mnemonic, msg, is_read, ingest_ts
         from alarm_log
         where ip=%s and ingest_ts >= %s and ingest_ts <= %s
-        order by ingest_ts, log_id limit %s
+        order by ingest_ts desc, log_id desc
         '''
+        params = [str(data["ip"]), str(start), str(end)]
+        if limit > 0:
+            # 多取一条用来判断有没有被截断，返回时再切掉
+            base_sql += " limit %s"
+            params.append(limit + 1)
+
         proper = ["log_id", "fingerprint", "ip", "hostname", "event_code", "alarm_object",
                   "severity", "mnemonic", "msg", "is_read", "ingest_ts"]
         try:
-            self.cursor.execute(sql, (str(data["ip"]), str(start), str(end), limit + 1))
+            self.cursor.execute(base_sql, tuple(params))
             result1 = self.cursor.fetchall()
             results = []
             for i in result1:
@@ -420,8 +448,16 @@ class AlarmDB(mysqldb_netops):
                 for num in range(len(proper)):
                     result[proper[num]] = i[num] if i[num] != None else ""
                 results.append(result)
-            truncated = len(results) > limit
-            return {"logs": results[:limit], "truncated": truncated,
+            truncated = limit > 0 and len(results) > limit
+            if truncated:
+                logger.warning("======AlarmDB getAlarmLogsByDevice warning========\n"
+                               "ip={} 的日志超过 {} 条，只返回最近的（跨度 {} 秒）".format(
+                                   data["ip"], limit, end - start))
+            # 先切掉多取的那一条（它是更早的，倒序排在末尾），再翻回正序
+            logs = results[:limit] if limit > 0 else results
+            logs.reverse()
+            return {"logs": logs,
+                    "truncated": truncated, "limit": limit,
                     "start_ts": start, "end_ts": end}
         except Exception as err:
             logger.error("======AlarmDB getAlarmLogsByDevice error========\n{}".format(str(err)))

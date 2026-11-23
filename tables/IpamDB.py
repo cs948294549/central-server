@@ -518,12 +518,16 @@ class IpamDB(mysqldb_netops):
             if "collect_type" in data:
                 conditions.append("collect_type REGEXP %s")
                 params.append(data["collect_type"])
+            # ip_deci 列是 varchar（注释写"整型"但类型不是），参数必须传 int：
+            # 两边都是字符串时 MySQL 按字典序比，位数不同就比错——查 1.1.1.0/24
+            # (16843008~16843263) 会带出 10.10.10.1 (168430081)，因为逐位比到
+            # 第 6 位 '0'<'2' 就判定小于上界。参数传 int 时 MySQL 会把列转成数值再比。
             if "start_ip" in data:
                 conditions.append("ip_deci >= %s")
-                params.append(str(data["start_ip"]))
+                params.append(int(data["start_ip"]))
             if "end_ip" in data:
                 conditions.append("ip_deci <= %s")
-                params.append(str(data["end_ip"]))
+                params.append(int(data["end_ip"]))
 
             sql = """SELECT ip_deci, ip_addr, collect_type, admin_status, comment, update_time
                      FROM ipam_ipaddr"""

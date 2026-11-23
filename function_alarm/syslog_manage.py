@@ -1,4 +1,4 @@
-from tables.AlarmDB import AlarmDB
+from tables.AlarmDB import AlarmDB, DEVICE_LOG_DEFAULT_LIMIT
 from tables.SyslogRuleDB import SyslogRuleDB
 import json
 import logging
@@ -321,13 +321,23 @@ def get_device_log_detail(data):
     管线的日志都拉出来（含没产生告警的、被 ignore 的、噪声码），按时间
     排序 —— 排查一个口为什么抖，要看的就是夹在 down/up 中间的那些
     速率协商、双工变化。
+
+    不限时间跨度，量靠条数兜：默认 1000 条，超了返回里带 truncated=True
+    和实际用的 limit，前端据此提示并给"加载全部"的入口。no_limit=True
+    时全量返回。
+
+    :param data: {"ip":.., "start_ts":.., "end_ts":..,
+                  "limit":1000(可选), "no_limit":False(可选)}
     '''
     try:
         ret = AlarmDB().getAlarmLogsByDevice({
             "ip": data["ip"],
             "start_ts": data["start_ts"],
             "end_ts": data["end_ts"],
-            "limit": data.get("limit", 500),
+            "limit": data.get("limit", DEVICE_LOG_DEFAULT_LIMIT),
+            # 前端那个"加载全部"按钮传 True。默认不开 —— 一台刷日志的
+            # 设备 7 天能有几十万行，全量拉过去浏览器会卡死
+            "no_limit": data.get("no_limit", False),
         })
         if ret == "failed":
             return {"status": "failed", "message": "查询失败", "data": None}
