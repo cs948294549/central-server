@@ -406,7 +406,7 @@ class ArchTemplateDB(mysqldb_netops):
         """
         self.cursor.execute(
             '''INSERT INTO arch_template_snapshot
-               (tid, vendor, version, config_a, config_z, params, change_summary, created_by, created_at)
+               (tid, vendor, version, config_a, config_z, params, change_summary, updated_by, updated_at)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
             (tid, vendor, version, config_a, config_z, params_json,
              change_summary, updated_by, timestamp))
@@ -423,9 +423,9 @@ class ArchTemplateDB(mysqldb_netops):
                 logger.error("ArchTemplateDB getSnapshotList 参数不足: tid, vendor")
                 return "failed"
 
-            fields = ["tid", "vendor", "version", "change_summary", "created_by", "created_at"]
+            fields = ["tid", "vendor", "version", "change_summary", "updated_by", "updated_at"]
             self.cursor.execute(
-                '''SELECT tid, vendor, version, change_summary, created_by, created_at
+                '''SELECT tid, vendor, version, change_summary, updated_by, updated_at
                    FROM arch_template_snapshot
                    WHERE tid = %s AND vendor = %s
                    ORDER BY version DESC''',
@@ -456,10 +456,10 @@ class ArchTemplateDB(mysqldb_netops):
                 return "failed"
 
             fields = ["tid", "vendor", "version", "config_a", "config_z",
-                      "params", "change_summary", "created_by", "created_at"]
+                      "params", "change_summary", "updated_by", "updated_at"]
             self.cursor.execute(
                 '''SELECT tid, vendor, version, config_a, config_z,
-                          params, change_summary, created_by, created_at
+                          params, change_summary, updated_by, updated_at
                    FROM arch_template_snapshot
                    WHERE tid = %s AND vendor = %s AND version = %s''',
                 (data["tid"], data["vendor"], int(data["version"])))
