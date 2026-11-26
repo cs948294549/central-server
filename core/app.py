@@ -27,6 +27,7 @@ from api.api_portgroup import portgroup_bp
 from api.api_policy_issue import policy_issue_bp
 from api.api_wifi import wifi_bp
 from api.api_msg import msg_bp
+from api.api_poap import poap_bp
 
 # 导入 SSH 终端蓝图
 from api.websocket_ssh_bp import websocket_ssh_bp
@@ -88,6 +89,7 @@ def create_app():
     app.register_blueprint(policy_issue_bp)
     app.register_blueprint(wifi_bp)
     app.register_blueprint(msg_bp)
+    app.register_blueprint(poap_bp)
 
     # 注册 SSH 终端蓝图
     app.register_blueprint(websocket_ssh_bp)

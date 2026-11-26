@@ -15,3 +15,4 @@ volcengine-python-sdk==5.0.41
 ldap3
 pycryptodome
 elasticsearch
+jinja2
