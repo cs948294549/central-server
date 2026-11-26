@@ -122,27 +122,35 @@ def _resolve_path(node, scope):
     {% for link in links %}{{ link.a_ip }} -> "links.a_ip"
     {% for pp in link.port_pairs %}{{ pp.a_port }}
                                            -> "links.port_pairs.a_port"
-    取不出路径（如对常量取属性）返回 None
+    取不出路径（如对常量取属性）返回 None。
+    返回 (path: str, depth: int)，depth 是点号层数（hostname 为 1，link.a_ip 为 2）。
     """
     if isinstance(node, jnodes.Name):
-        return scope.get(node.name, node.name)
+        return (scope.get(node.name, node.name), 1)
 
     if isinstance(node, jnodes.Getattr):
-        parent = _resolve_path(node.node, scope)
-        return "{}.{}".format(parent, node.attr) if parent else None
+        parent_result = _resolve_path(node.node, scope)
+        if not parent_result or not parent_result[0]:
+            return (None, 0)
+        parent_path, parent_depth = parent_result
+        return ("{}.{}".format(parent_path, node.attr), parent_depth + 1)
 
     if isinstance(node, jnodes.Getitem):
-        parent = _resolve_path(node.node, scope)
-        if not parent:
-            return None
+        parent_result = _resolve_path(node.node, scope)
+        if not parent_result or not parent_result[0]:
+            return (None, 0)
+        parent_path, parent_depth = parent_result
         arg = node.arg
         # ["字段"] 与 .字段 等价
-        if isinstance(arg, jnodes.Const) and isinstance(arg.const, str):
-            return "{}.{}".format(parent, arg.const)
+        if isinstance(arg, jnodes.Const):
+            # jinja2 2.x 用 const，3.x 用 value
+            val = getattr(arg, 'value', None) or getattr(arg, 'const', None)
+            if isinstance(val, str):
+                return ("{}.{}".format(parent_path, val), parent_depth + 1)
         # [下标] 取的是数组元素，字段归属仍算在这个集合上
-        return parent
+        return (parent_path, parent_depth)
 
-    return None
+    return (None, 0)
 
 
 class _Collector(object):
@@ -158,6 +166,7 @@ class _Collector(object):
         self.filters = set()
         self.tests = set()
         self.block_count = {"for": 0, "if": 0}
+        self.for_depth = 0        # 当前 for 嵌套深度
 
     def err(self, msg, node=None):
         lineno = getattr(node, "lineno", None)
@@ -208,10 +217,18 @@ class _Collector(object):
 
     def _walk_for(self, node, scope):
         self.block_count["for"] += 1
+        self.for_depth += 1
+
+        if self.for_depth > 2:
+            self.err("for 循环最多二层嵌套，不允许三层及以上", node)
+            self.for_depth -= 1
+            return
 
         # 被遍历的集合先在外层作用域里解析
-        coll_path = _resolve_path(node.iter, scope)
-        if coll_path:
+        coll_result = _resolve_path(node.iter, scope)
+        coll_path = None
+        if coll_result and coll_result[0]:
+            coll_path = coll_result[0]
             self.iterated.add(coll_path)
             self.paths.add(coll_path)
         else:
@@ -238,10 +255,19 @@ class _Collector(object):
         for child in node.else_:
             self.walk(child, inner)
 
+        self.for_depth -= 1
+
     def _note(self, node, scope):
-        path = _resolve_path(node, scope)
-        if not path:
+        result = _resolve_path(node, scope)
+        if not result or not result[0]:
             return
+        path, depth = result
+
+        # 参数取值最多二层：hostname（1层）、link.a_ip（2层）
+        if depth > 2:
+            self.err("参数取值最多二层（a.b），不允许更深嵌套：{}".format(path), node)
+            return
+
         root = path.split(".")[0]
         if root == LOOP_BUILTIN:
             return

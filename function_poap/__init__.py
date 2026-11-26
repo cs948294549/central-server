@@ -13,6 +13,16 @@ from function_poap.jinja_template import (
     find_missing,
 )
 from function_poap.jinja_filters import ALLOWED_FILTERS, ALLOWED_TESTS
+from function_poap.func_arch_template import (
+    get_template_list,
+    get_template_detail,
+    create_template,
+    update_template,
+    delete_template,
+    duplicate_template,
+    get_snapshot_list,
+    get_snapshot_detail,
+)
 
 __all__ = [
     'render_template',
@@ -21,4 +31,12 @@ __all__ = [
     'find_missing',
     'ALLOWED_FILTERS',
     'ALLOWED_TESTS',
+    'get_template_list',
+    'get_template_detail',
+    'create_template',
+    'update_template',
+    'delete_template',
+    'duplicate_template',
+    'get_snapshot_list',
+    'get_snapshot_detail',
 ]
