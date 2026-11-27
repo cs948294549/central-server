@@ -52,7 +52,7 @@ def get_template_detail(data):
 def create_template(data):
     """
     创建模板
-    :param data: {tid, name, arch_type, description, tags, has_z_side, created_by, configs}
+    :param data: {tid, name, arch_type, description, tags, created_by, configs}
     :return: {success: bool, data: {tid}, message: str}
     """
     try:
@@ -75,7 +75,7 @@ def create_template(data):
 def update_template(data):
     """
     更新模板
-    :param data: {tid, name, arch_type, description, tags, is_active, has_z_side, updated_by, configs}
+    :param data: {tid, name, arch_type, description, tags, is_active, updated_by, configs}
     :return: {success: bool, data: {tid, updated_vendors}, message: str}
     """
     try:

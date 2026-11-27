@@ -83,10 +83,9 @@ def createTemplate():
         arch_type: str (可选),
         description: str (可选),
         tags: list (可选),
-        has_z_side: int (0/1),
         min_expand_unit: int (可选，默认 1，每次扩容的最小设备台数，如双归为 2),
         configs: {
-            厂商: {config_a: str, config_z: str, params: list}
+            厂商: {config_a: str, params: list}
         }
     }
     """
@@ -120,12 +119,10 @@ def updateTemplate():
         description: str (可选),
         tags: list (可选),
         is_active: int (可选),
-        has_z_side: int (可选),
         min_expand_unit: int (可选),
         configs: {
             厂商: {
                 config_a: str,
-                config_z: str,
                 params: list,
                 increment_version: bool (可选，默认 true),
                 change_summary: str (可选)

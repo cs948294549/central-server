@@ -16,8 +16,7 @@ poap_bp = Blueprint('poap', __name__, url_prefix='/poap')
 def getTemplateParams():
     """
     从配置模板里提取参数清单
-    入参：{"source": "模板文本"} 或 {"configs": {"厂商": {"a": "...", "z": "..."}}}
-    configs 形式按「厂商 + 作用端」分别提取，便于区分 A/Z 端各自用到的参数
+    入参：{"source": "模板文本"} 或 {"configs": {"厂商": "模板文本"}}
     """
     try:
         data = request.json or {}
@@ -30,15 +29,10 @@ def getTemplateParams():
         if source is not None:
             return APIResponse.success(data=extract_params(source), message="提取成功")
 
-        result = {}
-        for vendor, sides in (configs or {}).items():
-            # 兼容厂商直接给一段文本的写法
-            if isinstance(sides, str):
-                sides = {"a": sides}
-            result[vendor] = {
-                side: extract_params(text or "")
-                for side, text in (sides or {}).items()
-            }
+        result = {
+            vendor: extract_params(text or "")
+            for vendor, text in (configs or {}).items()
+        }
         return APIResponse.success(data=result, message="提取成功")
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))

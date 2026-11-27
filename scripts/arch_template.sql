@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS `arch_template` (
   `description` TEXT COMMENT '用途与适用场景说明',
   `tags` JSON COMMENT '标签，如 ["rsw", "cbs", "ebgp"]',
   `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用（0=停用，1=启用）',
-  `has_z_side` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否包含 Z 端配置（0=仅 A 端，1=含 Z 端）',
   `min_expand_unit` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '最小扩张单元：每次扩容的最小设备台数，如双归为 2',
   `created_by` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '创建人',
   `updated_by` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '最后修改人',
@@ -24,15 +23,14 @@ CREATE TABLE IF NOT EXISTS `arch_template` (
 
 
 -- 业务架构模板配置表（按厂商分行存储）
--- 每个模板 × 每个厂商一行，配置文本、参数定义、版本号、A/Z 端分别存储
+-- 每个模板 × 每个厂商一行，只存该厂商自身（A 端）的配置文本与参数定义
 -- 版本号按厂商独立管理，修改某个厂商的配置时该厂商的版本号 +1
 CREATE TABLE IF NOT EXISTS `arch_template_config` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键',
   `tid` VARCHAR(64) NOT NULL COMMENT '模板 ID，关联 arch_template.tid',
   `vendor` VARCHAR(50) NOT NULL COMMENT '厂商代号：cisco_nx / cisco_ios / cisco_xr / h3c / huawei',
   `version` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '该厂商配置的版本号，每次修改自增',
-  `config_a` MEDIUMTEXT COMMENT 'A 端配置文本（Jinja 格式）',
-  `config_z` MEDIUMTEXT COMMENT 'Z 端配置文本（Jinja 格式），可为空',
+  `config_a` MEDIUMTEXT COMMENT '配置文本（Jinja 格式）',
   `params` JSON NOT NULL COMMENT '该厂商的参数定义清单，数组格式',
   `created_at` VARCHAR(10) NOT NULL DEFAULT '' COMMENT '创建时间（Unix 时间戳）',
   `updated_at` VARCHAR(10) NOT NULL DEFAULT '' COMMENT '最后修改时间（Unix 时间戳）',
@@ -51,8 +49,7 @@ CREATE TABLE IF NOT EXISTS `arch_template_snapshot` (
   `tid` VARCHAR(64) NOT NULL COMMENT '模板 ID',
   `vendor` VARCHAR(50) NOT NULL COMMENT '厂商代号',
   `version` INT UNSIGNED NOT NULL COMMENT '版本号',
-  `config_a` MEDIUMTEXT COMMENT 'A 端配置文本快照',
-  `config_z` MEDIUMTEXT COMMENT 'Z 端配置文本快照',
+  `config_a` MEDIUMTEXT COMMENT '配置文本快照',
   `params` JSON NOT NULL COMMENT '参数定义清单快照',
   `updated_by` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '修改人',
   `updated_at` VARCHAR(10) NOT NULL DEFAULT '' COMMENT '修改时间（Unix 时间戳）',
@@ -67,7 +64,7 @@ CREATE TABLE IF NOT EXISTS `arch_template_snapshot` (
 
 -- 示例数据（可选）
 INSERT INTO `arch_template`
-  (`tid`, `name`, `arch_type`, `description`, `tags`, `has_z_side`, `min_expand_unit`, `created_by`, `updated_by`)
+  (`tid`, `name`, `arch_type`, `description`, `tags`, `min_expand_unit`, `created_by`, `updated_by`)
 VALUES
   (
     '00000000-0000-0000-0000-000000000001',
@@ -75,28 +72,25 @@ VALUES
     '400g-bgp',
     '适用于 400G 单模 MDU，双归上联到核心，使用 BGP 协议',
     '["rsw", "bgp", "400g"]',
-    1,
     2,
     'system',
     'system'
   );
 
 INSERT INTO `arch_template_config`
-  (`tid`, `vendor`, `version`, `config_a`, `config_z`, `params`)
+  (`tid`, `vendor`, `version`, `config_a`, `params`)
 VALUES
   (
     '00000000-0000-0000-0000-000000000001',
     'cisco_nx',
     1,
-    'configure terminal\n! vPC domain {{ vpc_domain }}\n! A 端配置示例\ncopy running-config startup-config',
-    'configure terminal\n! Z 端配置示例\ncopy running-config startup-config',
-    '[{"key":"vpc_domain","label":"vPC Domain","type":"int","scope":"group","side":"a","required":true}]'
+    'configure terminal\n! vPC domain {{ vpc_domain }}\n! 配置示例\ncopy running-config startup-config',
+    '[{"key":"vpc_domain","label":"vPC Domain","type":"int","scope":"group","required":true}]'
   ),
   (
     '00000000-0000-0000-0000-000000000001',
     'h3c',
     1,
-    'system-view\n# irf member {{ member_id }}\n# A 端配置示例\nreturn\nsave force',
-    'system-view\n# Z 端配置示例\nreturn\nsave force',
-    '[{"key":"member_id","label":"IRF Member ID","type":"int","scope":"device","side":"a","required":true}]'
+    'system-view\n# irf member {{ member_id }}\n# 配置示例\nreturn\nsave force',
+    '[{"key":"member_id","label":"IRF Member ID","type":"int","scope":"device","required":true}]'
   );

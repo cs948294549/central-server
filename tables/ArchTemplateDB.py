@@ -66,10 +66,10 @@ class ArchTemplateDB(mysqldb_netops):
             total = self.cursor.fetchone()[0]
 
             fields = ["id", "tid", "name", "arch_type", "description", "tags",
-                      "is_active", "has_z_side", "min_expand_unit", "created_by",
+                      "is_active", "min_expand_unit", "created_by",
                       "updated_by", "created_at", "updated_at"]
             list_sql = '''SELECT DISTINCT t.id, t.tid, t.name, t.arch_type, t.description, t.tags,
-                                 t.is_active, t.has_z_side, t.min_expand_unit, t.created_by,
+                                 t.is_active, t.min_expand_unit, t.created_by,
                                  t.updated_by, t.created_at, t.updated_at
                           FROM arch_template t
                           {} WHERE {}
@@ -133,9 +133,9 @@ class ArchTemplateDB(mysqldb_netops):
         :return: 字典 或 None
         """
         fields = ["id", "tid", "name", "arch_type", "description", "tags", "is_active",
-                  "has_z_side", "min_expand_unit", "created_by", "updated_by",
+                  "min_expand_unit", "created_by", "updated_by",
                   "created_at", "updated_at"]
-        base_sql = '''SELECT id, tid, name, arch_type, description, tags, is_active, has_z_side,
+        base_sql = '''SELECT id, tid, name, arch_type, description, tags, is_active,
                              min_expand_unit, created_by, updated_by, created_at, updated_at
                       FROM arch_template WHERE {} = %s'''
         if tid:
@@ -150,17 +150,16 @@ class ArchTemplateDB(mysqldb_netops):
         detail = dict(zip(fields, row))
         detail["tags"] = json.loads(detail["tags"]) if isinstance(detail["tags"], str) else (detail["tags"] or [])
 
-        config_sql = '''SELECT vendor, version, config_a, config_z, params, created_at, updated_at
+        config_sql = '''SELECT vendor, version, config_a, params, created_at, updated_at
                         FROM arch_template_config WHERE tid = %s'''
         self.cursor.execute(config_sql, (detail["tid"],))
 
         configs = {}
-        for vendor, version, config_a, config_z, params, created_at, updated_at in self.cursor.fetchall():
+        for vendor, version, config_a, params, created_at, updated_at in self.cursor.fetchall():
             configs[vendor] = {
                 "vendor": vendor,
                 "version": version,
                 "config_a": config_a or "",
-                "config_z": config_z or "",
                 "params": json.loads(params) if isinstance(params, str) else (params or []),
                 "created_at": created_at,
                 "updated_at": updated_at
@@ -171,8 +170,8 @@ class ArchTemplateDB(mysqldb_netops):
     def createTemplate(self, data):
         """
         创建新模板（主表 + 配置表）
-        :param data: {tid, name, arch_type, description, tags, is_active, has_z_side,
-                      min_expand_unit, created_by, configs: {厂商: {config_a, config_z, params}}}
+        :param data: {tid, name, arch_type, description, tags, is_active,
+                      min_expand_unit, created_by, configs: {厂商: {config_a, params}}}
         :return: {tid} 或 "failed"
         """
         try:
@@ -199,9 +198,9 @@ class ArchTemplateDB(mysqldb_netops):
         """
         timestamp = str(int(time.time()))
         main_sql = '''INSERT INTO arch_template
-                      (tid, name, arch_type, description, tags, is_active, has_z_side,
+                      (tid, name, arch_type, description, tags, is_active,
                        min_expand_unit, created_by, updated_by, created_at, updated_at)
-                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
         self.cursor.execute(main_sql, (
             data["tid"],
             data["name"],
@@ -209,7 +208,6 @@ class ArchTemplateDB(mysqldb_netops):
             data.get("description", ""),
             json.dumps(data.get("tags", []), ensure_ascii=False),
             int(data.get("is_active", 1)),
-            int(data.get("has_z_side", 0)),
             int(data.get("min_expand_unit", 1)),
             data.get("created_by", ""),
             data.get("created_by", ""),
@@ -222,15 +220,14 @@ class ArchTemplateDB(mysqldb_netops):
             return
 
         config_sql = '''INSERT INTO arch_template_config
-                        (tid, vendor, version, config_a, config_z, params, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)'''
+                        (tid, vendor, version, config_a, params, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)'''
         config_params = [
             (
                 data["tid"],
                 vendor,
                 1,
                 cfg.get("config_a", ""),
-                cfg.get("config_z", ""),
                 json.dumps(cfg.get("params", []), ensure_ascii=False),
                 timestamp,
                 timestamp
@@ -242,9 +239,9 @@ class ArchTemplateDB(mysqldb_netops):
     def updateTemplate(self, data):
         """
         更新模板（主表 + 配置表，配置按厂商逐个更新或新增）
-        :param data: {tid, name?, arch_type?, description?, tags?, is_active?, has_z_side?,
+        :param data: {tid, name?, arch_type?, description?, tags?, is_active?,
                       min_expand_unit?, updated_by,
-                      configs?: {厂商: {config_a, config_z, params, increment_version, change_summary}}}
+                      configs?: {厂商: {config_a, params, increment_version, change_summary}}}
         :return: {tid, updated_vendors: [厂商]} 或 "failed"
         """
         try:
@@ -266,7 +263,7 @@ class ArchTemplateDB(mysqldb_netops):
             if "tags" in data.keys():
                 sets.append("tags = %s")
                 params.append(json.dumps(data["tags"], ensure_ascii=False))
-            for key in ("is_active", "has_z_side", "min_expand_unit"):
+            for key in ("is_active", "min_expand_unit"):
                 if key in data.keys():
                     sets.append("{} = %s".format(key))
                     params.append(int(data[key]))
@@ -280,7 +277,6 @@ class ArchTemplateDB(mysqldb_netops):
             updated_vendors = []
             for vendor, cfg in (data.get("configs") or {}).items():
                 config_a = cfg.get("config_a", "")
-                config_z = cfg.get("config_z", "")
                 params_json = json.dumps(cfg.get("params", []), ensure_ascii=False)
 
                 self.cursor.execute(
@@ -291,9 +287,9 @@ class ArchTemplateDB(mysqldb_netops):
                 if not existing:
                     self.cursor.execute(
                         '''INSERT INTO arch_template_config
-                           (tid, vendor, version, config_a, config_z, params, created_at, updated_at)
-                           VALUES (%s, %s, 1, %s, %s, %s, %s, %s)''',
-                        (data["tid"], vendor, config_a, config_z, params_json, timestamp, timestamp))
+                           (tid, vendor, version, config_a, params, created_at, updated_at)
+                           VALUES (%s, %s, 1, %s, %s, %s, %s)''',
+                        (data["tid"], vendor, config_a, params_json, timestamp, timestamp))
                     updated_vendors.append(vendor)
                     continue
 
@@ -301,12 +297,12 @@ class ArchTemplateDB(mysqldb_netops):
                 version_part = "version = version + 1, " if increment_version else ""
                 self.cursor.execute(
                     '''UPDATE arch_template_config
-                       SET config_a = %s, config_z = %s, params = %s, {}updated_at = %s
+                       SET config_a = %s, params = %s, {}updated_at = %s
                        WHERE tid = %s AND vendor = %s'''.format(version_part),
-                    (config_a, config_z, params_json, timestamp, data["tid"], vendor))
+                    (config_a, params_json, timestamp, data["tid"], vendor))
 
                 if increment_version:
-                    self._saveSnapshot(data["tid"], vendor, existing[0] + 1, config_a, config_z,
+                    self._saveSnapshot(data["tid"], vendor, existing[0] + 1, config_a,
                                        params_json, updated_by, timestamp,
                                        cfg.get("change_summary", ""))
                 updated_vendors.append(vendor)
@@ -373,13 +369,11 @@ class ArchTemplateDB(mysqldb_netops):
                 "description": source["description"],
                 "tags": source["tags"],
                 "is_active": source["is_active"],
-                "has_z_side": source["has_z_side"],
                 "min_expand_unit": source["min_expand_unit"],
                 "created_by": data.get("created_by", ""),
                 "configs": {
                     vendor: {
                         "config_a": cfg["config_a"],
-                        "config_z": cfg["config_z"],
                         "params": cfg["params"],
                     }
                     for vendor, cfg in source["configs"].items()
@@ -399,16 +393,16 @@ class ArchTemplateDB(mysqldb_netops):
 
     # ==================== 版本快照 ====================
 
-    def _saveSnapshot(self, tid, vendor, version, config_a, config_z, params_json,
+    def _saveSnapshot(self, tid, vendor, version, config_a, params_json,
                       updated_by, timestamp, change_summary=""):
         """
         写入版本快照（内部方法，不提交不关连接，异常向上冒泡由调用方回滚）
         """
         self.cursor.execute(
             '''INSERT INTO arch_template_snapshot
-               (tid, vendor, version, config_a, config_z, params, change_summary, updated_by, updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-            (tid, vendor, version, config_a, config_z, params_json,
+               (tid, vendor, version, config_a, params, change_summary, updated_by, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+            (tid, vendor, version, config_a, params_json,
              change_summary, updated_by, timestamp))
 
     def getSnapshotList(self, data):
@@ -455,10 +449,10 @@ class ArchTemplateDB(mysqldb_netops):
                 logger.error("ArchTemplateDB getSnapshot 参数不足: tid, vendor, version")
                 return "failed"
 
-            fields = ["tid", "vendor", "version", "config_a", "config_z",
+            fields = ["tid", "vendor", "version", "config_a",
                       "params", "change_summary", "updated_by", "updated_at"]
             self.cursor.execute(
-                '''SELECT tid, vendor, version, config_a, config_z,
+                '''SELECT tid, vendor, version, config_a,
                           params, change_summary, updated_by, updated_at
                    FROM arch_template_snapshot
                    WHERE tid = %s AND vendor = %s AND version = %s''',
@@ -470,7 +464,6 @@ class ArchTemplateDB(mysqldb_netops):
 
             item = dict(zip(fields, row))
             item["config_a"] = item["config_a"] or ""
-            item["config_z"] = item["config_z"] or ""
             item["params"] = json.loads(item["params"]) if isinstance(item["params"], str) else (item["params"] or [])
             return item
 
