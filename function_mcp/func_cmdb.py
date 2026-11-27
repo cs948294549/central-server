@@ -165,7 +165,12 @@ def transIP(ip_text, search_type="switch"):
             out_lines.append(line)
             continue
 
-        desc = _ip_desc(match.group(), search_type)
+        if search_type == "all":
+            # all：先按交换机查，查不到再按服务器查
+            ip = match.group()
+            desc = _ip_desc(ip, "switch") or _ip_desc(ip, "server")
+        else:
+            desc = _ip_desc(match.group(), search_type)
         if not desc:
             out_lines.append(line)
             continue

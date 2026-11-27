@@ -5,6 +5,7 @@ from function_collector.func_search import func_fulltext, get_deviceslist, get_e
 from function_collector.func_search import getfulltextDeviceGates_v4, getfulltextDeviceGates_v6, get_arp_list
 from function_collector.func_search import get_mac_table_by_tor, get_device_sns, get_device_summary
 from function_collector.func_zabbix import query_port_traffic
+from function_mcp.func_cmdb import transIP
 from lib_snmp.snmpAgent import snmpget, snmpwalk
 from config.config import Config
 
@@ -117,6 +118,25 @@ def gates_v6():
         return APIResponse.success(data=respond, message="查询成功")
     except Exception as e:
         return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
+@collector_bp.route('/trans_ip',methods=['POST'])
+def trans_ip():
+    """输入一段文本（如 BGP / traceroute 回显），返回每一行第一个 IP 补上归属描述的文本"""
+    try:
+        data = request.json or {}
+        ip_text = data.get('ip_text')
+        search_type = data.get('search_type') or 'all'
+        if not isinstance(ip_text, str) or not ip_text.strip():
+            return APIResponse.error(message="缺失参数 ip_text")
+        if search_type not in ('switch', 'server', 'all'):
+            search_type = 'all'
+
+        logger.info(f"{str(g.user)}调用 transIp 翻译，{len(ip_text.splitlines())} 行，search_type={search_type}")
+        respond = transIP(ip_text=ip_text, search_type=search_type)
+        return APIResponse.success(data=respond, message="翻译完成")
+    except Exception as e:
+        return APIResponse.server_error(message="接口异常，异常原因:{}".format(str(e)))
+
 
 @collector_bp.route('/getarp_list',methods=['POST'])
 def getarp_list():
