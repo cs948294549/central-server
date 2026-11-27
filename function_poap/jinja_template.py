@@ -285,6 +285,7 @@ def extract_params(source):
         ok: bool,
         errors: [{lineno, message}],        语法不合规之处
         variables: [str],                   顶层标量参数（取根名）
+        objects: {对象名: [字段…]},          没有被 for 遍历、但按 a.b 取过字段的单个对象
         collections: {集合名: [字段…]},      需要遍历的集合及其被引用的字段
         paths: [str],                       所有引用的完整路径，不丢 a.b.c 这类层级
         loop_vars: [str],                   循环变量名（不是参数，仅供参考）
@@ -294,7 +295,7 @@ def extract_params(source):
     """
     out = {
         "ok": False, "errors": [],
-        "variables": [], "collections": {}, "paths": [], "loop_vars": [],
+        "variables": [], "objects": {}, "collections": {}, "paths": [], "loop_vars": [],
         "filters": [], "tests": [], "blocks": {"for": 0, "if": 0},
     }
 
@@ -312,8 +313,9 @@ def extract_params(source):
     c = _Collector()
     c.walk(ast, {})
 
-    # 路径归类：被 for 遍历过的算集合，其余算标量
+    # 路径归类：被 for 遍历过的算集合；没遍历但取过 a.b 字段的算单个对象；剩下算标量
     collections = {name: set() for name in c.iterated}
+    objects = {}
     variables = set()
     for path in c.paths:
         if path in collections:
@@ -329,12 +331,22 @@ def extract_params(source):
             # 嵌套集合本身不算字段，它的字段已经单独记过
             if field and ("{}.{}".format(owner, field) not in collections):
                 collections[owner].add(field)
+            continue
+
+        root, sep, field = path.partition(".")
+        if sep:
+            # 没被 for 遍历，但按 a.b 取了字段：当成单个对象，不是裸标量
+            objects.setdefault(root, set()).add(field)
         else:
-            variables.add(path.split(".")[0])
+            variables.add(root)
+
+    # 对象根名不能同时是标量：只要出现过 a.b，a 就不再算 variables
+    variables -= set(objects.keys())
 
     out["errors"] = c.errors
     out["ok"] = not c.errors
     out["variables"] = sorted(variables)
+    out["objects"] = {k: sorted(v) for k, v in sorted(objects.items())}
     out["collections"] = {k: sorted(v) for k, v in sorted(collections.items())}
     out["paths"] = sorted(c.paths)
     out["loop_vars"] = c.loop_vars
@@ -389,6 +401,12 @@ def find_missing(source, context):
             continue
         for f in fields:
             path = "{}.{}".format(coll, f)
+            if path not in present:
+                missing.append(path)
+
+    for obj, fields in info["objects"].items():
+        for f in fields:
+            path = "{}.{}".format(obj, f)
             if path not in present:
                 missing.append(path)
 
