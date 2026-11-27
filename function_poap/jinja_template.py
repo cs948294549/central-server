@@ -365,15 +365,29 @@ def validate_template(source):
     return {"ok": r["ok"], "errors": r["errors"]}
 
 
+def _is_blank(v):
+    # 空字符串 / None / 空列表 / 空字典都算"没填"；0、False 是合法取值，不算空
+    if v is None:
+        return True
+    if isinstance(v, str):
+        return v.strip() == ""
+    if isinstance(v, (list, tuple, dict)):
+        return len(v) == 0
+    return False
+
+
 def _flatten_present(context, prefix=""):
     """
-    把上下文摊平成点号路径集合，用于比对模板引用了但没给值的参数
+    把上下文摊平成点号路径集合，用于比对模板引用了但没给值的参数。
+    值是空字符串/None/空列表/空字典时不计入已填集合——否则必填参数填了
+    空值也会被判定成"已填"，渲染和导出都看不出任何提示。
     """
     found = set()
     if isinstance(context, dict):
         for k, v in context.items():
             path = "{}.{}".format(prefix, k) if prefix else str(k)
-            found.add(path)
+            if not _is_blank(v):
+                found.add(path)
             found |= _flatten_present(v, path)
     elif isinstance(context, (list, tuple)):
         # 列表元素的字段挂在列表路径上，与提取结果的表达方式一致
@@ -431,6 +445,15 @@ def render_template(source, context=None, strict=True):
         return out
 
     out["missing"] = find_missing(source, ctx)
+
+    # strict 模式下空字符串/空值也要当缺参数拦住：StrictUndefined 只对"根本没传这个key"报错，
+    # 对"传了但是空字符串"是无感的，不单独处理的话这种半成品会悄悄渲染成功。
+    if strict and out["missing"]:
+        out["errors"].append({
+            "lineno": None,
+            "message": "参数缺失：{}".format("、".join(out["missing"]))
+        })
+        return out
 
     env = build_env(strict=strict)
     try:
